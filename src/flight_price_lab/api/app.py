@@ -74,6 +74,10 @@ def create_app(
             application.state.usage = configured
         return configured
 
+    @application.get("/api/health")
+    async def health() -> dict[str, str]:
+        return {"status": "ok"}
+
     @application.exception_handler(RequestValidationError)
     async def validation_error(
         request: Request, error: RequestValidationError

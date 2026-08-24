@@ -26,6 +26,9 @@ build-backend = "uv_build"
 [tool.uv.build-backend]
 module-root = "src"
 
+[tool.vercel]
+entrypoint = "flight_price_lab.api.app:app"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]

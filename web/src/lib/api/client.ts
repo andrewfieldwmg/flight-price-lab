@@ -6,11 +6,16 @@ import type {
   TripSearchRequest,
 } from "./types";
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL
+  ?? (process.env.NODE_ENV === "production" ? "" : "http://localhost:8000");
+
+export function resolveApiUrl(path: string, baseUrl = API_BASE_URL): string {
+  if (!path.startsWith("/api/")) throw new Error("API paths must retain the FastAPI /api prefix");
+  return `${baseUrl.replace(/\/$/, "")}${path}`;
+}
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await fetch(resolveApiUrl(path), {
     ...init,
     headers: { "Content-Type": "application/json", ...init?.headers },
   });
@@ -60,7 +65,7 @@ export function subscribeToSearch(
   onDisconnect: () => void,
 ): () => void {
   const source = new EventSource(
-    `${API_BASE_URL}/api/search/${encodeURIComponent(searchId)}/events`,
+    resolveApiUrl(`/api/search/${encodeURIComponent(searchId)}/events`),
   );
   for (const type of EVENT_NAMES) {
     source.addEventListener(type, (raw) => {

@@ -4,8 +4,11 @@ import asyncio
 import json
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
 from typing import Protocol
+
+from sqlalchemy.exc import SQLAlchemyError
 
 from flight_price_lab.api.models import CalendarPrice
 from flight_price_lab.api.search_logging import (
@@ -16,11 +19,47 @@ from flight_price_lab.models.flight import FlightOffer
 from flight_price_lab.providers.searchapi import SearchAPIClient
 from flight_price_lab.providers.searchapi_mapper import normalize_searchapi_response
 from flight_price_lab.storage.database import (
+    CachedSearch,
     CacheLookup,
     SearchResponseCache,
     canonical_search_json,
     canonical_search_key,
 )
+
+
+class _VolatileResponseCache:
+    """Process-local fallback when Vercel's filesystem cannot host SQLite/raw JSON."""
+
+    def __init__(self, ttl: timedelta = timedelta(minutes=60)) -> None:
+        self.ttl = ttl
+        self.entries: dict[str, tuple[CachedSearch, datetime, datetime]] = {}
+
+    def lookup(self, parameters: dict[str, object]) -> CacheLookup:
+        entry = self.entries.get(canonical_search_key(parameters))
+        if entry is None:
+            return CacheLookup("miss", None, None, None, None)
+        cached, created, expires = entry
+        now = datetime.now(UTC)
+        age = (now - created).total_seconds()
+        if expires <= now:
+            return CacheLookup("expired", None, created, expires, age)
+        return CacheLookup("hit", cached, created, expires, age)
+
+    def put(
+        self,
+        parameters: dict[str, object],
+        payload: dict[str, object],
+        *,
+        result_count: int,
+    ) -> CachedSearch:
+        created = datetime.now(UTC)
+        cached = CachedSearch(payload, Path("volatile-response.json"), result_count)
+        self.entries[canonical_search_key(parameters)] = (
+            cached,
+            created,
+            created + self.ttl,
+        )
+        return cached
 
 
 @dataclass(frozen=True)
@@ -67,7 +106,13 @@ class SearchAPIProviderGateway:
         self, client: SearchAPIClient, cache: SearchResponseCache | None = None
     ) -> None:
         self._client = client
-        self._cache = cache or SearchResponseCache()
+        if cache is not None:
+            self._cache = cache
+        else:
+            try:
+                self._cache = SearchResponseCache()
+            except (OSError, SQLAlchemyError):
+                self._cache = _VolatileResponseCache()
         self._cache_locks: dict[str, asyncio.Lock] = {}
 
     async def search_direct(self, **arguments: object) -> ProviderSearchResult:
@@ -104,11 +149,15 @@ class SearchAPIProviderGateway:
         }
         lock = self._cache_locks.setdefault(cache_key, asyncio.Lock())
         async with lock:
-            lookup = (
-                CacheLookup("miss", None, None, None, None)
-                if bypass_cache
-                else await asyncio.to_thread(self._cache.lookup, parameters)
-            )
+            if bypass_cache:
+                lookup = CacheLookup("miss", None, None, None, None)
+            else:
+                try:
+                    lookup = await asyncio.to_thread(self._cache.lookup, parameters)
+                except (OSError, SQLAlchemyError):
+                    fallback = _VolatileResponseCache()
+                    self._cache = fallback
+                    lookup = fallback.lookup(parameters)
             lookup_fields = {
                 **common,
                 "created_at": lookup.created_at,
@@ -158,12 +207,19 @@ class SearchAPIProviderGateway:
                     for bucket in ("best_flights", "other_flights")
                     if isinstance(payload.get(bucket), list)
                 )
-                cached = await asyncio.to_thread(
-                    self._cache.put,
-                    parameters,
-                    payload,
-                    result_count=result_count,
-                )
+                try:
+                    cached = await asyncio.to_thread(
+                        self._cache.put,
+                        parameters,
+                        payload,
+                        result_count=result_count,
+                    )
+                except (OSError, SQLAlchemyError):
+                    fallback = _VolatileResponseCache()
+                    self._cache = fallback
+                    cached = fallback.put(
+                        parameters, payload, result_count=result_count
+                    )
                 provider_calls = 1
                 search_log(
                     "PROVIDER_CALL_SUCCEEDED", **common, result_count=result_count

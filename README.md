@@ -100,6 +100,31 @@ as complete raw JSON so normalization can be designed from captured real respons
 Live calls are manual and confirmation-gated during schema discovery; automated tests
 use an in-memory HTTP transport and never contact SearchAPI.
 
+## Vercel deployment
+
+The repository deploys as one Vercel Services project. Set the Vercel project
+Framework Preset to **Services**. Public `/api/*` requests are routed to FastAPI
+without changing their path; all other requests go to Next.js. The frontend uses
+same-origin `/api/*` URLs in production and `http://localhost:8000/api/*` locally.
+
+Configure this server-only Vercel project environment variable:
+
+```text
+SEARCHAPI_KEY=<secret>
+```
+
+Never expose it through a `NEXT_PUBLIC_*` variable. `NEXT_PUBLIC_API_BASE_URL` is only
+needed for local development or an intentional external API origin.
+
+The initial deployment preserves the current architecture with serverless limits:
+search state and SSE queues are process-local, so another function instance may not
+find the same search ID and instance termination loses state. SQLite cache files and
+raw captures are local and ephemeral, are not shared between instances, and may
+disappear after an invocation. When local persistence is unavailable, provider
+responses remain usable through a volatile in-process fallback. Durable history and
+reliable cross-instance progressive searches require external object storage and a
+shared registry/cache in a later phase.
+
 After creating a local `.env` containing `SEARCHAPI_KEY`, run the guarded probe with:
 
 ```powershell

@@ -352,7 +352,17 @@ def test_api_routes_are_registered() -> None:
         "/api/search/{search_id}/events",
         "/api/calendar",
         "/api/provider-usage",
+        "/api/health",
     } <= paths
+
+
+def test_health_endpoint_needs_no_provider_call() -> None:
+    provider = MockProvider()
+    response = TestClient(create_app(provider)).get("/api/health")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+    assert provider.calls == []
 
 
 def test_search_key_endpoint_does_not_call_provider() -> None:
