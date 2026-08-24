@@ -1,0 +1,87 @@
+import type { Direction, TripOption } from "@/lib/api/types";
+
+export function option(
+  updates: Partial<TripOption> & Pick<TripOption, "id">,
+): TripOption {
+  return {
+    direction: "OUTBOUND",
+    route: ["LGW", "CAG"],
+    flight_numbers: ["FR 2687"],
+    airlines: ["Ryanair"],
+    legs: [
+      {
+        origin: "LGW",
+        destination: "CAG",
+        departure_at: "2026-12-18T08:00:00+00:00",
+        arrival_at: "2026-12-18T10:40:00+00:00",
+        airline: "Ryanair",
+        flight_number: "FR 2687",
+      },
+    ],
+    base_price: "741",
+    ancillary_price_low: "0",
+    ancillary_price_high: "0",
+    baggage_estimates: [],
+    cabin_bags: 0,
+    checked_bags: 0,
+    effective_price_low: "741",
+    effective_price_high: "741",
+    currency: "GBP",
+    price_completeness: "COMPLETE",
+    is_nonstop: true,
+    is_self_transfer: false,
+    connection_airport: null,
+    connection_minutes: null,
+    departure_at: "2026-12-18T08:00:00+00:00",
+    arrival_at: "2026-12-18T10:40:00+00:00",
+    total_journey_minutes: 160,
+    saving_vs_nonstop_amount: null,
+    saving_vs_nonstop_percent: null,
+    saving_vs_nonstop_low: null,
+    saving_vs_nonstop_high: null,
+    extra_minutes_vs_nonstop: 0,
+    ticketing_type: "unknown",
+    baggage_confidence: "medium",
+    ...updates,
+  };
+}
+
+export const synthetic = (direction: Direction = "OUTBOUND") =>
+  option({
+    id: `synthetic-${direction}`,
+    direction,
+    route: direction === "OUTBOUND" ? ["LGW", "MXP", "CAG"] : ["CAG", "MXP", "LGW"],
+    flight_numbers: ["U2 8309", "W4 6997"],
+    airlines: ["easyJet", "Wizz Air Malta"],
+    legs: [
+      {
+        origin: direction === "OUTBOUND" ? "LGW" : "CAG",
+        destination: "MXP",
+        departure_at: "2026-12-18T08:00:00+00:00",
+        arrival_at: "2026-12-18T10:00:00+01:00",
+        airline: "easyJet",
+        flight_number: "U2 8309",
+      },
+      {
+        origin: "MXP",
+        destination: direction === "OUTBOUND" ? "CAG" : "LGW",
+        departure_at: "2026-12-18T13:50:00+01:00",
+        arrival_at: "2026-12-18T15:25:00+01:00",
+        airline: "Wizz Air Malta",
+        flight_number: "W4 6997",
+      },
+    ],
+    base_price: "486",
+    effective_price_low: "486",
+    effective_price_high: "486",
+    is_nonstop: false,
+    is_self_transfer: true,
+    connection_airport: "MXP",
+    connection_minutes: 230,
+    arrival_at: "2026-12-18T15:25:00+01:00",
+    total_journey_minutes: 445,
+    saving_vs_nonstop_amount: "255",
+    saving_vs_nonstop_percent: "34.41",
+    extra_minutes_vs_nonstop: 285,
+    ticketing_type: "separate_tickets",
+  });

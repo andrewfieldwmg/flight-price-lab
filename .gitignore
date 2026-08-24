@@ -1,0 +1,15 @@
+.venv/
+.env
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+*.db
+*.sqlite
+*.sqlite3
+data/raw/
+data/processed/
+.npm-cache/
+.tmp/

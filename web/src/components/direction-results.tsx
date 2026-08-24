@@ -1,0 +1,173 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import type { ConnectionProfile, DirectionResults as Results, TripOption } from "@/lib/api/types";
+import { money } from "./price-display";
+import { duration } from "./result-card";
+
+export type SortKey = "saving" | "price" | "departure" | "arrival" | "transfer" | "journey" | "extra";
+type ViewMode = "all" | "efficient";
+
+export function localClock(value: string): string {
+  return value.match(/T(\d{2}:\d{2})/)?.[1] ?? "—";
+}
+
+export function isEarlyDeparture(value: string): boolean {
+  return localClock(value) < "06:00";
+}
+
+export function isLateArrival(value: string): boolean {
+  return localClock(value) > "23:00";
+}
+
+function price(option: TripOption): number {
+  return Number(option.base_price);
+}
+
+export function filterByMinimumSaving(options: TripOption[], minimum: number, selectedId: string | null) {
+  return options.filter((option) => option.is_nonstop || option.id === selectedId || Number(option.saving_vs_nonstop_amount ?? 0) >= minimum);
+}
+
+export function sortOptions(options: TripOption[], key: SortKey, descending: boolean): TripOption[] {
+  const value = (option: TripOption): number | string => {
+    if (key === "saving") return Number(option.saving_vs_nonstop_amount ?? 0);
+    if (key === "price") return price(option);
+    if (key === "departure") return option.departure_at;
+    if (key === "arrival") return option.arrival_at;
+    if (key === "transfer") return option.connection_minutes ?? -1;
+    if (key === "extra") return option.extra_minutes_vs_nonstop ?? -1;
+    return option.total_journey_minutes;
+  };
+  return [...options].sort((a, b) => {
+    const left = value(a);
+    const right = value(b);
+    const compared = left < right ? -1 : left > right ? 1 : 0;
+    return descending ? -compared : compared;
+  });
+}
+
+function deduplicate(options: Array<TripOption | null>): TripOption[] {
+  return [...new Map(options.filter(Boolean).map((item) => [(item as TripOption).id, item as TripOption])).values()];
+}
+
+function withBaseFareSavings(options: TripOption[], baseline: TripOption | null) {
+  if (!baseline) return options;
+  const reference = Number(baseline.base_price);
+  return options.map((option) => {
+    if (option.is_nonstop) return option;
+    const saving = reference - Number(option.base_price);
+    return { ...option, saving_vs_nonstop_amount: String(saving), saving_vs_nonstop_percent: reference ? String((saving / reference) * 100) : null };
+  });
+}
+
+function compactPrice(option: TripOption) {
+  return money(option.base_price, option.currency);
+}
+
+function HeaderButton({ label, sortKey, active, descending, onSort }: { label: string; sortKey: SortKey; active: boolean; descending: boolean; onSort: (key: SortKey) => void }) {
+  return <button type="button" onClick={() => onSort(sortKey)}>{label}{active ? (descending ? " ↓" : " ↑") : ""}</button>;
+}
+
+export function DirectionResults({
+  title,
+  results,
+  selectedId,
+  onSelect,
+  complete,
+  connectionProfile,
+  selfTransferEnabled,
+}: {
+  title: string;
+  results: Results;
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+  complete: boolean;
+  connectionProfile: ConnectionProfile;
+  selfTransferEnabled: boolean;
+}) {
+  const [sort, setSort] = useState<SortKey | null>(null);
+  const [descending, setDescending] = useState(false);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [mode, setMode] = useState<ViewMode>("all");
+  const [minimumSaving, setMinimumSaving] = useState(100);
+  const [customSaving, setCustomSaving] = useState(false);
+  const options = useMemo(() => {
+    const nonstops = results.nonstop_options.length ? results.nonstop_options : results.baseline ? [results.baseline] : [];
+    const candidates = !selfTransferEnabled
+      ? nonstops
+      : mode === "efficient"
+        ? deduplicate([...nonstops, ...results.pareto_frontier])
+        : deduplicate([...nonstops, ...results.feasible_options]);
+    const basePriced = withBaseFareSavings(candidates, results.baseline);
+    const filtered = selfTransferEnabled ? filterByMinimumSaving(basePriced, minimumSaving, selectedId) : basePriced;
+    return sort ? sortOptions(filtered, sort, descending) : filtered;
+  }, [results, sort, descending, mode, selfTransferEnabled, minimumSaving, selectedId]);
+
+  function changeSort(key: SortKey) {
+    if (key === sort) setDescending((value) => !value);
+    else {
+      setSort(key);
+      setDescending(false);
+    }
+  }
+
+  const columnCount = selfTransferEnabled ? 11 : 9;
+  return (
+    <section className="results-section">
+      <div className="results-heading">
+        <h2>{title}</h2>
+        <div className="compromise-controls">
+          {selfTransferEnabled && <div className="mode-toggle"><button type="button" className={mode === "all" ? "active" : ""} onClick={() => setMode("all")}>All options</button><button type="button" className={mode === "efficient" ? "active" : ""} onClick={() => setMode("efficient")}>Efficient only</button></div>}
+          {selfTransferEnabled && <label className="minimum-saving">Minimum saving <select aria-label={`${title} minimum saving`} value={customSaving ? "custom" : minimumSaving} onChange={(event) => { if (event.target.value === "custom") setCustomSaving(true); else { setCustomSaving(false); setMinimumSaving(Number(event.target.value)); } }}><option value="0">£0</option><option value="50">£50</option><option value="100">£100</option><option value="200">£200</option><option value="custom">custom</option></select>{customSaving && <input aria-label={`${title} custom minimum saving`} type="number" min="0" value={minimumSaving} onChange={(event) => setMinimumSaving(Number(event.target.value))} />}</label>}
+          <span>{options.length} shown</span>
+        </div>
+      </div>
+      <div className="table-scroll">
+        <table className="results-table">
+          <thead><tr>
+            <th>Select</th>
+            <th><HeaderButton label="Price" sortKey="price" active={sort === "price"} descending={descending} onSort={changeSort} /></th>
+            {selfTransferEnabled && <th><HeaderButton label="Saving vs nonstop" sortKey="saving" active={sort === "saving"} descending={descending} onSort={changeSort} /></th>}
+            <th><HeaderButton label="Depart" sortKey="departure" active={sort === "departure"} descending={descending} onSort={changeSort} /></th>
+            <th><HeaderButton label="Arrive" sortKey="arrival" active={sort === "arrival"} descending={descending} onSort={changeSort} /></th>
+            <th>Route</th>
+            <th><HeaderButton label="Stopover" sortKey="transfer" active={sort === "transfer"} descending={descending} onSort={changeSort} /></th>
+            <th><HeaderButton label="Journey" sortKey="journey" active={sort === "journey"} descending={descending} onSort={changeSort} /></th>
+            {selfTransferEnabled && <th><HeaderButton label="Extra vs nonstop" sortKey="extra" active={sort === "extra"} descending={descending} onSort={changeSort} /></th>}
+            <th>Airlines</th><th>Tickets</th>
+          </tr></thead>
+          <tbody>
+            {options.map((option) => <FragmentRow key={option.id} option={option} selected={selectedId === option.id} expanded={expanded === option.id} onClick={() => { onSelect(option.id); setExpanded(expanded === option.id ? null : option.id); }} connectionProfile={connectionProfile} showComparisons={selfTransferEnabled} columnCount={columnCount} />)}
+          </tbody>
+        </table>
+      </div>
+      {!options.length && <div className="compact-empty">{complete ? "No options matched this search." : "Waiting for direct-flight results…"}</div>}
+      <div className="table-footnote">Prices exclude baggage.</div>
+    </section>
+  );
+}
+
+function FragmentRow({ option, selected, expanded, onClick, connectionProfile, showComparisons, columnCount }: { option: TripOption; selected: boolean; expanded: boolean; onClick: () => void; connectionProfile: ConnectionProfile; showComparisons: boolean; columnCount: number }) {
+  const saving = Number(option.saving_vs_nonstop_amount ?? 0);
+  const stopover = option.connection_airport && option.connection_minutes !== null
+    ? `${option.connection_airport} · ${duration(option.connection_minutes)}`
+    : "—";
+  return (
+    <>
+      <tr className={`${selected ? "selected-row" : ""} ${expanded ? "expanded-row" : ""}`} onClick={onClick}>
+        <td data-label="Select"><input type="radio" readOnly checked={selected} aria-label={`Select ${option.route.join("-")}`} /> <span className="type-pill">{option.is_nonstop ? "Direct" : "1-stop"}</span></td>
+        <td data-label="Price" className="price-cell">{compactPrice(option)}</td>
+        {showComparisons && <td data-label="Saving vs nonstop" className="saving-cell">{option.is_nonstop ? "Reference" : saving > 0 ? `${money(saving, option.currency)} / ${Number(option.saving_vs_nonstop_percent).toFixed(0)}%` : "—"}</td>}
+        <td data-label="Depart" className={isEarlyDeparture(option.departure_at) ? "time-warning" : ""}>{localClock(option.departure_at)}</td>
+        <td data-label="Arrive" className={isLateArrival(option.arrival_at) ? "time-warning" : ""}>{localClock(option.arrival_at)}</td>
+        <td data-label="Route" className="route-cell">{option.route.join("–")}</td>
+        <td data-label="Stopover" className={(option.connection_minutes ?? 0) > 240 ? "time-warning" : ""}>{stopover}</td>
+        <td data-label="Journey">{duration(option.total_journey_minutes)}</td>
+        {showComparisons && <td data-label="Extra vs nonstop">{option.extra_minutes_vs_nonstop ? `+${duration(option.extra_minutes_vs_nonstop)}` : "—"}</td>}
+        <td data-label="Airlines">{option.airlines.join(" / ")}</td>
+        <td data-label="Tickets">{option.ticketing_type === "separate_tickets" ? "separate" : option.ticketing_type === "single_ticket" ? "single" : "unknown"}</td>
+      </tr>
+      {expanded && <tr className="detail-row"><td colSpan={columnCount}><div className="row-detail"><div className="leg-list">{option.legs.map((leg, index) => <div key={`${leg.flight_number}-${index}`}><strong>{leg.origin} {localClock(leg.departure_at)} → {leg.destination} {localClock(leg.arrival_at)}</strong><span>{leg.airline} · {leg.flight_number}</span>{index < option.legs.length - 1 && <em>Stopover {option.connection_airport} · {duration(option.connection_minutes)}</em>}</div>)}</div><dl><div><dt>Base fare</dt><dd>{money(option.base_price, option.currency)}</dd></div><div><dt>Ancillary status</dt><dd>{option.price_completeness}</dd></div><div><dt>Connection profile</dt><dd>{connectionProfile}</dd></div></dl>{option.ticketing_type === "separate_tickets" && <p className="inline-warning">Separate tickets: missed-connection protection is not guaranteed.</p>}</div></td></tr>}
+    </>
+  );
+}

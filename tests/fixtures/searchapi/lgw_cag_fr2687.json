@@ -1,0 +1,29 @@
+{
+  "search_metadata": {
+    "created_at": "2026-08-24T11:10:53+00:00"
+  },
+  "search_parameters": {
+    "departure_id": "LGW,STN,LTN,LHR,LCY",
+    "arrival_id": "CAG",
+    "outbound_date": "2026-12-18",
+    "flight_type": "one_way",
+    "stops": "nonstop",
+    "adults": "2",
+    "children": "2",
+    "currency": "GBP"
+  },
+  "best_flights": [],
+  "other_flights": [
+    {
+      "price": 741,
+      "flights": [
+        {
+          "departure_airport": {"id": "STN", "date": "2026-12-18", "time": "19:45"},
+          "arrival_airport": {"id": "CAG", "date": "2026-12-18", "time": "23:25"},
+          "airline": "Ryanair",
+          "flight_number": "FR 2687"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,1059 @@
+{
+  "search_metadata": {
+    "id": "SEARCH_ID_FIXTURE",
+    "status": "Success",
+    "created_at": "2026-08-24T10:36:50Z",
+    "request_time_taken": 1.43,
+    "parsing_time_taken": 0.05,
+    "total_time_taken": 1.48,
+    "request_url": "https://example.invalid/request_url/01",
+    "html_url": "https://example.invalid/html_url/01",
+    "json_url": "https://example.invalid/json_url/01"
+  },
+  "search_parameters": {
+    "engine": "google_flights",
+    "departure_id": "LGW",
+    "arrival_id": "MXP",
+    "currency": "GBP",
+    "hl": "en",
+    "gl": "us",
+    "outbound_date": "2026-12-18",
+    "flight_type": "one_way",
+    "travel_class": "economy",
+    "stops": "one_stop_or_fewer",
+    "sort_by": "price",
+    "adults": "2",
+    "children": "2",
+    "infants_in_seat": "0",
+    "infants_on_lap": "0",
+    "show_cheapest_flights": "true"
+  },
+  "other_flights": [
+    {
+      "flights": [
+        {
+          "departure_airport": {
+            "name": "London Gatwick Airport",
+            "id": "LGW",
+            "date": "2026-12-18",
+            "time": "21:15"
+          },
+          "arrival_airport": {
+            "name": "Milano Malpensa Airport",
+            "id": "MXP",
+            "date": "2026-12-19",
+            "time": "00:10"
+          },
+          "duration": 115,
+          "airplane": "Airbus A319",
+          "airline": "easyJet",
+          "airline_logo": "https://example.invalid/airline_logo/01",
+          "travel_class": "Economy",
+          "flight_number": "U2 8305",
+          "is_often_delayed": true,
+          "extensions": [
+            "Carbon emission: 410 kg"
+          ],
+          "detected_extensions": {
+            "carbon_emission": 410
+          }
+        }
+      ],
+      "total_duration": 115,
+      "carbon_emissions": {
+        "this_flight": 410000,
+        "typical_for_this_route": 401000,
+        "difference_percent": 2,
+        "lowest_route": 410000
+      },
+      "price": 258,
+      "type": "One way",
+      "extensions": [
+        "Bag and fare conditions depend on the return flight"
+      ],
+      "airline_logo": "https://example.invalid/airline_logo/02",
+      "booking_token": "BOOKING_TOKEN_01"
+    },
+    {
+      "flights": [
+        {
+          "departure_airport": {
+            "name": "London Gatwick Airport",
+            "id": "LGW",
+            "date": "2026-12-18",
+            "time": "17:15"
+          },
+          "arrival_airport": {
+            "name": "Milano Malpensa Airport",
+            "id": "MXP",
+            "date": "2026-12-18",
+            "time": "20:10"
+          },
+          "duration": 115,
+          "airplane": "Airbus A320",
+          "airline": "easyJet",
+          "airline_logo": "https://example.invalid/airline_logo/03",
+          "travel_class": "Economy",
+          "flight_number": "U2 8311",
+          "extensions": [
+            "Carbon emission: 379 kg"
+          ],
+          "detected_extensions": {
+            "carbon_emission": 379
+          }
+        }
+      ],
+      "total_duration": 115,
+      "carbon_emissions": {
+        "this_flight": 379000,
+        "typical_for_this_route": 401000,
+        "difference_percent": -5,
+        "lowest_route": 410000
+      },
+      "price": 274,
+      "type": "One way",
+      "extensions": [
+        "Bag and fare conditions depend on the return flight"
+      ],
+      "airline_logo": "https://example.invalid/airline_logo/04",
+      "booking_token": "BOOKING_TOKEN_02"
+    },
+    {
+      "flights": [
+        {
+          "departure_airport": {
+            "name": "London Gatwick Airport",
+            "id": "LGW",
+            "date": "2026-12-18",
+            "time": "14:25"
+          },
+          "arrival_airport": {
+            "name": "Milano Malpensa Airport",
+            "id": "MXP",
+            "date": "2026-12-18",
+            "time": "17:25"
+          },
+          "duration": 120,
+          "airplane": "Airbus A320",
+          "airline": "easyJet",
+          "airline_logo": "https://example.invalid/airline_logo/05",
+          "travel_class": "Economy",
+          "flight_number": "U2 8309",
+          "is_often_delayed": true,
+          "extensions": [
+            "Carbon emission: 379 kg"
+          ],
+          "detected_extensions": {
+            "carbon_emission": 379
+          }
+        }
+      ],
+      "total_duration": 120,
+      "carbon_emissions": {
+        "this_flight": 379000,
+        "typical_for_this_route": 401000,
+        "difference_percent": -5,
+        "lowest_route": 410000
+      },
+      "price": 328,
+      "type": "One way",
+      "extensions": [
+        "Bag and fare conditions depend on the return flight"
+      ],
+      "airline_logo": "https://example.invalid/airline_logo/06",
+      "booking_token": "BOOKING_TOKEN_03"
+    },
+    {
+      "flights": [
+        {
+          "departure_airport": {
+            "name": "London Gatwick Airport",
+            "id": "LGW",
+            "date": "2026-12-18",
+            "time": "08:30"
+          },
+          "arrival_airport": {
+            "name": "Milano Malpensa Airport",
+            "id": "MXP",
+            "date": "2026-12-18",
+            "time": "11:30"
+          },
+          "duration": 120,
+          "airplane": "Airbus A319",
+          "airline": "easyJet",
+          "airline_logo": "https://example.invalid/airline_logo/07",
+          "travel_class": "Economy",
+          "flight_number": "U2 8051",
+          "extensions": [
+            "Carbon emission: 410 kg"
+          ],
+          "detected_extensions": {
+            "carbon_emission": 410
+          }
+        }
+      ],
+      "total_duration": 120,
+      "carbon_emissions": {
+        "this_flight": 410000,
+        "typical_for_this_route": 401000,
+        "difference_percent": 2,
+        "lowest_route": 410000
+      },
+      "price": 340,
+      "type": "One way",
+      "extensions": [
+        "Bag and fare conditions depend on the return flight"
+      ],
+      "airline_logo": "https://example.invalid/airline_logo/08",
+      "booking_token": "BOOKING_TOKEN_04"
+    },
+    {
+      "flights": [
+        {
+          "departure_airport": {
+            "name": "London Gatwick Airport",
+            "id": "LGW",
+            "date": "2026-12-18",
+            "time": "20:15"
+          },
+          "arrival_airport": {
+            "name": "Milano Malpensa Airport",
+            "id": "MXP",
+            "date": "2026-12-18",
+            "time": "23:10"
+          },
+          "duration": 115,
+          "airplane": "Airbus A321",
+          "airline": "easyJet",
+          "airline_logo": "https://example.invalid/airline_logo/09",
+          "travel_class": "Economy",
+          "flight_number": "U2 8375",
+          "extensions": [
+            "Carbon emission: 376 kg"
+          ],
+          "detected_extensions": {
+            "carbon_emission": 376
+          }
+        }
+      ],
+      "total_duration": 115,
+      "carbon_emissions": {
+        "this_flight": 377000,
+        "typical_for_this_route": 401000,
+        "difference_percent": -6,
+        "lowest_route": 410000
+      },
+      "price": 344,
+      "type": "One way",
+      "extensions": [
+        "Bag and fare conditions depend on the return flight"
+      ],
+      "airline_logo": "https://example.invalid/airline_logo/10",
+      "booking_token": "BOOKING_TOKEN_05"
+    },
+    {
+      "flights": [
+        {
+          "departure_airport": {
+            "name": "London Gatwick Airport",
+            "id": "LGW",
+            "date": "2026-12-18",
+            "time": "07:00"
+          },
+          "arrival_airport": {
+            "name": "Milano Malpensa Airport",
+            "id": "MXP",
+            "date": "2026-12-18",
+            "time": "10:00"
+          },
+          "duration": 120,
+          "airplane": "Airbus A320",
+          "airline": "easyJet",
+          "airline_logo": "https://example.invalid/airline_logo/11",
+          "travel_class": "Economy",
+          "flight_number": "U2 8303",
+          "extensions": [
+            "Carbon emission: 391 kg"
+          ],
+          "detected_extensions": {
+            "carbon_emission": 391
+          }
+        }
+      ],
+      "total_duration": 120,
+      "carbon_emissions": {
+        "this_flight": 392000,
+        "typical_for_this_route": 401000,
+        "difference_percent": -2,
+        "lowest_route": 410000
+      },
+      "price": 354,
+      "type": "One way",
+      "extensions": [
+        "Bag and fare conditions depend on the return flight"
+      ],
+      "airline_logo": "https://example.invalid/airline_logo/12",
+      "booking_token": "BOOKING_TOKEN_06"
+    },
+    {
+      "flights": [
+        {
+          "departure_airport": {
+            "name": "London Gatwick Airport",
+            "id": "LGW",
+            "date": "2026-12-18",
+            "time": "18:35"
+          },
+          "arrival_airport": {
+            "name": "Milano Malpensa Airport",
+            "id": "MXP",
+            "date": "2026-12-18",
+            "time": "21:30"
+          },
+          "duration": 115,
+          "airplane": "Airbus A320",
+          "airline": "easyJet",
+          "airline_logo": "https://example.invalid/airline_logo/13",
+          "travel_class": "Economy",
+          "flight_number": "U2 8313",
+          "extensions": [
+            "Carbon emission: 379 kg"
+          ],
+          "detected_extensions": {
+            "carbon_emission": 379
+          }
+        }
+      ],
+      "total_duration": 115,
+      "carbon_emissions": {
+        "this_flight": 379000,
+        "typical_for_this_route": 401000,
+        "difference_percent": -5,
+        "lowest_route": 410000
+      },
+      "price": 362,
+      "type": "One way",
+      "extensions": [
+        "Bag and fare conditions depend on the return flight"
+      ],
+      "airline_logo": "https://example.invalid/airline_logo/14",
+      "booking_token": "BOOKING_TOKEN_07"
+    },
+    {
+      "flights": [
+        {
+          "departure_airport": {
+            "name": "London Gatwick Airport",
+            "id": "LGW",
+            "date": "2026-12-18",
+            "time": "13:00"
+          },
+          "arrival_airport": {
+            "name": "Josep Tarradellas Barcelona-El Prat Airport",
+            "id": "BCN",
+            "date": "2026-12-18",
+            "time": "16:05"
+          },
+          "duration": 125,
+          "airplane": "Airbus A320",
+          "airline": "Vueling",
+          "airline_logo": "https://example.invalid/airline_logo/15",
+          "travel_class": "Economy",
+          "flight_number": "VY 7607",
+          "ticket_also_sold_by": [
+            "Iberia"
+          ],
+          "extensions": [
+            "In-seat USB outlet",
+            "Stream video to own device",
+            "Wi-Fi for fee",
+            "Seat type Below Average Legroom",
+            "Legroom 29 inches",
+            "Carbon emission: 395 kg"
+          ],
+          "detected_extensions": {
+            "has_in_seat_usb_outlet": true,
+            "has_stream_video_to_own_device": true,
+            "wifi": "for fee",
+            "seat_type": "Below Average Legroom",
+            "legroom_short": "29 in",
+            "legroom_long": "29 inches",
+            "carbon_emission": 395
+          }
+        },
+        {
+          "departure_airport": {
+            "name": "Josep Tarradellas Barcelona-El Prat Airport",
+            "id": "BCN",
+            "date": "2026-12-18",
+            "time": "20:00"
+          },
+          "arrival_airport": {
+            "name": "Milano Malpensa Airport",
+            "id": "MXP",
+            "date": "2026-12-18",
+            "time": "21:40"
+          },
+          "duration": 100,
+          "airplane": "Airbus A321",
+          "airline": "Vueling",
+          "airline_logo": "https://example.invalid/airline_logo/16",
+          "travel_class": "Economy",
+          "flight_number": "VY 6054",
+          "ticket_also_sold_by": [
+            "Iberia"
+          ],
+          "extensions": [
+            "In-seat USB outlet",
+            "Stream video to own device",
+            "Wi-Fi for fee",
+            "Seat type Below Average Legroom",
+            "Legroom 29 inches",
+            "Carbon emission: 336 kg"
+          ],
+          "detected_extensions": {
+            "has_in_seat_usb_outlet": true,
+            "has_stream_video_to_own_device": true,
+            "wifi": "for fee",
+            "seat_type": "Below Average Legroom",
+            "legroom_short": "29 in",
+            "legroom_long": "29 inches",
+            "carbon_emission": 336
+          }
+        }
+      ],
+      "layovers": [
+        {
+          "duration": 235,
+          "name": "Josep Tarradellas Barcelona-El Prat Airport",
+          "id": "BCN"
+        }
+      ],
+      "total_duration": 460,
+      "carbon_emissions": {
+        "this_flight": 732000,
+        "typical_for_this_route": 401000,
+        "difference_percent": 83,
+        "lowest_route": 410000
+      },
+      "price": 374,
+      "type": "One way",
+      "extensions": [
+        "Bag and fare conditions depend on the return flight"
+      ],
+      "airline_logo": "https://example.invalid/airline_logo/17",
+      "booking_token": "BOOKING_TOKEN_08"
+    },
+    {
+      "flights": [
+        {
+          "departure_airport": {
+            "name": "London Gatwick Airport",
+            "id": "LGW",
+            "date": "2026-12-18",
+            "time": "18:40"
+          },
+          "arrival_airport": {
+            "name": "Zurich Airport",
+            "id": "ZRH",
+            "date": "2026-12-18",
+            "time": "21:25"
+          },
+          "duration": 105,
+          "airplane": "Airbus A320",
+          "airline": "SWISS",
+          "airline_logo": "https://example.invalid/airline_logo/18",
+          "travel_class": "Economy",
+          "flight_number": "LX 433",
+          "is_often_delayed": true,
+          "extensions": [
+            "Stream video to own device",
+            "Seat type Average Legroom",
+            "Legroom 30 inches",
+            "Carbon emission: 361 kg"
+          ],
+          "detected_extensions": {
+            "has_stream_video_to_own_device": true,
+            "seat_type": "Average Legroom",
+            "legroom_short": "30 in",
+            "legroom_long": "30 inches",
+            "carbon_emission": 361
+          }
+        },
+        {
+          "departure_airport": {
+            "name": "Zurich Airport",
+            "id": "ZRH",
+            "date": "2026-12-19",
+            "time": "08:45"
+          },
+          "arrival_airport": {
+            "name": "Milano Malpensa Airport",
+            "id": "MXP",
+            "date": "2026-12-19",
+            "time": "09:40"
+          },
+          "duration": 55,
+          "airplane": "Airbus A220-300 Passenger",
+          "airline": "SWISS",
+          "airline_logo": "https://example.invalid/airline_logo/19",
+          "travel_class": "Economy",
+          "flight_number": "LX 1612",
+          "extensions": [
+            "Seat type Below Average Legroom",
+            "Legroom 29 inches",
+            "Carbon emission: 191 kg"
+          ],
+          "detected_extensions": {
+            "seat_type": "Below Average Legroom",
+            "legroom_short": "29 in",
+            "legroom_long": "29 inches",
+            "carbon_emission": 191
+          }
+        }
+      ],
+      "layovers": [
+        {
+          "duration": 680,
+          "name": "Zurich Airport",
+          "id": "ZRH",
+          "is_overnight": true
+        }
+      ],
+      "total_duration": 840,
+      "carbon_emissions": {
+        "this_flight": 553000,
+        "typical_for_this_route": 401000,
+        "difference_percent": 38,
+        "lowest_route": 410000
+      },
+      "price": 462,
+      "type": "One way",
+      "extensions": [
+        "Bag and fare conditions depend on the return flight"
+      ],
+      "airline_logo": "https://example.invalid/airline_logo/20",
+      "booking_token": "BOOKING_TOKEN_09"
+    },
+    {
+      "flights": [
+        {
+          "departure_airport": {
+            "name": "London Gatwick Airport",
+            "id": "LGW",
+            "date": "2026-12-18",
+            "time": "15:25"
+          },
+          "arrival_airport": {
+            "name": "Josep Tarradellas Barcelona-El Prat Airport",
+            "id": "BCN",
+            "date": "2026-12-18",
+            "time": "18:30"
+          },
+          "duration": 125,
+          "airplane": "Airbus A320",
+          "airline": "Vueling",
+          "airline_logo": "https://example.invalid/airline_logo/21",
+          "travel_class": "Economy",
+          "flight_number": "VY 7613",
+          "ticket_also_sold_by": [
+            "Iberia"
+          ],
+          "extensions": [
+            "In-seat USB outlet",
+            "Stream video to own device",
+            "Wi-Fi for fee",
+            "Seat type Below Average Legroom",
+            "Legroom 29 inches",
+            "Carbon emission: 395 kg"
+          ],
+          "detected_extensions": {
+            "has_in_seat_usb_outlet": true,
+            "has_stream_video_to_own_device": true,
+            "wifi": "for fee",
+            "seat_type": "Below Average Legroom",
+            "legroom_short": "29 in",
+            "legroom_long": "29 inches",
+            "carbon_emission": 395
+          }
+        },
+        {
+          "departure_airport": {
+            "name": "Josep Tarradellas Barcelona-El Prat Airport",
+            "id": "BCN",
+            "date": "2026-12-18",
+            "time": "20:00"
+          },
+          "arrival_airport": {
+            "name": "Milano Malpensa Airport",
+            "id": "MXP",
+            "date": "2026-12-18",
+            "time": "21:40"
+          },
+          "duration": 100,
+          "airplane": "Airbus A321",
+          "airline": "Vueling",
+          "airline_logo": "https://example.invalid/airline_logo/22",
+          "travel_class": "Economy",
+          "flight_number": "VY 6054",
+          "ticket_also_sold_by": [
+            "Iberia"
+          ],
+          "extensions": [
+            "In-seat USB outlet",
+            "Stream video to own device",
+            "Wi-Fi for fee",
+            "Seat type Below Average Legroom",
+            "Legroom 29 inches",
+            "Carbon emission: 336 kg"
+          ],
+          "detected_extensions": {
+            "has_in_seat_usb_outlet": true,
+            "has_stream_video_to_own_device": true,
+            "wifi": "for fee",
+            "seat_type": "Below Average Legroom",
+            "legroom_short": "29 in",
+            "legroom_long": "29 inches",
+            "carbon_emission": 336
+          }
+        }
+      ],
+      "layovers": [
+        {
+          "duration": 90,
+          "name": "Josep Tarradellas Barcelona-El Prat Airport",
+          "id": "BCN"
+        }
+      ],
+      "total_duration": 315,
+      "carbon_emissions": {
+        "this_flight": 732000,
+        "typical_for_this_route": 401000,
+        "difference_percent": 83,
+        "lowest_route": 410000
+      },
+      "price": 713,
+      "type": "One way",
+      "extensions": [
+        "Bag and fare conditions depend on the return flight"
+      ],
+      "airline_logo": "https://example.invalid/airline_logo/23",
+      "booking_token": "BOOKING_TOKEN_10"
+    },
+    {
+      "flights": [
+        {
+          "departure_airport": {
+            "name": "London Gatwick Airport",
+            "id": "LGW",
+            "date": "2026-12-18",
+            "time": "10:25"
+          },
+          "arrival_airport": {
+            "name": "Frankfurt Airport",
+            "id": "FRA",
+            "date": "2026-12-18",
+            "time": "12:55"
+          },
+          "duration": 90,
+          "airplane": "Airbus A320",
+          "airline": "Condor",
+          "airline_logo": "https://example.invalid/airline_logo/24",
+          "travel_class": "Economy",
+          "flight_number": "DE 4331",
+          "extensions": [
+            "Stream video to own device",
+            "Seat type Below Average Legroom",
+            "Legroom 28 inches",
+            "Carbon emission: 290 kg"
+          ],
+          "detected_extensions": {
+            "has_stream_video_to_own_device": true,
+            "seat_type": "Below Average Legroom",
+            "legroom_short": "28 in",
+            "legroom_long": "28 inches",
+            "carbon_emission": 290
+          }
+        },
+        {
+          "departure_airport": {
+            "name": "Frankfurt Airport",
+            "id": "FRA",
+            "date": "2026-12-18",
+            "time": "14:20"
+          },
+          "arrival_airport": {
+            "name": "Milano Malpensa Airport",
+            "id": "MXP",
+            "date": "2026-12-18",
+            "time": "15:35"
+          },
+          "duration": 75,
+          "airplane": "Embraer 190",
+          "airline": "Condor",
+          "airline_logo": "https://example.invalid/airline_logo/25",
+          "travel_class": "Economy",
+          "flight_number": "DE 4264",
+          "extensions": [
+            "Seat type Average Legroom",
+            "Legroom 31 inches",
+            "Carbon emission: 350 kg"
+          ],
+          "detected_extensions": {
+            "seat_type": "Average Legroom",
+            "legroom_short": "31 in",
+            "legroom_long": "31 inches",
+            "carbon_emission": 350
+          }
+        }
+      ],
+      "layovers": [
+        {
+          "duration": 85,
+          "name": "Frankfurt Airport",
+          "id": "FRA"
+        }
+      ],
+      "total_duration": 250,
+      "carbon_emissions": {
+        "this_flight": 641000,
+        "typical_for_this_route": 401000,
+        "difference_percent": 60,
+        "lowest_route": 410000
+      },
+      "price": 820,
+      "type": "One way",
+      "extensions": [
+        "Bag and fare conditions depend on the return flight"
+      ],
+      "airline_logo": "https://example.invalid/airline_logo/26",
+      "booking_token": "BOOKING_TOKEN_11"
+    }
+  ],
+  "airports": [
+    {
+      "departure": [
+        {
+          "airport": {
+            "id": "LGW",
+            "name": "London Gatwick Airport"
+          },
+          "city": "London",
+          "country": "United Kingdom",
+          "country_code": "GB",
+          "image": "https://example.invalid/image/01",
+          "thumbnail": "https://example.invalid/thumbnail/01"
+        }
+      ],
+      "arrival": [
+        {
+          "airport": {
+            "id": "MXP",
+            "name": "Milano Malpensa Airport"
+          },
+          "city": "Milan",
+          "country": "Italy",
+          "country_code": "IT",
+          "image": "https://example.invalid/image/02",
+          "thumbnail": "https://example.invalid/thumbnail/02"
+        }
+      ]
+    }
+  ],
+  "airlines": {
+    "alliances": [
+      {
+        "code": "ONEWORLD",
+        "name": "Oneworld"
+      },
+      {
+        "code": "SKYTEAM",
+        "name": "SkyTeam"
+      },
+      {
+        "code": "STAR_ALLIANCE",
+        "name": "Star Alliance"
+      }
+    ],
+    "airlines": [
+      {
+        "code": "A3",
+        "name": "Aegean"
+      },
+      {
+        "code": "BT",
+        "name": "Air Baltic"
+      },
+      {
+        "code": "EN",
+        "name": "Air Dolomiti"
+      },
+      {
+        "code": "UX",
+        "name": "Air Europa"
+      },
+      {
+        "code": "AF",
+        "name": "Air France"
+      },
+      {
+        "code": "AI",
+        "name": "Air India"
+      },
+      {
+        "code": "A2",
+        "name": "Animawings"
+      },
+      {
+        "code": "S4",
+        "name": "Azores Airlines"
+      },
+      {
+        "code": "BA",
+        "name": "British Airways"
+      },
+      {
+        "code": "MU",
+        "name": "China Eastern"
+      },
+      {
+        "code": "DE",
+        "name": "Condor"
+      },
+      {
+        "code": "U2",
+        "name": "easyJet"
+      },
+      {
+        "code": "EK",
+        "name": "Emirates"
+      },
+      {
+        "code": "EW",
+        "name": "Eurowings"
+      },
+      {
+        "code": "IB",
+        "name": "Iberia"
+      },
+      {
+        "code": "FI",
+        "name": "Icelandair"
+      },
+      {
+        "code": "6E",
+        "name": "IndiGo"
+      },
+      {
+        "code": "AZ",
+        "name": "ITA"
+      },
+      {
+        "code": "LL",
+        "name": "LEVEL"
+      },
+      {
+        "code": "LO",
+        "name": "LOT"
+      },
+      {
+        "code": "LH",
+        "name": "Lufthansa"
+      },
+      {
+        "code": "D8",
+        "name": "Norwegian"
+      },
+      {
+        "code": "DY",
+        "name": "Norwegian"
+      },
+      {
+        "code": "BJ",
+        "name": "Nouvelair Tunisie"
+      },
+      {
+        "code": "PK",
+        "name": "Pakistan International Airlines"
+      },
+      {
+        "code": "QR",
+        "name": "Qatar Airways"
+      },
+      {
+        "code": "AT",
+        "name": "Royal Air Maroc"
+      },
+      {
+        "code": "SK",
+        "name": "Scandinavian Airlines"
+      },
+      {
+        "code": "SQ",
+        "name": "Singapore Airlines"
+      },
+      {
+        "code": "GQ",
+        "name": "SKY express"
+      },
+      {
+        "code": "XQ",
+        "name": "SunExpress"
+      },
+      {
+        "code": "LX",
+        "name": "SWISS"
+      },
+      {
+        "code": "TP",
+        "name": "Tap Air Portugal"
+      },
+      {
+        "code": "TG",
+        "name": "THAI"
+      },
+      {
+        "code": "TU",
+        "name": "Tunisair"
+      },
+      {
+        "code": "TK",
+        "name": "Turkish Airlines"
+      },
+      {
+        "code": "VY",
+        "name": "Vueling"
+      }
+    ],
+    "hubs": [
+      {
+        "code": "ALC",
+        "name": "Alicante"
+      },
+      {
+        "code": "ATH",
+        "name": "Athens"
+      },
+      {
+        "code": "BCN",
+        "name": "Barcelona"
+      },
+      {
+        "code": "BOD",
+        "name": "Bordeaux"
+      },
+      {
+        "code": "CMN",
+        "name": "Casablanca"
+      },
+      {
+        "code": "CGN",
+        "name": "Cologne"
+      },
+      {
+        "code": "CPH",
+        "name": "Copenhagen"
+      },
+      {
+        "code": "FRA",
+        "name": "Frankfurt am Main"
+      },
+      {
+        "code": "GVA",
+        "name": "Geneva"
+      },
+      {
+        "code": "IST",
+        "name": "Istanbul"
+      },
+      {
+        "code": "LIS",
+        "name": "Lisbon"
+      },
+      {
+        "code": "LUX",
+        "name": "Luxembourg"
+      },
+      {
+        "code": "LYS",
+        "name": "Lyon"
+      },
+      {
+        "code": "MAD",
+        "name": "Madrid"
+      },
+      {
+        "code": "AGP",
+        "name": "Málaga"
+      },
+      {
+        "code": "MUC",
+        "name": "Munich"
+      },
+      {
+        "code": "CDG",
+        "name": "Paris"
+      },
+      {
+        "code": "OPO",
+        "name": "Porto"
+      },
+      {
+        "code": "RIX",
+        "name": "Riga"
+      },
+      {
+        "code": "WAW",
+        "name": "Warsaw"
+      },
+      {
+        "code": "ZRH",
+        "name": "Zürich"
+      }
+    ]
+  },
+  "baggage_allowance_links": [
+    {
+      "airline_code": "DE",
+      "airline": "Condor",
+      "url": "https://example.invalid/url/01"
+    },
+    {
+      "airline_code": "U2",
+      "airline": "easyJet",
+      "url": "https://example.invalid/url/02"
+    },
+    {
+      "airline_code": "LX",
+      "airline": "SWISS",
+      "url": "https://example.invalid/url/03"
+    },
+    {
+      "airline_code": "VY",
+      "airline": "Vueling",
+      "url": "https://example.invalid/url/04"
+    }
+  ],
+  "passenger_assistance_links": [
+    {
+      "airline_code": "U2",
+      "airline": "easyJet",
+      "url": "https://example.invalid/url/05"
+    },
+    {
+      "airline_code": "VY",
+      "airline": "Vueling",
+      "url": "https://example.invalid/url/06"
+    },
+    {
+      "airline_code": "LX",
+      "airline": "SWISS",
+      "url": "https://example.invalid/url/07"
+    },
+    {
+      "airline_code": "DE",
+      "airline": "Condor",
+      "url": "https://example.invalid/url/08"
+    }
+  ]
+}

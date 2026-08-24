@@ -1,0 +1,154 @@
+carriers:
+  - carrier_code: U2
+    carrier_name: easyJet
+    effective_from: null
+    source_retrieved_at: 2026-08-24
+    personal_item:
+      included: true
+      dimensions_cm: 45x36x20
+    cabin_bag:
+      dimensions_cm: 56x45x25
+      price_type: dynamic
+      price_min: {GBP: 5.99}
+      price_max: {}
+    checked_bag:
+      options:
+        - weight_kg: 15
+          price_type: dynamic
+          price_min: {GBP: 6.99}
+        - weight_kg: 23
+          price_type: dynamic
+          price_min: {GBP: 9.49}
+    source_url: https://www.easyjet.com/en/terms-and-conditions/fees
+    confidence: medium
+
+  - carrier_code: FR
+    carrier_name: Ryanair
+    effective_from: null
+    source_retrieved_at: 2026-08-24
+    personal_item:
+      included: true
+      dimensions_cm: 40x30x20
+    cabin_bag:
+      weight_kg: 10
+      dimensions_cm: null
+      product: Priority + 2 Cabin Bags
+      price_type: range
+      price_min: {GBP/EUR: 6}
+      price_max: {GBP/EUR: 36}
+      currency_basis: GBP/EUR depending market
+    checked_bag:
+      options:
+        - weight_kg: 10
+          price_type: range
+          price_min: {GBP/EUR: 9.49}
+          price_max: {GBP/EUR: 44.99}
+          currency_basis: GBP/EUR depending market
+        - weight_kg: 20
+          price_type: range
+          price_min: {GBP/EUR: 18.99}
+          price_max: {GBP/EUR: 59.99}
+          currency_basis: GBP/EUR depending market
+        - weight_kg: 23
+          price_type: range
+          price_min: {GBP/EUR: 29.99}
+          price_max: {GBP/EUR: 80.99}
+          currency_basis: GBP/EUR depending market
+    source_url: https://www.ryanair.com/gb/en/useful-info/help-centre/fees
+    confidence: medium
+
+  - carrier_code: W4
+    carrier_name: Wizz Air Malta
+    effective_from: null
+    source_retrieved_at: 2026-08-24
+    personal_item:
+      included: true
+      dimensions_cm: 40x30x20
+      weight_kg: 10
+    cabin_bag:
+      dimensions_cm: 55x40x23
+      weight_kg: 10
+      product: WIZZ Priority
+      price_type: dynamic
+      price_min: {}
+      price_max: {}
+    checked_bag:
+      supported_weights_kg: [10, 20, 26, 32]
+      price_type: dynamic
+      price_min: {}
+      price_max: {}
+      notes: Pricing varies by season/date/payment channel/weight.
+    source_url: null
+    confidence: low
+
+  - carrier_code: VY
+    carrier_name: Vueling
+    effective_from: null
+    source_retrieved_at: 2026-08-24
+    personal_item:
+      included: true
+      dimensions_cm: 40x30x20
+    cabin_bag:
+      dimensions_cm: 55x40x20
+      weight_kg: 10
+      price_type: dynamic_or_fare_dependent
+      price_min: {}
+      price_max: {}
+    checked_bag:
+      options:
+        - weight_kg: 15
+          price_type: range
+          price_min: {EUR: 10}
+          price_max: {EUR: 95}
+        - weight_kg: 20
+          price_type: range
+          price_min: {EUR: 14}
+          price_max: {EUR: 96}
+        - weight_kg: 25
+          price_type: range
+          price_min: {EUR: 18}
+          price_max: {EUR: 99}
+        - weight_kg: 30
+          price_type: range
+          price_min: {EUR: 25}
+          price_max: {EUR: 120}
+    source_url: https://help.vueling.com/hc/en-gb/articles/19798784049041-Checked-Luggage-Allowance
+    confidence: medium
+
+  - carrier_code: LX
+    carrier_name: SWISS
+    effective_from: null
+    source_retrieved_at: 2026-08-24
+    personal_item:
+      included: true
+      dimensions_cm: 40x30x15
+    cabin_bag:
+      weight_kg: 8
+      price_type: fare_dependent
+      notes: Basic may charge separately; higher economy fare families may include it.
+    checked_bag:
+      weight_kg: 23
+      price_type: fare_dependent
+    source_url: https://www.swiss.com/gb/en/prepare/baggage/checked-baggage
+    confidence: medium
+
+  - carrier_code: DE
+    carrier_name: Condor
+    effective_from: null
+    source_retrieved_at: 2026-08-24
+    personal_item:
+      included: true
+      dimensions_cm: 40x30x15
+    cabin_bag:
+      weight_kg: 8
+      price_type: dynamic
+      price_min: {EUR: 9.99, GBP: 10}
+      price_max: {}
+      notes: Economy Zero short/medium haul reference.
+    checked_bag:
+      weight_kg: 20
+      price_type: dynamic
+      price_min: {EUR: 24.99}
+      price_max: {}
+    source_url: https://www.condor.com/eu/flight-preparation/baggage-and-animals/carry-on.jsp
+    confidence: medium

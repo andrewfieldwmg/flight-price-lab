@@ -1,0 +1,1 @@
+"""Flight offer provider adapters."""

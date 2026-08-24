@@ -1,0 +1,691 @@
+{
+  "search_metadata": {
+    "id": "SEARCH_ID_FIXTURE",
+    "status": "Success",
+    "created_at": "2026-08-24T10:56:35Z",
+    "request_time_taken": 1.09,
+    "parsing_time_taken": 0.01,
+    "total_time_taken": 1.1,
+    "request_url": "https://example.invalid/request_url/01",
+    "html_url": "https://example.invalid/html_url/01",
+    "json_url": "https://example.invalid/json_url/01"
+  },
+  "search_parameters": {
+    "engine": "google_flights",
+    "departure_id": "MXP",
+    "arrival_id": "CAG",
+    "currency": "GBP",
+    "hl": "en",
+    "gl": "us",
+    "outbound_date": "2026-12-18",
+    "flight_type": "one_way",
+    "travel_class": "economy",
+    "stops": "one_stop_or_fewer",
+    "sort_by": "price",
+    "adults": "2",
+    "children": "2",
+    "infants_in_seat": "0",
+    "infants_on_lap": "0",
+    "show_cheapest_flights": "true"
+  },
+  "other_flights": [
+    {
+      "flights": [
+        {
+          "departure_airport": {
+            "name": "Milano Malpensa Airport",
+            "id": "MXP",
+            "date": "2026-12-18",
+            "time": "07:10"
+          },
+          "arrival_airport": {
+            "name": "Cagliari Elmas Airport",
+            "id": "CAG",
+            "date": "2026-12-18",
+            "time": "08:45"
+          },
+          "duration": 95,
+          "airplane": "Airbus A321neo",
+          "airline": "Wizz Air",
+          "airline_logo": "https://example.invalid/airline_logo/01",
+          "travel_class": "Economy",
+          "flight_number": "W4 6995",
+          "extensions": [
+            "Carbon emission: 236 kg"
+          ],
+          "detected_extensions": {
+            "carbon_emission": 236
+          }
+        }
+      ],
+      "total_duration": 95,
+      "carbon_emissions": {
+        "this_flight": 237000,
+        "typical_for_this_route": 296000,
+        "difference_percent": -20,
+        "lowest_route": 304000
+      },
+      "price": 158,
+      "type": "One way",
+      "extensions": [
+        "Bag and fare conditions depend on the return flight"
+      ],
+      "airline_logo": "https://example.invalid/airline_logo/02",
+      "booking_token": "BOOKING_TOKEN_01"
+    },
+    {
+      "flights": [
+        {
+          "departure_airport": {
+            "name": "Milano Malpensa Airport",
+            "id": "MXP",
+            "date": "2026-12-18",
+            "time": "21:15"
+          },
+          "arrival_airport": {
+            "name": "Cagliari Elmas Airport",
+            "id": "CAG",
+            "date": "2026-12-18",
+            "time": "22:50"
+          },
+          "duration": 95,
+          "airplane": "Airbus A321neo",
+          "airline": "Wizz Air",
+          "airline_logo": "https://example.invalid/airline_logo/03",
+          "travel_class": "Economy",
+          "flight_number": "W4 6997",
+          "extensions": [
+            "Carbon emission: 236 kg"
+          ],
+          "detected_extensions": {
+            "carbon_emission": 236
+          }
+        }
+      ],
+      "total_duration": 95,
+      "carbon_emissions": {
+        "this_flight": 237000,
+        "typical_for_this_route": 296000,
+        "difference_percent": -20,
+        "lowest_route": 304000
+      },
+      "price": 158,
+      "type": "One way",
+      "extensions": [
+        "Bag and fare conditions depend on the return flight"
+      ],
+      "airline_logo": "https://example.invalid/airline_logo/04",
+      "booking_token": "BOOKING_TOKEN_02"
+    },
+    {
+      "flights": [
+        {
+          "departure_airport": {
+            "name": "Milano Malpensa Airport",
+            "id": "MXP",
+            "date": "2026-12-18",
+            "time": "20:35"
+          },
+          "arrival_airport": {
+            "name": "Cagliari Elmas Airport",
+            "id": "CAG",
+            "date": "2026-12-18",
+            "time": "22:10"
+          },
+          "duration": 95,
+          "airplane": "Boeing 737",
+          "airline": "Ryanair",
+          "airline_logo": "https://example.invalid/airline_logo/05",
+          "travel_class": "Economy",
+          "flight_number": "FR 4578",
+          "extensions": [
+            "Seat type Average Legroom",
+            "Legroom 30 inches",
+            "Carbon emission: 304 kg"
+          ],
+          "detected_extensions": {
+            "seat_type": "Average Legroom",
+            "legroom_short": "30 in",
+            "legroom_long": "30 inches",
+            "carbon_emission": 304
+          }
+        }
+      ],
+      "total_duration": 95,
+      "carbon_emissions": {
+        "this_flight": 304000,
+        "typical_for_this_route": 296000,
+        "difference_percent": 3,
+        "lowest_route": 304000
+      },
+      "price": 162,
+      "type": "One way",
+      "extensions": [
+        "Bag and fare conditions depend on the return flight"
+      ],
+      "airline_logo": "https://example.invalid/airline_logo/06",
+      "booking_token": "BOOKING_TOKEN_03"
+    },
+    {
+      "flights": [
+        {
+          "departure_airport": {
+            "name": "Milano Malpensa Airport",
+            "id": "MXP",
+            "date": "2026-12-18",
+            "time": "10:10"
+          },
+          "arrival_airport": {
+            "name": "Cagliari Elmas Airport",
+            "id": "CAG",
+            "date": "2026-12-18",
+            "time": "11:50"
+          },
+          "duration": 100,
+          "airplane": "Airbus A320",
+          "airline": "easyJet",
+          "airline_logo": "https://example.invalid/airline_logo/07",
+          "travel_class": "Economy",
+          "flight_number": "U2 3565",
+          "extensions": [
+            "Carbon emission: 304 kg"
+          ],
+          "detected_extensions": {
+            "carbon_emission": 304
+          }
+        }
+      ],
+      "total_duration": 100,
+      "carbon_emissions": {
+        "this_flight": 305000,
+        "typical_for_this_route": 296000,
+        "difference_percent": 3,
+        "lowest_route": 304000
+      },
+      "price": 165,
+      "type": "One way",
+      "extensions": [
+        "Bag and fare conditions depend on the return flight"
+      ],
+      "airline_logo": "https://example.invalid/airline_logo/08",
+      "booking_token": "BOOKING_TOKEN_04"
+    },
+    {
+      "flights": [
+        {
+          "departure_airport": {
+            "name": "Milano Malpensa Airport",
+            "id": "MXP",
+            "date": "2026-12-18",
+            "time": "15:35"
+          },
+          "arrival_airport": {
+            "name": "Cagliari Elmas Airport",
+            "id": "CAG",
+            "date": "2026-12-18",
+            "time": "17:10"
+          },
+          "duration": 95,
+          "airplane": "Boeing 737",
+          "airline": "Ryanair",
+          "airline_logo": "https://example.invalid/airline_logo/09",
+          "travel_class": "Economy",
+          "flight_number": "FR 238",
+          "extensions": [
+            "Seat type Average Legroom",
+            "Legroom 30 inches",
+            "Carbon emission: 304 kg"
+          ],
+          "detected_extensions": {
+            "seat_type": "Average Legroom",
+            "legroom_short": "30 in",
+            "legroom_long": "30 inches",
+            "carbon_emission": 304
+          }
+        }
+      ],
+      "total_duration": 95,
+      "carbon_emissions": {
+        "this_flight": 304000,
+        "typical_for_this_route": 296000,
+        "difference_percent": 3,
+        "lowest_route": 304000
+      },
+      "price": 253,
+      "type": "One way",
+      "extensions": [
+        "Bag and fare conditions depend on the return flight"
+      ],
+      "airline_logo": "https://example.invalid/airline_logo/10",
+      "booking_token": "BOOKING_TOKEN_05"
+    },
+    {
+      "flights": [
+        {
+          "departure_airport": {
+            "name": "Milano Malpensa Airport",
+            "id": "MXP",
+            "date": "2026-12-18",
+            "time": "21:20"
+          },
+          "arrival_airport": {
+            "name": "Luxembourg Airport",
+            "id": "LUX",
+            "date": "2026-12-18",
+            "time": "22:45"
+          },
+          "duration": 85,
+          "airplane": "De Havilland-Bombardier Dash-8",
+          "airline": "Luxair",
+          "airline_logo": "https://example.invalid/airline_logo/11",
+          "travel_class": "Economy",
+          "flight_number": "LG 6998",
+          "is_often_delayed": true,
+          "extensions": [
+            "Seat type Average Legroom",
+            "Legroom 31 inches",
+            "Carbon emission: 277 kg"
+          ],
+          "detected_extensions": {
+            "seat_type": "Average Legroom",
+            "legroom_short": "31 in",
+            "legroom_long": "31 inches",
+            "carbon_emission": 277
+          }
+        },
+        {
+          "departure_airport": {
+            "name": "Luxembourg Airport",
+            "id": "LUX",
+            "date": "2026-12-19",
+            "time": "17:10"
+          },
+          "arrival_airport": {
+            "name": "Cagliari Elmas Airport",
+            "id": "CAG",
+            "date": "2026-12-19",
+            "time": "19:20"
+          },
+          "duration": 130,
+          "airplane": "Boeing 737",
+          "airline": "Luxair",
+          "airline_logo": "https://example.invalid/airline_logo/12",
+          "travel_class": "Economy",
+          "flight_number": "LG 531",
+          "extensions": [
+            "Stream video to own device",
+            "Seat type Average Legroom",
+            "Legroom 30 inches",
+            "Carbon emission: 519 kg"
+          ],
+          "detected_extensions": {
+            "has_stream_video_to_own_device": true,
+            "seat_type": "Average Legroom",
+            "legroom_short": "30 in",
+            "legroom_long": "30 inches",
+            "carbon_emission": 519
+          }
+        }
+      ],
+      "layovers": [
+        {
+          "duration": 1105,
+          "name": "Luxembourg Airport",
+          "id": "LUX",
+          "is_overnight": true
+        }
+      ],
+      "total_duration": 1320,
+      "carbon_emissions": {
+        "this_flight": 797000,
+        "typical_for_this_route": 296000,
+        "difference_percent": 169,
+        "lowest_route": 304000
+      },
+      "price": 817,
+      "type": "One way",
+      "extensions": [
+        "Bag and fare conditions depend on the return flight"
+      ],
+      "airline_logo": "https://example.invalid/airline_logo/13",
+      "booking_token": "BOOKING_TOKEN_06"
+    },
+    {
+      "flights": [
+        {
+          "departure_airport": {
+            "name": "Milano Malpensa Airport",
+            "id": "MXP",
+            "date": "2026-12-18",
+            "time": "22:30"
+          },
+          "arrival_airport": {
+            "name": "Josep Tarradellas Barcelona-El Prat Airport",
+            "id": "BCN",
+            "date": "2026-12-19",
+            "time": "00:10"
+          },
+          "duration": 100,
+          "airplane": "Airbus A321",
+          "airline": "Vueling",
+          "airline_logo": "https://example.invalid/airline_logo/14",
+          "travel_class": "Economy",
+          "flight_number": "VY 6055",
+          "ticket_also_sold_by": [
+            "Iberia"
+          ],
+          "extensions": [
+            "In-seat USB outlet",
+            "Stream video to own device",
+            "Wi-Fi for fee",
+            "Seat type Below Average Legroom",
+            "Legroom 29 inches",
+            "Carbon emission: 324 kg"
+          ],
+          "detected_extensions": {
+            "has_in_seat_usb_outlet": true,
+            "has_stream_video_to_own_device": true,
+            "wifi": "for fee",
+            "seat_type": "Below Average Legroom",
+            "legroom_short": "29 in",
+            "legroom_long": "29 inches",
+            "carbon_emission": 324
+          }
+        },
+        {
+          "departure_airport": {
+            "name": "Josep Tarradellas Barcelona-El Prat Airport",
+            "id": "BCN",
+            "date": "2026-12-19",
+            "time": "11:35"
+          },
+          "arrival_airport": {
+            "name": "Cagliari Elmas Airport",
+            "id": "CAG",
+            "date": "2026-12-19",
+            "time": "13:05"
+          },
+          "duration": 90,
+          "airplane": "Airbus A320",
+          "airline": "Vueling",
+          "airline_logo": "https://example.invalid/airline_logo/15",
+          "travel_class": "Economy",
+          "flight_number": "VY 6114",
+          "ticket_also_sold_by": [
+            "Iberia"
+          ],
+          "extensions": [
+            "In-seat USB outlet",
+            "Stream video to own device",
+            "Wi-Fi for fee",
+            "Seat type Below Average Legroom",
+            "Legroom 29 inches",
+            "Carbon emission: 299 kg"
+          ],
+          "detected_extensions": {
+            "has_in_seat_usb_outlet": true,
+            "has_stream_video_to_own_device": true,
+            "wifi": "for fee",
+            "seat_type": "Below Average Legroom",
+            "legroom_short": "29 in",
+            "legroom_long": "29 inches",
+            "carbon_emission": 299
+          }
+        }
+      ],
+      "layovers": [
+        {
+          "duration": 685,
+          "name": "Josep Tarradellas Barcelona-El Prat Airport",
+          "id": "BCN",
+          "is_overnight": true
+        }
+      ],
+      "total_duration": 875,
+      "carbon_emissions": {
+        "this_flight": 624000,
+        "typical_for_this_route": 296000,
+        "difference_percent": 111,
+        "lowest_route": 304000
+      },
+      "price": 909,
+      "type": "One way",
+      "extensions": [
+        "Bag and fare conditions depend on the return flight"
+      ],
+      "airline_logo": "https://example.invalid/airline_logo/16",
+      "booking_token": "BOOKING_TOKEN_07"
+    }
+  ],
+  "airports": [
+    {
+      "departure": [
+        {
+          "airport": {
+            "id": "MXP",
+            "name": "Milano Malpensa Airport"
+          },
+          "city": "Milan",
+          "country": "Italy",
+          "country_code": "IT",
+          "image": "https://example.invalid/image/01",
+          "thumbnail": "https://example.invalid/thumbnail/01"
+        }
+      ],
+      "arrival": [
+        {
+          "airport": {
+            "id": "CAG",
+            "name": "Cagliari Elmas Airport"
+          },
+          "city": "Cagliari",
+          "country": "Italy",
+          "country_code": "IT",
+          "image": "https://example.invalid/image/02",
+          "thumbnail": "https://example.invalid/thumbnail/02"
+        }
+      ]
+    }
+  ],
+  "airlines": {
+    "alliances": [
+      {
+        "code": "ONEWORLD",
+        "name": "Oneworld"
+      },
+      {
+        "code": "SKYTEAM",
+        "name": "SkyTeam"
+      },
+      {
+        "code": "STAR_ALLIANCE",
+        "name": "Star Alliance"
+      }
+    ],
+    "airlines": [
+      {
+        "code": "EN",
+        "name": "Air Dolomiti"
+      },
+      {
+        "code": "AF",
+        "name": "Air France"
+      },
+      {
+        "code": "SN",
+        "name": "Brussels Airlines"
+      },
+      {
+        "code": "U2",
+        "name": "easyJet"
+      },
+      {
+        "code": "LY",
+        "name": "El Al"
+      },
+      {
+        "code": "EW",
+        "name": "Eurowings"
+      },
+      {
+        "code": "IB",
+        "name": "Iberia"
+      },
+      {
+        "code": "AZ",
+        "name": "ITA"
+      },
+      {
+        "code": "LL",
+        "name": "LEVEL"
+      },
+      {
+        "code": "LH",
+        "name": "Lufthansa"
+      },
+      {
+        "code": "LG",
+        "name": "Luxair"
+      },
+      {
+        "code": "NO",
+        "name": "Neos"
+      },
+      {
+        "code": "QR",
+        "name": "Qatar Airways"
+      },
+      {
+        "code": "FR",
+        "name": "Ryanair"
+      },
+      {
+        "code": "SK",
+        "name": "Scandinavian Airlines"
+      },
+      {
+        "code": "LX",
+        "name": "SWISS"
+      },
+      {
+        "code": "TO",
+        "name": "Transavia"
+      },
+      {
+        "code": "VY",
+        "name": "Vueling"
+      },
+      {
+        "code": "W4",
+        "name": "Wizz Air"
+      }
+    ],
+    "hubs": [
+      {
+        "code": "BCN",
+        "name": "Barcelona"
+      },
+      {
+        "code": "BER",
+        "name": "Berlin"
+      },
+      {
+        "code": "BRU",
+        "name": "Brussels"
+      },
+      {
+        "code": "CPH",
+        "name": "Copenhagen"
+      },
+      {
+        "code": "DUS",
+        "name": "Düsseldorf"
+      },
+      {
+        "code": "FRA",
+        "name": "Frankfurt am Main"
+      },
+      {
+        "code": "GVA",
+        "name": "Geneva"
+      },
+      {
+        "code": "GRZ",
+        "name": "Graz"
+      },
+      {
+        "code": "HAM",
+        "name": "Hamburg"
+      },
+      {
+        "code": "LUX",
+        "name": "Luxembourg"
+      },
+      {
+        "code": "MUC",
+        "name": "Munich"
+      },
+      {
+        "code": "CDG",
+        "name": "Paris"
+      },
+      {
+        "code": "PRG",
+        "name": "Prague"
+      },
+      {
+        "code": "ZRH",
+        "name": "Zürich"
+      }
+    ]
+  },
+  "baggage_allowance_links": [
+    {
+      "airline_code": "U2",
+      "airline": "easyJet",
+      "url": "https://example.invalid/url/01"
+    },
+    {
+      "airline_code": "LG",
+      "airline": "Luxair",
+      "url": "https://example.invalid/url/02"
+    },
+    {
+      "airline_code": "FR",
+      "airline": "Ryanair",
+      "url": "https://example.invalid/url/03"
+    },
+    {
+      "airline_code": "VY",
+      "airline": "Vueling",
+      "url": "https://example.invalid/url/04"
+    },
+    {
+      "airline_code": "W4",
+      "airline": "Wizz Air",
+      "url": "https://example.invalid/url/05"
+    }
+  ],
+  "passenger_assistance_links": [
+    {
+      "airline_code": "FR",
+      "airline": "Ryanair",
+      "url": "https://example.invalid/url/06"
+    },
+    {
+      "airline_code": "U2",
+      "airline": "easyJet",
+      "url": "https://example.invalid/url/07"
+    },
+    {
+      "airline_code": "LG",
+      "airline": "Luxair",
+      "url": "https://example.invalid/url/08"
+    },
+    {
+      "airline_code": "VY",
+      "airline": "Vueling",
+      "url": "https://example.invalid/url/09"
+    }
+  ]
+}
