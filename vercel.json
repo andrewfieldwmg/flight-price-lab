@@ -5,7 +5,7 @@
     "backend": {
       "root": ".",
       "framework": "fastapi",
-      "entrypoint": "flight_price_lab.api.app:app"
+      "entrypoint": "backend.main:app"
     }
   },
   "rewrites": [

@@ -19,7 +19,7 @@ def test_api_key_is_required_and_hidden(monkeypatch) -> None:
 def test_vercel_services_preserve_fastapi_api_paths() -> None:
     config = json.loads(Path("vercel.json").read_text(encoding="utf-8"))
 
-    assert config["services"]["backend"]["entrypoint"] == "flight_price_lab.api.app:app"
+    assert config["services"]["backend"]["entrypoint"] == "backend.main:app"
     assert config["rewrites"][0] == {
         "source": "/api/(.*)",
         "destination": {"service": "backend"},
