@@ -13,3 +13,6 @@ data/raw/
 data/processed/
 .npm-cache/
 .tmp/
+
+.vercel
+.env*
