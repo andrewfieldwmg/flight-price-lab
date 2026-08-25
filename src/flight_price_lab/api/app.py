@@ -41,7 +41,7 @@ from flight_price_lab.api.registry import InMemorySearchRegistry
 from flight_price_lab.api.service import TripSearchService, trip_search_key
 from flight_price_lab.config import Settings
 from flight_price_lab.providers.searchapi import SearchAPIClient, SearchAPIError
-from flight_price_lab.storage.database import BookingCandidateStore
+from flight_price_lab.storage.database import BookingCandidateStore, database_health
 
 
 def create_app(
@@ -61,7 +61,8 @@ def create_app(
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    registry = InMemorySearchRegistry(BookingCandidateStore())
+    candidate_store = BookingCandidateStore()
+    registry = InMemorySearchRegistry(candidate_store)
     application.state.registry = registry
     application.state.provider = provider
     application.state.booking_resolver = booking_resolver
@@ -105,8 +106,13 @@ def create_app(
         )
 
     @application.get("/api/health")
-    async def health() -> dict[str, str]:
-        return {"status": "ok"}
+    async def health() -> dict[str, str | bool]:
+        available = database_health(candidate_store.engine)
+        return {
+            "status": "ok" if available else "degraded",
+            "database_mode": "postgres",
+            "database_available": available,
+        }
 
     @application.exception_handler(RequestValidationError)
     async def validation_error(

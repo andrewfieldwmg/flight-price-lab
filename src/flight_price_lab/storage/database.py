@@ -1,20 +1,38 @@
-"""Persistent SQLite cache for raw provider search responses."""
+"""PostgreSQL persistence for provider cache and durable observations."""
 
 from __future__ import annotations
 
 import json
+import logging
+import os
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from hashlib import sha256
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import DateTime, Integer, String, Text, create_engine, select
+from dotenv import dotenv_values
+from sqlalchemy import (
+    DateTime,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    create_engine,
+    select,
+    text,
+)
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
+from sqlalchemy.pool import NullPool
 
 if TYPE_CHECKING:
     from flight_price_lab.models.flight import FlightOffer
+
+LOGGER = logging.getLogger("flight_price_lab.database")
 
 
 class Base(DeclarativeBase):
@@ -48,6 +66,89 @@ class BookingCandidateEntry(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
+
+
+class MarketObservation(Base):
+    __tablename__ = "market_observation"
+    __table_args__ = (
+        Index("ix_market_observation_market_time", "market_key", "observed_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    market_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    observed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    cheapest_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    source: Mapped[str] = mapped_column(String(50), nullable=False)
+
+
+class FlightObservation(Base):
+    __tablename__ = "flight_observation"
+    __table_args__ = (
+        Index(
+            "ix_flight_observation_fingerprint_time",
+            "flight_fingerprint",
+            "observed_at",
+        ),
+        Index("ix_flight_observation_departure", "departure_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    flight_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    observed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    flight_number: Mapped[str] = mapped_column(String(20), nullable=False)
+    origin: Mapped[str] = mapped_column(String(3), nullable=False)
+    destination: Mapped[str] = mapped_column(String(3), nullable=False)
+    departure_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    search_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+
+def normalize_database_url(url: str) -> str:
+    """Use psycopg 3 for standard managed-Postgres URL forms."""
+
+    if url.startswith("postgres://"):
+        return "postgresql+psycopg://" + url.removeprefix("postgres://")
+    if url.startswith("postgresql://"):
+        return "postgresql+psycopg://" + url.removeprefix("postgresql://")
+    return url
+
+
+def configured_database_url() -> str:
+    configured = os.getenv("DATABASE_URL") or dotenv_values(".env").get("DATABASE_URL")
+    if not configured:
+        LOGGER.critical("DATABASE_URL is required; PostgreSQL is the only runtime database")
+        raise RuntimeError("DATABASE_URL is required")
+    return normalize_database_url(configured)
+
+
+def create_database_engine(database_url: str | None = None) -> Engine:
+    url = normalize_database_url(database_url or configured_database_url())
+    if not url.startswith("postgresql+psycopg://"):
+        raise ValueError("PostgreSQL with psycopg 3 is required")
+    options: dict[str, Any] = {
+        "pool_pre_ping": True,
+        "connect_args": {"prepare_threshold": None},
+    }
+    if os.getenv("VERCEL"):
+        options["poolclass"] = NullPool
+    return create_engine(url, **options)
+
+
+def database_health(engine: Engine) -> bool:
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+        return True
+    except Exception:  # noqa: BLE001 - health must report rather than crash
+        return False
 
 
 @dataclass(frozen=True)
@@ -88,19 +189,18 @@ def canonical_search_key(parameters: dict[str, Any]) -> str:
 
 
 class SearchResponseCache:
-    """SQLite cache index whose raw JSON files remain after entries expire."""
+    """PostgreSQL cache index whose raw JSON files remain after entries expire."""
 
     def __init__(
         self,
-        database_url: str = "sqlite:///data/search_cache.sqlite3",
+        database_url: str | None = None,
         *,
         raw_root: str | Path = "data/raw/searchapi",
         ttl: timedelta = timedelta(minutes=60),
     ) -> None:
-        self.engine = create_engine(database_url)
+        self.engine = create_database_engine(database_url)
         self.raw_root = Path(raw_root)
         self.ttl = ttl
-        Base.metadata.create_all(self.engine)
 
     def get(
         self, parameters: dict[str, Any], *, now: datetime | None = None
@@ -242,11 +342,8 @@ class SearchResponseCache:
 class BookingCandidateStore:
     """Persist selected-option provenance independently from public snapshots."""
 
-    def __init__(
-        self, database_url: str = "sqlite:///data/search_cache.sqlite3"
-    ) -> None:
-        self.engine = create_engine(database_url)
-        Base.metadata.create_all(self.engine)
+    def __init__(self, database_url: str | None = None) -> None:
+        self.engine = create_database_engine(database_url)
 
     def put(
         self, search_id: str, option_id: str, offers: tuple[FlightOffer, ...]

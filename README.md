@@ -84,7 +84,7 @@ The local HTTP API keeps progressive search state in process memory. This is sui
 for one local development process only and must be replaced by a shared registry such
 as Redis or a database before horizontally scaled deployment.
 
-Provider search responses are indexed in `data/search_cache.sqlite3` with a 60-minute
+Provider search responses are indexed in PostgreSQL with a 60-minute
 TTL. A normal search reuses fresh entries; only the explicit **Refresh prices** action
 bypasses them. Raw JSON captures remain under `data/raw/searchapi/` after expiry. Exact,
 reconstructable historical captures can be indexed without a provider call with:
@@ -115,23 +115,40 @@ Framework Preset to **Services**. Public `/api/*` requests are routed to FastAPI
 without changing their path; all other requests go to Next.js. The frontend uses
 same-origin `/api/*` URLs in production and `http://localhost:8000/api/*` locally.
 
-Configure this server-only Vercel project environment variable:
+Configure these server-only Vercel project environment variables:
 
 ```text
 SEARCHAPI_KEY=<secret>
+DATABASE_URL=<managed-postgres-connection>
 ```
 
 Never expose it through a `NEXT_PUBLIC_*` variable. `NEXT_PUBLIC_API_BASE_URL` is only
 needed for local development or an intentional external API origin.
 
+Production requires a pre-migrated PostgreSQL database.
+Apply migrations during deployment administration, before starting the application:
+
+```powershell
+uv run alembic upgrade head
+```
+
+PostgreSQL is required in every environment. Local `.env` configuration uses separate
+development and test databases:
+
+```text
+DATABASE_URL=postgresql+psycopg://flight_price_lab:<password>@localhost:5432/flight_price_lab
+TEST_DATABASE_URL=postgresql+psycopg://flight_price_lab:<password>@localhost:5432/flight_price_lab_test
+```
+
+Tests refuse to run when both URLs target the same server and database. Alembic is the
+only schema authority; application startup never creates tables automatically.
+
 The initial deployment preserves the current architecture with serverless limits:
-search state and SSE queues are process-local, so another function instance may not
-find the same search ID and instance termination loses state. SQLite cache files and
-raw captures are local and ephemeral, are not shared between instances, and may
-disappear after an invocation. When local persistence is unavailable, provider
-responses remain usable through a volatile in-process fallback. Durable history and
-reliable cross-instance progressive searches require external object storage and a
-shared registry/cache in a later phase.
+search state and SSE queues remain process-local, so another function instance may not
+find the same active search ID and instance termination loses that live state. Cache
+metadata and booking lineage use Postgres in production. Raw JSON captures still need
+external object storage for durable cross-instance access; the Vercel filesystem is
+ephemeral and is not treated as durable history.
 
 After creating a local `.env` containing `SEARCHAPI_KEY`, run the guarded probe with:
 

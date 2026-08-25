@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import os
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
@@ -13,6 +14,10 @@ from flight_price_lab.storage.database import (
     SearchResponseCache,
     canonical_search_key,
 )
+
+
+def postgres_test_url() -> str:
+    return os.environ["TEST_DATABASE_URL"]
 
 
 class FakeSearchClient:
@@ -50,7 +55,7 @@ def test_identical_search_uses_persistent_cache_and_preserves_raw_json(
 ) -> None:
     client = FakeSearchClient(fixture_payload())
     cache = SearchResponseCache(
-        f"sqlite:///{(tmp_path / 'cache.sqlite3').as_posix()}",
+        postgres_test_url(),
         raw_root=tmp_path / "raw",
     )
     gateway = SearchAPIProviderGateway(client, cache)  # type: ignore[arg-type]
@@ -88,7 +93,7 @@ def test_refresh_bypasses_cache_without_deleting_previous_raw_capture(
 ) -> None:
     client = FakeSearchClient(fixture_payload())
     cache = SearchResponseCache(
-        f"sqlite:///{(tmp_path / 'cache.sqlite3').as_posix()}",
+        postgres_test_url(),
         raw_root=tmp_path / "raw",
     )
     gateway = SearchAPIProviderGateway(client, cache)  # type: ignore[arg-type]
@@ -104,7 +109,7 @@ def test_safe_existing_capture_can_seed_cache(tmp_path: Path) -> None:
     capture = tmp_path / "capture.json"
     capture.write_text(json.dumps(fixture_payload()), encoding="utf-8")
     cache = SearchResponseCache(
-        f"sqlite:///{(tmp_path / 'cache.sqlite3').as_posix()}",
+        postgres_test_url(),
         raw_root=tmp_path / "raw",
     )
     assert cache.seed_capture(capture) is True
@@ -113,7 +118,7 @@ def test_safe_existing_capture_can_seed_cache(tmp_path: Path) -> None:
 
 def test_default_cache_ttl_is_sixty_minutes(tmp_path: Path) -> None:
     cache = SearchResponseCache(
-        f"sqlite:///{(tmp_path / 'cache.sqlite3').as_posix()}",
+        postgres_test_url(),
         raw_root=tmp_path / "raw",
     )
     parameters = {
@@ -183,7 +188,7 @@ def test_a_b_a_calls_provider_once_per_distinct_key_then_hits_a_cache(
     caplog.set_level(logging.INFO, logger="flight_price_lab.search")
     client = FakeSearchClient(fixture_payload())
     cache = SearchResponseCache(
-        f"sqlite:///{(tmp_path / 'cache.sqlite3').as_posix()}",
+        postgres_test_url(),
         raw_root=tmp_path / "raw",
     )
     gateway = SearchAPIProviderGateway(client, cache)  # type: ignore[arg-type]
@@ -213,7 +218,7 @@ def test_a_b_a_calls_provider_once_per_distinct_key_then_hits_a_cache(
 def test_expired_entry_causes_provider_call(tmp_path: Path) -> None:
     client = FakeSearchClient(fixture_payload())
     cache = SearchResponseCache(
-        f"sqlite:///{(tmp_path / 'cache.sqlite3').as_posix()}",
+        postgres_test_url(),
         raw_root=tmp_path / "raw",
     )
     args = arguments()

@@ -353,9 +353,8 @@ def test_prefilled_wizz_ticket_does_not_block_combined_assisted_handoff() -> Non
     assert wizz["passenger_composition_verified"] is True
 
 
-def test_synthetic_constituent_lineage_survives_registry_recreation(tmp_path) -> None:
-    database_url = f"sqlite:///{(tmp_path / 'booking.sqlite3').as_posix()}"
-    first_registry = InMemorySearchRegistry(BookingCandidateStore(database_url))
+def test_synthetic_constituent_lineage_survives_registry_recreation() -> None:
+    first_registry = InMemorySearchRegistry(BookingCandidateStore())
     selected = (offer("U2 8309", "328"), offer("W4 6997", "158"))
     asyncio.run(
         first_registry.create(SearchSnapshot(search_id="cached", status="completed"))
@@ -364,7 +363,7 @@ def test_synthetic_constituent_lineage_survives_registry_recreation(tmp_path) ->
         first_registry.register_booking_candidate("cached", "synthetic", selected)
     )
 
-    restored_registry = InMemorySearchRegistry(BookingCandidateStore(database_url))
+    restored_registry = InMemorySearchRegistry(BookingCandidateStore())
     restored = asyncio.run(
         restored_registry.get_booking_candidate("cached", "synthetic")
     )

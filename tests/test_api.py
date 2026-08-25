@@ -381,7 +381,11 @@ def test_health_endpoint_needs_no_provider_call() -> None:
     response = TestClient(create_app(provider)).get("/api/health")
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    assert response.json() == {
+        "status": "ok",
+        "database_mode": "postgres",
+        "database_available": True,
+    }
     assert provider.calls == []
 
 
