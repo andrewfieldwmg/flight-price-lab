@@ -56,7 +56,7 @@ def clean_persistence_tables() -> None:
     with engine.begin() as connection:
         connection.execute(
             text(
-                "TRUNCATE TABLE search_cache, booking_candidates, "
+                "TRUNCATE TABLE search_cache, booking_candidates, search_sessions, "
                 "market_observation, flight_observation RESTART IDENTITY"
             )
         )

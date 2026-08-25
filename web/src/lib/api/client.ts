@@ -27,13 +27,42 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export async function startSearch(
+export async function streamSearch(
   request: TripSearchRequest,
-): Promise<{ search_id: string; trip_id: string; search_key: string; status: "started" }> {
-  return apiFetch("/api/search", {
+  onEvent: (event: SearchEvent) => void,
+): Promise<void> {
+  const response = await fetch(resolveApiUrl("/api/search/stream"), {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request),
   });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(body?.error?.message ?? body?.detail ?? `HTTP ${response.status}`);
+  }
+  if (!response.body) throw new Error("Streaming response body unavailable");
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  const dispatchLines = (final = false) => {
+    const lines = buffer.split("\n");
+    buffer = final ? "" : (lines.pop() ?? "");
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      const value = JSON.parse(line) as { event: string; data: Record<string, unknown> };
+      onEvent({ type: value.event, data: value.data });
+    }
+  };
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    dispatchLines();
+  }
+  buffer += decoder.decode();
+  if (buffer.trim()) buffer += "\n";
+  dispatchLines(true);
 }
 
 export async function getSearchKey(request: TripSearchRequest): Promise<string> {
@@ -46,40 +75,6 @@ export async function getSearchKey(request: TripSearchRequest): Promise<string> 
 
 export function getSearch(searchId: string): Promise<SearchSnapshot> {
   return apiFetch(`/api/search/${encodeURIComponent(searchId)}`);
-}
-
-const EVENT_NAMES = [
-  "search_started",
-  "baseline_found",
-  "hub_started",
-  "hub_completed",
-  "alternative_found",
-  "results_updated",
-  "direction_completed",
-  "search_completed",
-  "search_failed",
-] as const;
-
-export function subscribeToSearch(
-  searchId: string,
-  onEvent: (event: SearchEvent) => void,
-  onDisconnect: () => void,
-): () => void {
-  const source = new EventSource(
-    resolveApiUrl(`/api/search/${encodeURIComponent(searchId)}/events`),
-  );
-  for (const type of EVENT_NAMES) {
-    source.addEventListener(type, (raw) => {
-      const message = raw as MessageEvent<string>;
-      onEvent({ type, data: JSON.parse(message.data) as Record<string, unknown> });
-      if (type === "search_completed" || type === "search_failed") source.close();
-    });
-  }
-  source.onerror = () => {
-    source.close();
-    onDisconnect();
-  };
-  return () => source.close();
 }
 
 export async function getCalendarPrices(input: {

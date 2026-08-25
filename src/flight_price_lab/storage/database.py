@@ -68,6 +68,27 @@ class BookingCandidateEntry(Base):
     )
 
 
+class SearchSessionEntry(Base):
+    """Durable search metadata and latest normalized recovery snapshot."""
+
+    __tablename__ = "search_sessions"
+
+    search_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    search_key: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    request_json: Mapped[str] = mapped_column(Text, nullable=False)
+    snapshot_json: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
 class MarketObservation(Base):
     __tablename__ = "market_observation"
     __table_args__ = (
@@ -374,3 +395,50 @@ class BookingCandidateStore:
                 return None
             values = json.loads(entry.offers_json)
         return tuple(FlightOffer.model_validate(value) for value in values)
+
+
+class SearchSessionStore:
+    """Persist latest search state for cross-instance recovery and history access."""
+
+    def __init__(self, database_url: str | None = None) -> None:
+        self.engine = create_database_engine(database_url)
+
+    def create(self, snapshot: Any, request: Any) -> None:
+        now = datetime.now(UTC)
+        entry = SearchSessionEntry(
+            search_id=snapshot.search_id,
+            search_key=snapshot.search_key,
+            status=snapshot.status.value,
+            request_json=request.model_dump_json(by_alias=True),
+            snapshot_json=snapshot.model_dump_json(by_alias=True),
+            created_at=now,
+            updated_at=now,
+            completed_at=None,
+        )
+        with Session(self.engine) as session:
+            session.add(entry)
+            session.commit()
+
+    def update(self, snapshot: Any) -> None:
+        now = datetime.now(UTC)
+        terminal = snapshot.status.value in {"completed", "partial_failure", "failed"}
+        with Session(self.engine) as session:
+            entry = session.get(SearchSessionEntry, snapshot.search_id)
+            if entry is None:
+                raise KeyError(f"search session {snapshot.search_id} was not persisted")
+            entry.status = snapshot.status.value
+            entry.snapshot_json = snapshot.model_dump_json(by_alias=True)
+            entry.updated_at = now
+            if terminal:
+                entry.completed_at = now
+            session.commit()
+
+    def get(self, search_id: str) -> Any | None:
+        from flight_price_lab.api.models import SearchSnapshot
+
+        with Session(self.engine) as session:
+            entry = session.get(SearchSessionEntry, search_id)
+            if entry is None:
+                return None
+            value = entry.snapshot_json
+        return SearchSnapshot.model_validate_json(value)

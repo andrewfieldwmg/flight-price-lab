@@ -41,6 +41,7 @@ def test_initial_migration_creates_current_and_history_schema() -> None:
     assert {
         "search_cache",
         "booking_candidates",
+        "search_sessions",
         "market_observation",
         "flight_observation",
         "alembic_version",
@@ -108,6 +109,7 @@ def test_postgres_connection_migrated_indexes_and_transactional_insert() -> None
         assert {
             "search_cache",
             "booking_candidates",
+            "search_sessions",
             "market_observation",
             "flight_observation",
         } <= tables

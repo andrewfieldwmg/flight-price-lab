@@ -149,6 +149,11 @@ class TripSearchService:
         self._active_snapshot: SearchSnapshot | None = None
 
     async def start(self, request: TripSearchRequest) -> str:
+        trip_id = await self.create(request)
+        asyncio.create_task(self.run(trip_id, request))
+        return trip_id
+
+    async def create(self, request: TripSearchRequest) -> str:
         trip_id = uuid4().hex
         search_key = trip_search_key(request)
         snapshot = SearchSnapshot(
@@ -178,12 +183,14 @@ class TripSearchService:
                 canonical_search_json(trip_search_parameters(request))
             )
         search_log("SEARCH_RECEIVED", **fields)
-        await self.registry.create(snapshot)
-        asyncio.create_task(self.run(trip_id, request))
+        await self.registry.create(snapshot, request)
         return trip_id
 
-    async def _event(self, search_id: str, name: str, **data: object) -> None:
-        await self.registry.publish(search_id, name, data)
+    async def _event(self, session_id: str, name: str, **data: object) -> None:
+        snapshot = await self.registry.get(session_id)
+        if snapshot is not None:
+            data["snapshot"] = snapshot.model_dump(mode="json", by_alias=True)
+        await self.registry.publish(session_id, name, data)
 
     async def run(self, search_id: str, request: TripSearchRequest) -> None:
         snapshot = await self.registry.get(search_id)
@@ -191,7 +198,12 @@ class TripSearchService:
         snapshot.status = SearchStatus.RUNNING
         self._active_snapshot = snapshot
         await self.registry.update(snapshot)
-        await self._event(search_id, "search_started", id=search_id)
+        await self._event(
+            search_id,
+            "search_started",
+            search_id=search_id,
+            search_key=snapshot.search_key,
+        )
         try:
             await self._direction(
                 snapshot,

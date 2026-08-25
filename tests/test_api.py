@@ -1,4 +1,5 @@
 import asyncio
+import json
 from datetime import UTC, date, datetime, timedelta, timezone
 from decimal import Decimal
 
@@ -74,6 +75,22 @@ class MockProvider:
     async def calendar(self, **arguments: object) -> list[object]:
         del arguments
         return []
+
+
+class ConcurrentProvider(MockProvider):
+    def __init__(self) -> None:
+        super().__init__()
+        self.active = 0
+        self.maximum_active = 0
+
+    async def search_direct(self, **arguments: object) -> list[FlightOffer]:
+        self.active += 1
+        self.maximum_active = max(self.maximum_active, self.active)
+        try:
+            await asyncio.sleep(0.01)
+            return await super().search_direct(**arguments)
+        finally:
+            self.active -= 1
 
 
 def make_offer(
@@ -285,6 +302,31 @@ def test_identical_provider_searches_are_deduplicated_within_run() -> None:
     assert len(provider.calls) == 1
 
 
+def test_provider_tasks_remain_bounded_concurrent() -> None:
+    provider = ConcurrentProvider()
+    registry = InMemorySearchRegistry()
+    service = TripSearchService(
+        provider, registry, hubs=("MXP", "BGY", "FCO"), max_concurrency=2
+    )
+
+    async def execute() -> None:
+        search_id = await service.start(request(SelfTransferPolicy.OUTBOUND_ONLY))
+        for _ in range(500):
+            snapshot = await registry.get(search_id)
+            assert snapshot is not None
+            if snapshot.status in {
+                SearchStatus.COMPLETED,
+                SearchStatus.PARTIAL_FAILURE,
+                SearchStatus.FAILED,
+            }:
+                return
+            await asyncio.sleep(0.001)
+        raise AssertionError("search did not complete")
+
+    asyncio.run(execute())
+    assert provider.maximum_active == 2
+
+
 def test_baseline_event_precedes_synthetic_alternative() -> None:
     snapshot, registry, _ = asyncio.run(run_search(SelfTransferPolicy.OUTBOUND_ONLY))
 
@@ -367,6 +409,7 @@ def test_api_routes_are_registered() -> None:
     paths = {route.path for route in create_app(MockProvider()).routes}
     assert {
         "/api/search",
+        "/api/search/stream",
         "/api/search/key",
         "/api/search/{search_id}",
         "/api/search/{search_id}/events",
@@ -374,6 +417,79 @@ def test_api_routes_are_registered() -> None:
         "/api/provider-usage",
         "/api/health",
     } <= paths
+
+
+def test_streamed_search_emits_progressive_outbound_and_return_events() -> None:
+    client = TestClient(create_app(MockProvider()))
+    response = client.post(
+        "/api/search/stream",
+        json=request(SelfTransferPolicy.BOTH).model_dump(mode="json", by_alias=True),
+    )
+
+    assert response.status_code == 200
+    events = [json.loads(line) for line in response.text.splitlines() if line]
+    names = [item["event"] for item in events]
+    assert names[0] == "search_started"
+    assert any(
+        item["event"] == "results_updated"
+        and item["data"]["direction"] == "OUTBOUND"
+        for item in events
+    )
+    assert any(
+        item["event"] == "results_updated"
+        and item["data"]["direction"] == "RETURN"
+        for item in events
+    )
+    assert names[-1] == "search_completed"
+    assert events[-1]["data"]["snapshot"]["status"] == "completed"
+
+
+def test_completed_stream_recovers_from_fresh_application_instance() -> None:
+    first = TestClient(create_app(MockProvider()))
+    streamed = first.post(
+        "/api/search/stream",
+        json=request(SelfTransferPolicy.NONE).model_dump(mode="json", by_alias=True),
+    )
+    events = [json.loads(line) for line in streamed.text.splitlines() if line]
+    search_id = events[0]["data"]["search_id"]
+
+    recovered = TestClient(create_app(MockProvider())).get(f"/api/search/{search_id}")
+
+    assert recovered.status_code == 200
+    assert recovered.json()["search_id"] == search_id
+    assert recovered.json()["status"] == "completed"
+
+
+def test_running_search_is_recoverable_from_fresh_application_instance() -> None:
+    class WaitingProvider(MockProvider):
+        async def search_direct(self, **arguments: object) -> list[FlightOffer]:
+            del arguments
+            await asyncio.Event().wait()
+            return []
+
+    app = create_app(WaitingProvider())
+    service = TripSearchService(WaitingProvider(), app.state.registry, hubs=("MXP",))
+
+    async def begin_and_interrupt() -> str:
+        search_request = request(SelfTransferPolicy.NONE)
+        search_id = await service.create(search_request)
+        task = asyncio.create_task(service.run(search_id, search_request))
+        for _ in range(100):
+            snapshot = app.state.search_store.get(search_id)
+            if snapshot is not None and snapshot.status is SearchStatus.RUNNING:
+                task.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await task
+                return search_id
+            await asyncio.sleep(0.001)
+        task.cancel()
+        raise AssertionError("running milestone was not persisted")
+
+    search_id = asyncio.run(begin_and_interrupt())
+    recovered = TestClient(create_app(MockProvider())).get(f"/api/search/{search_id}")
+
+    assert recovered.status_code == 200
+    assert recovered.json()["status"] == "running"
 
 
 def test_health_endpoint_needs_no_provider_call() -> None:

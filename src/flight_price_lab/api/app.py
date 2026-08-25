@@ -1,7 +1,9 @@
 """FastAPI application and progressive-search routes."""
 
+import asyncio
 import json
 import os
+from contextlib import suppress
 from datetime import date
 from typing import Annotated
 
@@ -42,7 +44,11 @@ from flight_price_lab.api.registry import InMemorySearchRegistry
 from flight_price_lab.api.service import TripSearchService, trip_search_key
 from flight_price_lab.config import Settings
 from flight_price_lab.providers.searchapi import SearchAPIClient, SearchAPIError
-from flight_price_lab.storage.database import BookingCandidateStore, database_health
+from flight_price_lab.storage.database import (
+    BookingCandidateStore,
+    SearchSessionStore,
+    database_health,
+)
 
 
 def create_app(
@@ -63,8 +69,10 @@ def create_app(
         allow_headers=["*"],
     )
     candidate_store = BookingCandidateStore()
-    registry = InMemorySearchRegistry(candidate_store)
+    search_store = SearchSessionStore()
+    registry = InMemorySearchRegistry(candidate_store, search_store)
     application.state.registry = registry
+    application.state.search_store = search_store
     application.state.provider = provider
     application.state.booking_resolver = booking_resolver
     application.state.booking_sessions = InMemoryBookingSessionRegistry()
@@ -137,13 +145,45 @@ def create_app(
             search_key=trip_search_key(request),
         )
 
+    @application.post("/api/search/stream")
+    async def stream_search(request: TripSearchRequest) -> StreamingResponse:
+        """Run and stream one search on the same request/function instance."""
+
+        service = TripSearchService(get_provider(), registry)
+        search_id = await service.create(request)
+
+        async def stream():
+            task = asyncio.create_task(service.run(search_id, request))
+            try:
+                async for event in registry.events(search_id):
+                    yield json.dumps(
+                        {
+                            "sequence": event.sequence,
+                            "event": event.event,
+                            "data": event.data,
+                        },
+                        separators=(",", ":"),
+                    ) + "\n"
+                await task
+            finally:
+                if not task.done():
+                    task.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await task
+
+        return StreamingResponse(
+            stream(),
+            media_type="application/x-ndjson",
+            headers={"Cache-Control": "no-cache, no-transform"},
+        )
+
     @application.post("/api/search/key", response_model=SearchKeyResponse)
     async def derive_search_key(request: TripSearchRequest) -> SearchKeyResponse:
         return SearchKeyResponse(search_key=trip_search_key(request))
 
     @application.get("/api/search/{search_id}", response_model=SearchSnapshot)
     async def get_search(search_id: str) -> SearchSnapshot:
-        snapshot = await registry.get(search_id)
+        snapshot = search_store.get(search_id)
         if snapshot is None:
             raise HTTPException(status_code=404, detail="search not found")
         return snapshot

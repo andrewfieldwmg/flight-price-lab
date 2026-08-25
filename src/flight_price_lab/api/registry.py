@@ -6,7 +6,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Protocol
 
-from flight_price_lab.api.models import SearchSnapshot
+from flight_price_lab.api.models import SearchSnapshot, TripSearchRequest
 from flight_price_lab.models.flight import FlightOffer
 
 
@@ -18,7 +18,9 @@ class SearchEvent:
 
 
 class SearchRegistry(Protocol):
-    async def create(self, snapshot: SearchSnapshot) -> None: ...
+    async def create(
+        self, snapshot: SearchSnapshot, request: TripSearchRequest | None = None
+    ) -> None: ...
     async def get(self, search_id: str) -> SearchSnapshot | None: ...
     async def update(self, snapshot: SearchSnapshot) -> None: ...
     async def register_booking_candidate(
@@ -41,6 +43,12 @@ class BookingCandidatePersistence(Protocol):
     def get(self, search_id: str, option_id: str) -> tuple[FlightOffer, ...] | None: ...
 
 
+class SearchSessionPersistence(Protocol):
+    def create(self, snapshot: SearchSnapshot, request: TripSearchRequest) -> None: ...
+    def update(self, snapshot: SearchSnapshot) -> None: ...
+    def get(self, search_id: str) -> SearchSnapshot | None: ...
+
+
 @dataclass
 class _Entry:
     snapshot: SearchSnapshot
@@ -53,20 +61,33 @@ class InMemorySearchRegistry:
     """Single-process development registry; unsuitable for horizontal scaling."""
 
     def __init__(
-        self, candidate_store: BookingCandidatePersistence | None = None
+        self,
+        candidate_store: BookingCandidatePersistence | None = None,
+        search_store: SearchSessionPersistence | None = None,
     ) -> None:
         self._entries: dict[str, _Entry] = {}
         self._candidate_store = candidate_store
+        self._search_store = search_store
 
-    async def create(self, snapshot: SearchSnapshot) -> None:
+    async def create(
+        self, snapshot: SearchSnapshot, request: TripSearchRequest | None = None
+    ) -> None:
         self._entries[snapshot.search_id] = _Entry(snapshot=deepcopy(snapshot))
+        if self._search_store is not None and request is not None:
+            self._search_store.create(snapshot, request)
 
     async def get(self, search_id: str) -> SearchSnapshot | None:
         entry = self._entries.get(search_id)
-        return deepcopy(entry.snapshot) if entry else None
+        if entry:
+            return deepcopy(entry.snapshot)
+        if self._search_store is not None:
+            return self._search_store.get(search_id)
+        return None
 
     async def update(self, snapshot: SearchSnapshot) -> None:
         self._entries[snapshot.search_id].snapshot = deepcopy(snapshot)
+        if self._search_store is not None:
+            self._search_store.update(snapshot)
 
     async def register_booking_candidate(
         self, search_id: str, option_id: str, offers: tuple[FlightOffer, ...]

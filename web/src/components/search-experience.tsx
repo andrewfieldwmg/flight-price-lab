@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { getSearch, getSearchKey, startSearch, subscribeToSearch } from "@/lib/api/client";
-import type { TripOption, TripSearchRequest } from "@/lib/api/types";
+import { getSearch, getSearchKey, streamSearch } from "@/lib/api/client";
+import type { SearchSnapshot, TripOption, TripSearchRequest } from "@/lib/api/types";
 import { uniqueOptions } from "@/lib/search/calculations";
 import { initialSearchState, searchReducer } from "@/lib/search/state";
 import { shouldRefreshProviderUsage } from "@/lib/search/telemetry";
@@ -29,35 +29,15 @@ const terminal = new Set(["completed", "partial_failure", "failed"]);
 
 export function SearchExperience() {
   const [state, dispatch] = useReducer(searchReducer, initialSearchState);
-  const [searchId, setSearchId] = useState<string | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
   const [cachedMinutes, setCachedMinutes] = useState<number | null>(null);
   const [excludeBaggage, setExcludeBaggage] = useState(true);
   const savedTrips = useRef(new Set<string>());
-  const refreshQueue = useRef<Promise<void>>(Promise.resolve());
-
-  useEffect(() => {
-    if (!searchId) return;
-    const refresh = () => {
-      refreshQueue.current = refreshQueue.current
-        .then(async () => dispatch({ type: "snapshot", snapshot: await getSearch(searchId) }))
-        .catch(() => dispatch({ type: "disconnect" }));
-    };
-    refresh();
-    return subscribeToSearch(
-      searchId,
-      (event) => {
-        dispatch({ type: "event", event: event.type, data: event.data });
-        refresh();
-      },
-      () => dispatch({ type: "disconnect" }),
-    );
-  }, [searchId]);
 
   async function submit(request: TripSearchRequest) {
     setStartError(null);
-    setSearchId(null);
     dispatch({ type: "started", request });
+    let activeSearchId: string | null = null;
     try {
       const key = await getSearchKey(request);
       logFrontendCacheEvent("SEARCH_RECEIVED", { search_key: key, search_key_short: key.slice(0, 12), cache_bypass: request.refresh_prices });
@@ -72,9 +52,27 @@ export function SearchExperience() {
         }
       }
       setCachedMinutes(null);
-      const response = await startSearch(request);
-      setSearchId(response.search_id);
+      await streamSearch(request, (event) => {
+        const eventSearchId = event.data.search_id;
+        if (typeof eventSearchId === "string") {
+          activeSearchId = eventSearchId;
+        }
+        const snapshot = event.data.snapshot;
+        if (snapshot && typeof snapshot === "object") {
+          dispatch({ type: "snapshot", snapshot: snapshot as SearchSnapshot });
+        }
+        dispatch({ type: "event", event: event.type, data: event.data });
+      });
     } catch (error) {
+      if (activeSearchId) {
+        try {
+          dispatch({ type: "snapshot", snapshot: await getSearch(activeSearchId) });
+          dispatch({ type: "disconnect" });
+          return;
+        } catch {
+          dispatch({ type: "disconnect" });
+        }
+      }
       setStartError(error instanceof Error ? error.message : "Search could not start");
     }
   }

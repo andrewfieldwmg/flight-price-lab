@@ -416,7 +416,12 @@ def test_real_synthetic_option_id_prepares_two_mixed_tickets() -> None:
         raise AssertionError("synthetic search did not complete")
 
     search_id, option_id = asyncio.run(search())
-    response = TestClient(app).post(
+    fresh_app = create_app(
+        provider=SyntheticSearchProvider(),
+        booking_resolver=MixedCapabilityResolver(),
+        handoff_launcher=Launcher(),
+    )
+    response = TestClient(fresh_app).post(
         "/api/booking/prepare",
         json={"search_id": search_id, "selected_option_ids": [option_id]},
     )
