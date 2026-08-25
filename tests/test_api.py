@@ -389,6 +389,15 @@ def test_health_endpoint_needs_no_provider_call() -> None:
     assert provider.calls == []
 
 
+def test_provider_usage_missing_key_returns_503(monkeypatch) -> None:
+    monkeypatch.setenv("SEARCHAPI_KEY", "")
+
+    response = TestClient(create_app(MockProvider())).get("/api/provider-usage")
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "provider credentials unavailable"}
+
+
 def test_search_key_endpoint_does_not_call_provider() -> None:
     provider = MockProvider()
     client = TestClient(create_app(provider))

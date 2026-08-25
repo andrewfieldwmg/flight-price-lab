@@ -16,6 +16,16 @@ def test_api_key_is_required_and_hidden(monkeypatch) -> None:
     assert "test-secret-key" not in repr(settings)
 
 
+def test_settings_ignores_database_urls_from_shared_environment(monkeypatch) -> None:
+    monkeypatch.setenv("SEARCHAPI_KEY", "test-secret-key")
+    monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://example/dev")
+    monkeypatch.setenv("TEST_DATABASE_URL", "postgresql+psycopg://example/test")
+
+    assert Settings(_env_file=None).searchapi_key.get_secret_value() == (
+        "test-secret-key"
+    )
+
+
 def test_vercel_services_preserve_fastapi_api_paths() -> None:
     config = json.loads(Path("vercel.json").read_text(encoding="utf-8"))
 

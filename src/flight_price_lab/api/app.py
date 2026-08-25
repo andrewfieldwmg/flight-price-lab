@@ -9,6 +9,7 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
+from pydantic import ValidationError
 
 from flight_price_lab.api.booking import (
     BookingContextExpiredError,
@@ -191,6 +192,10 @@ def create_app(
     async def provider_usage(refresh: bool = False) -> ProviderUsage:
         try:
             return await get_usage_service().get(force_refresh=refresh)
+        except ValidationError:
+            raise HTTPException(
+                status_code=503, detail="provider credentials unavailable"
+            ) from None
         except (SearchAPIError, TypeError, ValueError):
             raise HTTPException(
                 status_code=502, detail="provider usage unavailable"
