@@ -12,6 +12,15 @@ import { SearchForm } from "./search-form";
 import { SearchStatusPanel } from "./search-status-panel";
 import { TripSummary } from "./trip-summary";
 
+const emptyDirectionResults = {
+  baseline: null,
+  nonstop_options: [],
+  cheapest_feasible: null,
+  fastest_feasible: null,
+  pareto_frontier: [],
+  feasible_options: [],
+};
+
 function selected(options: TripOption[], id: string | null): TripOption | null {
   return options.find((option) => option.id === id) ?? null;
 }
@@ -125,9 +134,9 @@ export function SearchExperience() {
           )}
         </div>
       )}
-      {state.snapshot && (
+      {(state.snapshot || state.request) && (
         <>
-          <TripSummary
+          {state.snapshot && <TripSummary
             outbound={outbound}
             inbound={state.snapshot.return ? inbound : null}
             outboundBaseline={state.snapshot.outbound.baseline}
@@ -135,25 +144,30 @@ export function SearchExperience() {
             outboundComparisonEnabled={outboundTransfers}
             inboundComparisonEnabled={returnTransfers}
             excludeBaggage={excludeBaggage}
-          />
+            searchId={state.snapshot.search_id}
+            outboundDate={state.request?.outbound_date}
+            returnDate={state.request?.return_date ?? undefined}
+          />}
           <DirectionResults
             title="Outbound"
-            results={state.snapshot.outbound}
+            results={state.snapshot?.outbound ?? emptyDirectionResults}
             selectedId={state.selectedOutboundId}
             onSelect={(id) => dispatch({ type: "select_outbound", id })}
-            complete={isTerminal}
+            complete={isTerminal || state.directionCompleted.OUTBOUND}
             connectionProfile={state.request?.connection_profile ?? "CONSERVATIVE"}
             selfTransferEnabled={outboundTransfers}
+            date={state.request?.outbound_date ?? ""}
           />
-          {state.snapshot.return && (
+          {state.request?.return_date && (
             <DirectionResults
               title="Return"
-              results={state.snapshot.return}
+              results={state.snapshot?.return ?? emptyDirectionResults}
               selectedId={state.selectedReturnId}
               onSelect={(id) => dispatch({ type: "select_return", id })}
-              complete={isTerminal}
+              complete={isTerminal || state.directionCompleted.RETURN}
               connectionProfile={state.request?.connection_profile ?? "CONSERVATIVE"}
               selfTransferEnabled={returnTransfers}
+              date={state.request.return_date}
             />
           )}
         </>

@@ -1,0 +1,5 @@
+INFO:     127.0.0.1:53235 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53241 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53241 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53241 - "POST /api/booking/prepare HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53241 - "POST /api/booking/497041d0-96ad-49a6-8e82-475b242d50d9/handoff/a2415029-5765-4a87-93d8-2f2206b7bfc2?acknowledge_material_change=true HTTP/1.1" 303 See Other

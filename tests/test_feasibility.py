@@ -60,7 +60,7 @@ def _itinerary(connection_minutes: int):
 
 @pytest.mark.parametrize(
     ("minutes", "expected"),
-    [(179, False), (180, True)],
+    [(119, False), (120, True)],
 )
 def test_conservative_cabin_threshold(minutes: int, expected: bool) -> None:
     assert (
@@ -75,7 +75,7 @@ def test_conservative_cabin_threshold(minutes: int, expected: bool) -> None:
 
 @pytest.mark.parametrize(
     ("minutes", "expected"),
-    [(239, False), (240, True)],
+    [(119, False), (120, True)],
 )
 def test_conservative_checked_bag_threshold(minutes: int, expected: bool) -> None:
     assert (
@@ -91,10 +91,10 @@ def test_conservative_checked_bag_threshold(minutes: int, expected: bool) -> Non
 @pytest.mark.parametrize(
     ("profile", "baggage", "threshold"),
     [
-        (SelfTransferProfile.STANDARD, BaggageProfile.PERSONAL_ITEM_ONLY, 150),
-        (SelfTransferProfile.STANDARD, BaggageProfile.CHECKED_BAG, 210),
+        (SelfTransferProfile.STANDARD, BaggageProfile.PERSONAL_ITEM_ONLY, 120),
+        (SelfTransferProfile.STANDARD, BaggageProfile.CHECKED_BAG, 120),
         (SelfTransferProfile.AGGRESSIVE, BaggageProfile.CABIN_BAG, 120),
-        (SelfTransferProfile.AGGRESSIVE, BaggageProfile.CHECKED_BAG, 180),
+        (SelfTransferProfile.AGGRESSIVE, BaggageProfile.CHECKED_BAG, 120),
     ],
 )
 def test_standard_and_aggressive_thresholds(
@@ -121,7 +121,7 @@ def test_feasibility_is_applied_before_frontier() -> None:
     cheap_short = _offer(
         "MXP",
         "CAG",
-        first.legs[0].arrival + timedelta(minutes=120),
+        first.legs[0].arrival + timedelta(minutes=119),
         price="50",
         offer_id="cheap-short",
     )

@@ -1,0 +1,28 @@
+{
+  "carrier": "FR",
+  "flight_number": "FR 2687",
+  "expected_price": 741,
+  "booking_option_price": 813,
+  "rendered_price": 812.4,
+  "currency": "GBP",
+  "exact_flight_verified": true,
+  "passengers_verified": false,
+  "fare_selected": false,
+  "handoff_stage": "SELECTED_FLIGHT",
+  "verification_timestamp": "2026-08-25T05:41:34.848Z",
+  "verification": {
+    "carrier": true,
+    "flight": true,
+    "route": true,
+    "date": true,
+    "adults": false,
+    "children": false,
+    "selected_automatically": true
+  },
+  "price_validation": {
+    "discovery_to_booking_delta": 72,
+    "booking_to_ryanair_delta": -0.6,
+    "total_delta": 71.4,
+    "price_verified_at": "2026-08-25T05:41:34.848Z"
+  }
+}

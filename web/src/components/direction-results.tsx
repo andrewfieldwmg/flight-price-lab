@@ -7,9 +7,19 @@ import { duration } from "./result-card";
 
 export type SortKey = "saving" | "price" | "departure" | "arrival" | "transfer" | "journey" | "extra";
 type ViewMode = "all" | "efficient";
+const RESULTS_PER_PAGE = 15;
 
 export function localClock(value: string): string {
   return value.match(/T(\d{2}:\d{2})/)?.[1] ?? "—";
+}
+
+export function longSearchDate(value: string): string {
+  return new Date(`${value}T12:00:00`).toLocaleDateString("en-GB", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).replace(",", "");
 }
 
 export function isEarlyDeparture(value: string): boolean {
@@ -76,6 +86,7 @@ export function DirectionResults({
   complete,
   connectionProfile,
   selfTransferEnabled,
+  date,
 }: {
   title: string;
   results: Results;
@@ -84,6 +95,7 @@ export function DirectionResults({
   complete: boolean;
   connectionProfile: ConnectionProfile;
   selfTransferEnabled: boolean;
+  date: string;
 }) {
   const [sort, setSort] = useState<SortKey | null>(null);
   const [descending, setDescending] = useState(false);
@@ -91,6 +103,7 @@ export function DirectionResults({
   const [mode, setMode] = useState<ViewMode>("all");
   const [minimumSaving, setMinimumSaving] = useState(100);
   const [customSaving, setCustomSaving] = useState(false);
+  const [page, setPage] = useState(1);
   const options = useMemo(() => {
     const nonstops = results.nonstop_options.length ? results.nonstop_options : results.baseline ? [results.baseline] : [];
     const candidates = !selfTransferEnabled
@@ -102,8 +115,14 @@ export function DirectionResults({
     const filtered = selfTransferEnabled ? filterByMinimumSaving(basePriced, minimumSaving, selectedId) : basePriced;
     return sort ? sortOptions(filtered, sort, descending) : filtered;
   }, [results, sort, descending, mode, selfTransferEnabled, minimumSaving, selectedId]);
+  const pageCount = Math.max(1, Math.ceil(options.length / RESULTS_PER_PAGE));
+  const currentPage = Math.min(page, pageCount);
+  const pageOptions = options.slice((currentPage - 1) * RESULTS_PER_PAGE, currentPage * RESULTS_PER_PAGE);
+  const firstResult = options.length ? (currentPage - 1) * RESULTS_PER_PAGE + 1 : 0;
+  const lastResult = Math.min(currentPage * RESULTS_PER_PAGE, options.length);
 
   function changeSort(key: SortKey) {
+    setPage(1);
     if (key === sort) setDescending((value) => !value);
     else {
       setSort(key);
@@ -115,13 +134,14 @@ export function DirectionResults({
   return (
     <section className="results-section">
       <div className="results-heading">
-        <h2>{title}</h2>
+        <div><h2>{title}</h2><div className="direction-date">{longSearchDate(date)}</div></div>
         <div className="compromise-controls">
-          {selfTransferEnabled && <div className="mode-toggle"><button type="button" className={mode === "all" ? "active" : ""} onClick={() => setMode("all")}>All options</button><button type="button" className={mode === "efficient" ? "active" : ""} onClick={() => setMode("efficient")}>Efficient only</button></div>}
-          {selfTransferEnabled && <label className="minimum-saving">Minimum saving <select aria-label={`${title} minimum saving`} value={customSaving ? "custom" : minimumSaving} onChange={(event) => { if (event.target.value === "custom") setCustomSaving(true); else { setCustomSaving(false); setMinimumSaving(Number(event.target.value)); } }}><option value="0">£0</option><option value="50">£50</option><option value="100">£100</option><option value="200">£200</option><option value="custom">custom</option></select>{customSaving && <input aria-label={`${title} custom minimum saving`} type="number" min="0" value={minimumSaving} onChange={(event) => setMinimumSaving(Number(event.target.value))} />}</label>}
+          {selfTransferEnabled && <div className="mode-toggle"><button type="button" className={mode === "all" ? "active" : ""} onClick={() => { setMode("all"); setPage(1); }}>All options</button><button type="button" className={mode === "efficient" ? "active" : ""} onClick={() => { setMode("efficient"); setPage(1); }}>Efficient only</button></div>}
+          {selfTransferEnabled && <label className="minimum-saving">Minimum saving <select aria-label={`${title} minimum saving`} value={customSaving ? "custom" : minimumSaving} onChange={(event) => { setPage(1); if (event.target.value === "custom") setCustomSaving(true); else { setCustomSaving(false); setMinimumSaving(Number(event.target.value)); } }}><option value="0">£0</option><option value="50">£50</option><option value="100">£100</option><option value="200">£200</option><option value="custom">custom</option></select>{customSaving && <input aria-label={`${title} custom minimum saving`} type="number" min="0" value={minimumSaving} onChange={(event) => { setMinimumSaving(Number(event.target.value)); setPage(1); }} />}</label>}
           <span>{options.length} shown</span>
         </div>
       </div>
+      {!complete && <div className={`results-loading ${options.length ? "progressive" : ""}`} role="status"><span className="loading-spinner" aria-hidden="true" />{options.length ? "Still loading more options…" : `Loading ${title.toLowerCase()} options…`}</div>}
       <div className="table-scroll">
         <table className="results-table">
           <thead><tr>
@@ -137,11 +157,12 @@ export function DirectionResults({
             <th>Airlines</th><th>Tickets</th>
           </tr></thead>
           <tbody>
-            {options.map((option) => <FragmentRow key={option.id} option={option} selected={selectedId === option.id} expanded={expanded === option.id} onClick={() => { onSelect(option.id); setExpanded(expanded === option.id ? null : option.id); }} connectionProfile={connectionProfile} showComparisons={selfTransferEnabled} columnCount={columnCount} />)}
+            {pageOptions.map((option) => <FragmentRow key={option.id} option={option} selected={selectedId === option.id} expanded={expanded === option.id} onClick={() => { onSelect(option.id); setExpanded(expanded === option.id ? null : option.id); }} connectionProfile={connectionProfile} showComparisons={selfTransferEnabled} columnCount={columnCount} />)}
           </tbody>
         </table>
       </div>
       {!options.length && <div className="compact-empty">{complete ? "No options matched this search." : "Waiting for direct-flight results…"}</div>}
+      {!!options.length && <nav className="results-pagination" aria-label={`${title} pagination`}><span>{firstResult}–{lastResult} of {options.length}</span><div><button type="button" onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={currentPage === 1}>Previous</button><span>Page {currentPage} of {pageCount}</span><button type="button" onClick={() => setPage((value) => Math.min(pageCount, value + 1))} disabled={currentPage === pageCount}>Next</button></div></nav>}
       <div className="table-footnote">Prices exclude baggage.</div>
     </section>
   );

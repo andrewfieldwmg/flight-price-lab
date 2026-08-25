@@ -8,10 +8,13 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import DateTime, Integer, String, Text, create_engine, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
+
+if TYPE_CHECKING:
+    from flight_price_lab.models.flight import FlightOffer
 
 
 class Base(DeclarativeBase):
@@ -32,6 +35,19 @@ class SearchCacheEntry(Base):
         DateTime(timezone=True), nullable=False
     )
     result_count: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class BookingCandidateEntry(Base):
+    """Internal booking lineage; provider action metadata never reaches the client."""
+
+    __tablename__ = "booking_candidates"
+
+    search_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    option_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    offers_json: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
 
 
 @dataclass(frozen=True)
@@ -221,3 +237,43 @@ class SearchResponseCache:
             session.merge(entry)
             session.commit()
         return True
+
+
+class BookingCandidateStore:
+    """Persist selected-option provenance independently from public snapshots."""
+
+    def __init__(
+        self, database_url: str = "sqlite:///data/search_cache.sqlite3"
+    ) -> None:
+        self.engine = create_engine(database_url)
+        Base.metadata.create_all(self.engine)
+
+    def put(
+        self, search_id: str, option_id: str, offers: tuple[FlightOffer, ...]
+    ) -> None:
+        from flight_price_lab.models.flight import FlightOffer
+
+        serialized = []
+        for offer in offers:
+            if not isinstance(offer, FlightOffer):
+                raise TypeError("booking constituent must be a FlightOffer")
+            serialized.append(offer.model_dump(mode="json"))
+        entry = BookingCandidateEntry(
+            search_id=search_id,
+            option_id=option_id,
+            offers_json=json.dumps(serialized, separators=(",", ":")),
+            created_at=datetime.now(UTC),
+        )
+        with Session(self.engine) as session:
+            session.merge(entry)
+            session.commit()
+
+    def get(self, search_id: str, option_id: str) -> tuple[FlightOffer, ...] | None:
+        from flight_price_lab.models.flight import FlightOffer
+
+        with Session(self.engine) as session:
+            entry = session.get(BookingCandidateEntry, (search_id, option_id))
+            if entry is None:
+                return None
+            values = json.loads(entry.offers_json)
+        return tuple(FlightOffer.model_validate(value) for value in values)

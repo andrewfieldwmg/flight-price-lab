@@ -29,10 +29,56 @@ const results = {
 };
 
 const renderResults = (selfTransferEnabled = true, onSelect = vi.fn()) => render(
-  <DirectionResults title="Outbound" results={results} selectedId={null} onSelect={onSelect} complete connectionProfile="CONSERVATIVE" selfTransferEnabled={selfTransferEnabled} />,
+  <DirectionResults title="Outbound" date="2026-12-18" results={results} selectedId={null} onSelect={onSelect} complete connectionProfile="CONSERVATIVE" selfTransferEnabled={selfTransferEnabled} />,
 );
 
 describe("dense flight results", () => {
+  const manyOptions = Array.from({ length: 31 }, (_, index) => option({
+    id: `direct-${index + 1}`,
+    route: [`O${index + 1}`, "CAG"],
+    base_price: String(900 - index),
+    flight_numbers: [`FR ${1000 + index}`],
+    legs: [{
+      ...option({ id: "leg" }).legs[0],
+      origin: `O${index + 1}`,
+      flight_number: `FR ${1000 + index}`,
+    }],
+  }));
+  const pagedResults = { ...results, baseline: manyOptions[0], nonstop_options: manyOptions, feasible_options: [] };
+
+  it("paginates 15 rows after sorting and retains selection across pages", () => {
+    const { rerender } = render(<DirectionResults title="Outbound" date="2026-12-18" results={pagedResults} selectedId="direct-20" onSelect={vi.fn()} complete connectionProfile="CONSERVATIVE" selfTransferEnabled={false} />);
+    expect(screen.getAllByRole("radio")).toHaveLength(15);
+    expect(screen.getByText("1–15 of 31")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByText("Page 2 of 3")).toBeInTheDocument();
+    expect(screen.getByLabelText("Select O20-CAG")).toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Price" }));
+    expect(screen.getByText("Page 1 of 3")).toBeInTheDocument();
+    expect(screen.getByText("O31–CAG")).toBeInTheDocument();
+    rerender(<DirectionResults title="Outbound" date="2026-12-18" results={pagedResults} selectedId="direct-20" onSelect={vi.fn()} complete connectionProfile="CONSERVATIVE" selfTransferEnabled={false} />);
+    expect(screen.getByLabelText("Select O20-CAG")).toBeChecked();
+  });
+
+  it("keeps outbound and return pagination independent", () => {
+    render(<><DirectionResults title="Outbound" date="2026-12-18" results={pagedResults} selectedId={null} onSelect={vi.fn()} complete connectionProfile="CONSERVATIVE" selfTransferEnabled={false} /><DirectionResults title="Return" date="2026-12-28" results={pagedResults} selectedId={null} onSelect={vi.fn()} complete connectionProfile="CONSERVATIVE" selfTransferEnabled={false} /></>);
+    const outboundPagination = screen.getByRole("navigation", { name: "Outbound pagination" });
+    const returnPagination = screen.getByRole("navigation", { name: "Return pagination" });
+    fireEvent.click(within(outboundPagination).getByRole("button", { name: "Next" }));
+    expect(outboundPagination).toHaveTextContent("Page 2 of 3");
+    expect(returnPagination).toHaveTextContent("Page 1 of 3");
+  });
+
+  it("shows the search date and direction loading states", () => {
+    const { rerender } = render(<DirectionResults title="Outbound" date="2026-12-18" results={{ ...results, baseline: null, nonstop_options: [], feasible_options: [] }} selectedId={null} onSelect={vi.fn()} complete={false} connectionProfile="CONSERVATIVE" selfTransferEnabled />);
+    expect(screen.getByText("Friday 18 December 2026")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Loading outbound options…");
+    rerender(<DirectionResults title="Outbound" date="2026-12-18" results={results} selectedId={null} onSelect={vi.fn()} complete={false} connectionProfile="CONSERVATIVE" selfTransferEnabled />);
+    expect(screen.getByRole("status")).toHaveTextContent("Still loading more options…");
+    rerender(<DirectionResults title="Outbound" date="2026-12-18" results={results} selectedId={null} onSelect={vi.fn()} complete connectionProfile="CONSERVATIVE" selfTransferEnabled />);
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
   it("shows all feasible options with the nonstop reference pinned initially", () => {
     renderResults();
     const rows = screen.getAllByRole("row").slice(1);
@@ -54,7 +100,7 @@ describe("dense flight results", () => {
   });
 
   it("retains a selected alternative below the saving threshold", () => {
-    render(<DirectionResults title="Outbound" results={results} selectedId="dominated" onSelect={vi.fn()} complete connectionProfile="CONSERVATIVE" selfTransferEnabled />);
+    render(<DirectionResults title="Outbound" date="2026-12-18" results={results} selectedId="dominated" onSelect={vi.fn()} complete connectionProfile="CONSERVATIVE" selfTransferEnabled />);
     expect(screen.getByText("LGW–FCO–CAG")).toBeInTheDocument();
   });
 

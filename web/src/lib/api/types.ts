@@ -88,6 +88,40 @@ export interface TripOption {
   baggage_confidence: string;
 }
 
+export type BookingSessionState = "CREATED" | "REPRICING" | "READY" | "VERIFY_ON_AIRLINE" | "UNAVAILABLE" | "PRICE_CHANGED" | "HANDOFF_STARTED" | "AIRLINE_VERIFIED" | "FAILED";
+
+export interface BookingTicket {
+  ticket_id: string;
+  carrier: string;
+  flight_number: string;
+  route: string;
+  travel_date: string;
+  departure_at: string;
+  arrival_at: string;
+  original_price: string;
+  current_price: string | null;
+  price_delta: string | null;
+  currency: string;
+  status: BookingSessionState;
+  price_change_status: "PRICE_DECREASED" | "UNCHANGED" | "MINOR_INCREASE" | "MATERIAL_INCREASE" | null;
+  material_change_acknowledgement_required: boolean;
+  capability: "EXACT_CHECKOUT_HANDOFF" | "EXACT_FLIGHT_HANDOFF" | "PREFILLED_SEARCH" | "GENERIC_BOOKING_PAGE" | "UNAVAILABLE" | null;
+  fare_selected: boolean;
+  adults: number;
+  children: number;
+  exact_flight_verified: boolean;
+  passenger_composition_verified: boolean;
+}
+
+export interface BookingSession {
+  booking_session_id: string;
+  state: BookingSessionState;
+  tickets: BookingTicket[];
+  original_total: string;
+  current_total: string | null;
+  price_delta: string | null;
+}
+
 export interface DirectionResults {
   baseline: TripOption | null;
   nonstop_options: TripOption[];

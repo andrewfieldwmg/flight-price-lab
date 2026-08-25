@@ -188,6 +188,26 @@ async def run_search(
     raise AssertionError("search did not complete")
 
 
+def test_synthetic_option_keeps_two_booking_constituents() -> None:
+    snapshot, registry, _ = asyncio.run(run_search(SelfTransferPolicy.OUTBOUND_ONLY))
+    option = next(
+        item
+        for item in snapshot.outbound.feasible_options
+        if item.flight_numbers == ["U2 100", "W4 200"]
+    )
+
+    constituents = asyncio.run(
+        registry.get_booking_candidate(snapshot.search_id, option.id)
+    )
+
+    assert constituents is not None
+    assert len(constituents) == 2
+    assert [offer.legs[0].flight_number for offer in constituents] == [
+        "U2 100",
+        "W4 200",
+    ]
+
+
 def test_request_validation_and_structured_http_error() -> None:
     client = TestClient(create_app(MockProvider()))
     response = client.post(

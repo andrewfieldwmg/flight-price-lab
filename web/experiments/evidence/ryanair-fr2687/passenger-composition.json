@@ -1,0 +1,764 @@
+{
+  "expected_adults": 2,
+  "expected_children": 2,
+  "observed_adults": 2,
+  "observed_children": 2,
+  "evidence_source": [
+    "NETWORK_RESPONSE",
+    "NETWORK_REQUEST",
+    "DOM",
+    "SESSION_STORAGE"
+  ],
+  "browser_verified": true,
+  "handoff_payload_verified": true,
+  "independently_verified": true,
+  "confidence": "HIGH",
+  "prepare_booking_allowed": false,
+  "evidence": [
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.basket.infant-fee",
+      "value": "Infant fee"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.basket.plus-fare-teen",
+      "value": "Teen Flexi Plus fare"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.basket.regular-fare-teen",
+      "value": "Teen Standard fare"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.basket.sure-fare-teen",
+      "value": "Teen Plus fare"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.breadcrumbs.link-bookings.passengers",
+      "value": "Passengers"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.breadcrumbs.paxs-checkin",
+      "value": "Passengers"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.common-header.EU-261-passenger-rights",
+      "value": "EU-261 Passenger Rights"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-card.benefit-children_seat-family",
+      "value": "Free seats for children"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-card.benefit.children_seat",
+      "value": "Free reserved seats for kids under 12"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-card.benefit.description-children_seat-family",
+      "value": "For up to 4 kids on your booking"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-card.benefit.description-children_seat-regular",
+      "value": "For up to 4 kids on your booking"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-card.benefit.description-children_seat-standard",
+      "value": "For up to 4 kids on your booking"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-card.benefit.title-children_seat",
+      "value": "Free reserved seats for kids under 12"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-card.benefit.title-children_seat-family",
+      "value": "Free reserved seats for kids under 12"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-card.benefit.title-children_seat-regular",
+      "value": "Free reserved seats for kids under 12"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-card.benefit.title-children_seat-standard",
+      "value": "Free reserved seats for kids under 12"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-card.benefit.title-children_seat_res-family",
+      "value": "Free reserved seats for kids under 12"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-options-explained.children_seat-description",
+      "value": "For up to 4 kids on your booking"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-options-explained.children_seat-title",
+      "value": "Free reserved seats for kids under 12"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-options-explained.children_seat_res-title",
+      "value": "Free reserved seats for kids under 12"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-table.benefit.description-children_seat",
+      "value": "For up to 4 kids on your booking"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-table.benefit.granular-description-children_seat",
+      "value": "For up to 4 kids on your booking"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-table.benefit.modal.description-children_seat_family",
+      "value": "Our Basic and Family Plus bundles include free seats for up to 4 children per adult within specific rows for a flat fee.<br/>All other bundles include reserved seats for all passengers on the booking within specific rows."
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-table.benefit.modal.description-children_seat_nonFamily",
+      "value": "Our Basic bundle includes free seats for up to 4 children per adult within specific rows for a flat fee.<br/>All other bundles include reserved seats for all passengers on the booking within specific rows. "
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-table.benefit.modal.description-children_seat_seta_v2",
+      "value": "Our Family Plus bundles include free seats for up to 4 children per adult within specific rows."
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-table.benefit.title-children_seat",
+      "value": "Free reserved seats for kids under 12"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-table.benefit.title-children_seat_res",
+      "value": "Free reserved seats for kids under 12"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-tile.benefit.description-children_seat",
+      "value": "For up to 4 kids on your booking"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-tile.benefit.title-children_seat",
+      "value": "Free reserved seats for kids under 12"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-type.description-family-children",
+      "value": "Guaranteed lowest fare, Free seats for children, 2 x 20kg check-in bags, 10kg Check-in bags"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-type.description-family-connecting-children",
+      "value": "Guaranteed lowest fare, Free seats for children, 2 x 20kg check-in bags, 10kg Check-in bags"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-upgrade.sheet-benefit-children_seat-family",
+      "value": "Free seats for children"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.flight-card.not-enough-infant-seats-left",
+      "value": "Sorry, not enough infant seats left."
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.flight-change.card.breakdown.total-per-pax",
+      "value": "Total per passenger:"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.flight-details.description-laudamotion-connecting-family-children",
+      "value": "Guaranteed lowest fare, Free seats for children, 2 x 20kg check-in bags, 10kg Check-in bags"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.flight-details.description-laudamotion-family-children",
+      "value": "Guaranteed lowest fare, Free seats for children, 2 x 20kg check-in bags, 10kg Check-in bags"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.flight-details.description-ryanair-connecting-family-children",
+      "value": "Guaranteed lowest fare, Free seats for children, 2 x 20kg check-in bags, 10kg Check-in bags"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.flight-details.description-ryanair-family-children",
+      "value": "Guaranteed lowest fare, Free seats for children, 2 x 20kg check-in bags, 10kg Check-in bags"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.global.infants-info-body",
+      "value": "Infants and any subsidy on the infant booking will be allocated to the first adult passenger on the booking.\nThe infant fee for each baby travelling on an adult’s lap is €25/£25 (or the equivalent in the local currency) for each one-way flight."
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.global.infants-info-title",
+      "value": "Flying with an infant?"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.myfr.user.logged-in.passengers",
+      "value": "companion"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.basket.infant-fee",
+      "value": "Infant fee"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.basket.plus-fare-teen",
+      "value": "Teen Flexi Plus fare"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.basket.regular-fare-teen",
+      "value": "Teen Standard fare"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.basket.sure-fare-teen",
+      "value": "Teen Plus fare"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.breadcrumbs.link-bookings.passengers",
+      "value": "Passengers"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.breadcrumbs.paxs-checkin",
+      "value": "Passengers"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.common-header.EU-261-passenger-rights",
+      "value": "EU-261 Passenger Rights"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-card.benefit-children_seat-family",
+      "value": "Free seats for children"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-card.benefit.children_seat",
+      "value": "Free reserved seats for kids under 12"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-card.benefit.description-children_seat-family",
+      "value": "For up to 4 kids on your booking"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-card.benefit.description-children_seat-regular",
+      "value": "For up to 4 kids on your booking"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-card.benefit.description-children_seat-standard",
+      "value": "For up to 4 kids on your booking"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-card.benefit.title-children_seat",
+      "value": "Free reserved seats for kids under 12"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-card.benefit.title-children_seat-family",
+      "value": "Free reserved seats for kids under 12"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-card.benefit.title-children_seat-regular",
+      "value": "Free reserved seats for kids under 12"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-card.benefit.title-children_seat-standard",
+      "value": "Free reserved seats for kids under 12"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-card.benefit.title-children_seat_res-family",
+      "value": "Free reserved seats for kids under 12"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-options-explained.children_seat-description",
+      "value": "For up to 4 kids on your booking"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-options-explained.children_seat-title",
+      "value": "Free reserved seats for kids under 12"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-options-explained.children_seat_res-title",
+      "value": "Free reserved seats for kids under 12"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-table.benefit.description-children_seat",
+      "value": "For up to 4 kids on your booking"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-table.benefit.granular-description-children_seat",
+      "value": "For up to 4 kids on your booking"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-table.benefit.modal.description-children_seat_family",
+      "value": "Our Basic and Family Plus bundles include free seats for up to 4 children per adult within specific rows for a flat fee.<br/>All other bundles include reserved seats for all passengers on the booking within specific rows."
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-table.benefit.modal.description-children_seat_nonFamily",
+      "value": "Our Basic bundle includes free seats for up to 4 children per adult within specific rows for a flat fee.<br/>All other bundles include reserved seats for all passengers on the booking within specific rows. "
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-table.benefit.modal.description-children_seat_seta_v2",
+      "value": "Our Family Plus bundles include free seats for up to 4 children per adult within specific rows."
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-table.benefit.title-children_seat",
+      "value": "Free reserved seats for kids under 12"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-table.benefit.title-children_seat_res",
+      "value": "Free reserved seats for kids under 12"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-tile.benefit.description-children_seat",
+      "value": "For up to 4 kids on your booking"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-tile.benefit.title-children_seat",
+      "value": "Free reserved seats for kids under 12"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-type.description-family-children",
+      "value": "Guaranteed lowest fare, Free seats for children, 2 x 20kg check-in bags, 10kg Check-in bags"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-type.description-family-connecting-children",
+      "value": "Guaranteed lowest fare, Free seats for children, 2 x 20kg check-in bags, 10kg Check-in bags"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.fare-upgrade.sheet-benefit-children_seat-family",
+      "value": "Free seats for children"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.flight-card.not-enough-infant-seats-left",
+      "value": "Sorry, not enough infant seats left."
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.flight-change.card.breakdown.total-per-pax",
+      "value": "Total per passenger:"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.flight-details.description-laudamotion-connecting-family-children",
+      "value": "Guaranteed lowest fare, Free seats for children, 2 x 20kg check-in bags, 10kg Check-in bags"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.flight-details.description-laudamotion-family-children",
+      "value": "Guaranteed lowest fare, Free seats for children, 2 x 20kg check-in bags, 10kg Check-in bags"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.flight-details.description-ryanair-connecting-family-children",
+      "value": "Guaranteed lowest fare, Free seats for children, 2 x 20kg check-in bags, 10kg Check-in bags"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.flight-details.description-ryanair-family-children",
+      "value": "Guaranteed lowest fare, Free seats for children, 2 x 20kg check-in bags, 10kg Check-in bags"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.global.infants-info-body",
+      "value": "Infants and any subsidy on the infant booking will be allocated to the first adult passenger on the booking.\nThe infant fee for each baby travelling on an adult’s lap is €25/£25 (or the equivalent in the local currency) for each one-way flight."
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.global.infants-info-title",
+      "value": "Flying with an infant?"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.myfr.user.logged-in.passengers",
+      "value": "companion"
+    },
+    {
+      "source": "NETWORK_REQUEST",
+      "path": "$.availability.adultPax",
+      "value": 2
+    },
+    {
+      "source": "NETWORK_REQUEST",
+      "path": "$.availability.teenPax",
+      "value": 0
+    },
+    {
+      "source": "NETWORK_REQUEST",
+      "path": "$.availability.childPax",
+      "value": 2
+    },
+    {
+      "source": "NETWORK_REQUEST",
+      "path": "$.availability.infantPax",
+      "value": 0
+    },
+    {
+      "source": "NETWORK_REQUEST",
+      "path": "$.availability.rawAvailability.entities.flights.FR~2687~ ~~STN~12/17/2026 12:25~CAG~12/17/2026 16:05~~.infantsLeft",
+      "value": 18
+    },
+    {
+      "source": "NETWORK_REQUEST",
+      "path": "$.availability.rawAvailability.entities.flights.FR~2687~ ~~STN~12/18/2026 19:45~CAG~12/18/2026 23:25~~.infantsLeft",
+      "value": 18
+    },
+    {
+      "source": "NETWORK_REQUEST",
+      "path": "$.availability.rawAvailability.entities.flights.FR~9445~ ~~STN~12/19/2026 08:35~CAG~12/19/2026 12:15~~.infantsLeft",
+      "value": 17
+    },
+    {
+      "source": "NETWORK_REQUEST",
+      "path": "$.availability.rawAvailability.entities.flights.FR~2687~ ~~STN~12/19/2026 20:50~CAG~12/20/2026 00:30~~.infantsLeft",
+      "value": 17
+    },
+    {
+      "source": "NETWORK_REQUEST",
+      "path": "$.availability.rawAvailability.entities.flights.FR~2687~ ~~STN~12/20/2026 19:55~CAG~12/20/2026 23:35~~.infantsLeft",
+      "value": 18
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.trips[0].dates[1].flights[0].infantsLeft",
+      "value": 18
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.trips[0].dates[2].flights[0].infantsLeft",
+      "value": 18
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.trips[0].dates[3].flights[0].infantsLeft",
+      "value": 17
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.trips[0].dates[3].flights[1].infantsLeft",
+      "value": 17
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.trips[0].dates[4].flights[0].infantsLeft",
+      "value": 18
+    },
+    {
+      "source": "NETWORK_REQUEST",
+      "path": "$.analytics.cd_PaxConfig",
+      "value": "A:2|T:0|C:2|I:0"
+    },
+    {
+      "source": "NETWORK_REQUEST",
+      "path": "$.variables.createBooking.adults",
+      "value": 2
+    },
+    {
+      "source": "NETWORK_REQUEST",
+      "path": "$.variables.createBooking.children",
+      "value": 2
+    },
+    {
+      "source": "NETWORK_REQUEST",
+      "path": "$.variables.createBooking.infants",
+      "value": 0
+    },
+    {
+      "source": "NETWORK_REQUEST",
+      "path": "$.variables.createBooking.teens",
+      "value": 0
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.errors.min-promo-pax",
+      "value": "The minimum amount of passengers for this promotion is {{minPromoPax}}."
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.flight-search.deals-of-the-day.only-adult-price",
+      "value": "The prices shown are for adult fares only. Please see the main flights selection page to see the total, including infant fares on your booking."
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.flight-search.search-input.passengers-title",
+      "value": "Passengers"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.flight-search.search-passengers.adult",
+      "value": "Adult"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.flight-search.search-passengers.adults",
+      "value": "Adults"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.flight-search.search-passengers.child",
+      "value": "Child"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.flight-search.search-passengers.children",
+      "value": "Children"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.flight-search.search-passengers.infant",
+      "value": "Infant"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.flight-search.search-passengers.infant-paragraph1",
+      "value": "Infants and any subsidy on the infant booking will be allocated to the first adult passenger on the booking.\nThe infant fee for each baby travelling on an adult’s lap is €25/£25 (or the equivalent in the local currency) for each one-way flight."
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.flight-search.search-passengers.infant-paragraph2",
+      "value": ""
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.flight-search.search-passengers.infant-paragraph3",
+      "value": ""
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.flight-search.search-passengers.infant-paragraph4",
+      "value": ""
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.flight-search.search-passengers.infant-title",
+      "value": "Flying with an infant?"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.flight-search.search-passengers.infants-adults",
+      "value": "You can't travel with more infants than adults"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.flight-search.search-passengers.infants-max",
+      "value": "Maximum number of infants is {{max}}"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.flight-search.search-passengers.teens",
+      "value": "Teens"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.passengers-selector.errors.infants-adults",
+      "value": "You can't travel with more infants than adults"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.passengers-selector.errors.infants-max",
+      "value": "Maximum number of infants is {{ max }}"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.passengers-selector.errors.min-promo-pax",
+      "value": "The minimum amount of passengers for this promotion is {{minPromoPax}}."
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.passengers-selector.passenger-type.adult",
+      "value": "Adult"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.passengers-selector.passenger-type.adults",
+      "value": "Adults"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.passengers-selector.passenger-type.child",
+      "value": "Child"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.passengers-selector.passenger-type.children",
+      "value": "Children"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.passengers-selector.passenger-type.infant",
+      "value": "Infant"
+    },
+    {
+      "source": "NETWORK_RESPONSE",
+      "path": "$.passengers-selector.passenger-type.teens",
+      "value": "Teens"
+    },
+    {
+      "source": "DOM",
+      "path": "adult_count",
+      "value": 2
+    },
+    {
+      "source": "DOM",
+      "path": "child_count",
+      "value": 2
+    },
+    {
+      "source": "SESSION_STORAGE",
+      "path": "ryanair:featureToggles.checkin-change-pax-type-enabled",
+      "value": true
+    },
+    {
+      "source": "SESSION_STORAGE",
+      "path": "ryanair:featureToggles.checkin-change-pax-type-redirect-dark",
+      "value": true
+    },
+    {
+      "source": "SESSION_STORAGE",
+      "path": "ryanair:featureToggles.checkin-seats-last-pax-enabled-desktop-dark",
+      "value": false
+    },
+    {
+      "source": "SESSION_STORAGE",
+      "path": "ryanair:featureToggles.flight-search-widget-ai-search-model-passengers",
+      "value": "gpt-oss-120b"
+    },
+    {
+      "source": "SESSION_STORAGE",
+      "path": "ryanair:featureToggles.flights-mandatory-child-seat-enabled",
+      "value": true
+    },
+    {
+      "source": "SESSION_STORAGE",
+      "path": "ryanair:featureToggles.lead-passenger-dob-enabled",
+      "value": true
+    },
+    {
+      "source": "SESSION_STORAGE",
+      "path": "ryanair:featureToggles.lp-pax-feature-enabled",
+      "value": true
+    },
+    {
+      "source": "SESSION_STORAGE",
+      "path": "ryanair:featureToggles.manage-hub-add-infant-lead-pax-dob-save-enabled",
+      "value": true
+    },
+    {
+      "source": "SESSION_STORAGE",
+      "path": "ryanair:featureToggles.manage-hub-change-name-lead-pax-dob-save-enabled",
+      "value": true
+    },
+    {
+      "source": "SESSION_STORAGE",
+      "path": "ryanair:featureToggles.manage-hub-change-pax-type-enabled",
+      "value": true
+    },
+    {
+      "source": "SESSION_STORAGE",
+      "path": "ryanair:featureToggles.manage-hub-cpt-lead-pax-dob-save-enabled",
+      "value": true
+    },
+    {
+      "source": "SESSION_STORAGE",
+      "path": "ryanair:featureToggles.manage-hub-link-bookings-lead-pax-dob-save-enabled",
+      "value": true
+    },
+    {
+      "source": "SESSION_STORAGE",
+      "path": "ryanair:featureToggles.passengers-desktop-canary",
+      "value": "2.7.1"
+    },
+    {
+      "source": "SESSION_STORAGE",
+      "path": "ryanair:featureToggles.passengers-lead-dob",
+      "value": true
+    },
+    {
+      "source": "SESSION_STORAGE",
+      "path": "ryanair:featureToggles.passengers-login-touchpoint-enabled",
+      "value": true
+    },
+    {
+      "source": "SESSION_STORAGE",
+      "path": "ryanair:featureToggles.passengers-new-sa-enabled",
+      "value": true
+    },
+    {
+      "source": "SESSION_STORAGE",
+      "path": "ryanair:featureToggles.passengers-nextpage",
+      "value": "bags"
+    },
+    {
+      "source": "SESSION_STORAGE",
+      "path": "ryanair:featureToggles.passengers-person-api-culture-dark",
+      "value": true
+    },
+    {
+      "source": "SESSION_STORAGE",
+      "path": "ryanair:featureToggles.passengers-sa-updated-ssrs-dark",
+      "value": true
+    },
+    {
+      "source": "SESSION_STORAGE",
+      "path": "ryanair:featureToggles.single-domain-my-ryanair-passengers-dark",
+      "value": false
+    },
+    {
+      "source": "SESSION_STORAGE",
+      "path": "ryanair:featureToggles.uncheck-passengers-on-flight-change-enabled",
+      "value": false
+    }
+  ]
+}

@@ -81,8 +81,8 @@ def matches_time_window(
 def trip_search_parameters(request: TripSearchRequest) -> dict[str, object]:
     """Return provider-affecting identity inputs without UI-only state."""
     profile_minimum = {
-        "CONSERVATIVE": 180,
-        "STANDARD": 150,
+        "CONSERVATIVE": 120,
+        "STANDARD": 120,
         "AGGRESSIVE": 120,
     }[request.connection_profile.value]
     parameters: dict[str, object] = {
@@ -388,6 +388,11 @@ class TripSearchService:
             (self._direct_option(offer, direction, request) for offer in direct),
             key=lambda item: (item.base_price, item.total_journey_minutes),
         )
+        offers_by_id = {offer.fingerprint: offer for offer in direct}
+        for option in direct_options:
+            await self.registry.register_booking_candidate(
+                snapshot.search_id, option.id, (offers_by_id[option.id],)
+            )
         results.nonstop_options = direct_options
         baseline_offer = min(direct, key=lambda item: item.total_price, default=None)
         if baseline_offer is None:
@@ -485,21 +490,45 @@ class TripSearchService:
                     if direction is Direction.OUTBOUND
                     else request.return_time_window
                 )
-                options = [
-                    self._with_savings(
-                        self._itinerary_option(item.itinerary, direction, request),
-                        baseline,
+                options = []
+                for item in synthesized.itineraries:
+                    itinerary = item.itinerary
+                    if itinerary.connection_duration is None:
+                        continue
+                    if (
+                        _minutes(itinerary.connection_duration)
+                        > window.max_connection_minutes
+                    ):
+                        continue
+                    if not matches_time_window(
+                        itinerary.departure, itinerary.final_arrival, window
+                    ):
+                        continue
+                    option = self._with_savings(
+                        self._itinerary_option(itinerary, direction, request), baseline
                     )
-                    for item in synthesized.itineraries
-                    if item.itinerary.connection_duration is not None
-                    and _minutes(item.itinerary.connection_duration)
-                    <= window.max_connection_minutes
-                    if matches_time_window(
-                        item.itinerary.departure,
-                        item.itinerary.final_arrival,
-                        window,
+                    options.append(option)
+                    await self.registry.register_booking_candidate(
+                        snapshot.search_id, option.id, itinerary.components
                     )
-                ]
+                    if development_diagnostics_enabled():
+                        search_log(
+                            "SYNTHETIC_BOOKING_LINEAGE_REGISTERED",
+                            search_id=snapshot.search_id,
+                            selected_option_id=option.id,
+                            option_type="synthetic",
+                            is_self_transfer=True,
+                            ticketing_type=option.ticketing_type.value,
+                            number_of_legs=len(option.legs),
+                            number_of_constituent_refs=len(itinerary.components),
+                            constituent_ids=[
+                                offer.fingerprint for offer in itinerary.components
+                            ],
+                            constituent_flights=[
+                                offer.legs[0].flight_number
+                                for offer in itinerary.components
+                            ],
+                        )
                 if (
                     request.max_extra_journey_minutes is not None
                     and baseline is not None

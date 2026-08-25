@@ -23,9 +23,9 @@ class BaggageProfile(StrEnum):
 
 
 _MINIMUM_CONNECTION_MINUTES = {
-    SelfTransferProfile.CONSERVATIVE: {"cabin": 180, "checked": 240},
-    SelfTransferProfile.STANDARD: {"cabin": 150, "checked": 210},
-    SelfTransferProfile.AGGRESSIVE: {"cabin": 120, "checked": 180},
+    SelfTransferProfile.CONSERVATIVE: {"cabin": 120, "checked": 120},
+    SelfTransferProfile.STANDARD: {"cabin": 120, "checked": 120},
+    SelfTransferProfile.AGGRESSIVE: {"cabin": 120, "checked": 120},
 }
 
 

@@ -8,8 +8,19 @@ from typing import Annotated
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 
+from flight_price_lab.api.booking import (
+    BookingContextExpiredError,
+    BookingPreparationService,
+    BookingResolver,
+    BookingSessionResponse,
+    GooglePostHandoffLauncher,
+    HandoffLauncher,
+    InMemoryBookingSessionRegistry,
+    PrepareBookingRequest,
+    SearchAPIBookingResolver,
+)
 from flight_price_lab.api.models import (
     CalendarResponse,
     ErrorResponse,
@@ -30,11 +41,14 @@ from flight_price_lab.api.registry import InMemorySearchRegistry
 from flight_price_lab.api.service import TripSearchService, trip_search_key
 from flight_price_lab.config import Settings
 from flight_price_lab.providers.searchapi import SearchAPIClient, SearchAPIError
+from flight_price_lab.storage.database import BookingCandidateStore
 
 
 def create_app(
     provider: ProviderGateway | None = None,
     usage_gateway: ProviderUsageGateway | None = None,
+    booking_resolver: BookingResolver | None = None,
+    handoff_launcher: HandoffLauncher | None = None,
 ) -> FastAPI:
     application = FastAPI(title="Flight Price Lab API", version="1.0.0")
     allowed = os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
@@ -47,9 +61,12 @@ def create_app(
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    registry = InMemorySearchRegistry()
+    registry = InMemorySearchRegistry(BookingCandidateStore())
     application.state.registry = registry
     application.state.provider = provider
+    application.state.booking_resolver = booking_resolver
+    application.state.booking_sessions = InMemoryBookingSessionRegistry()
+    application.state.handoff_launcher = handoff_launcher or GooglePostHandoffLauncher()
     application.state.usage = (
         CachedProviderUsage(usage_gateway) if usage_gateway is not None else None
     )
@@ -73,6 +90,19 @@ def create_app(
             )
             application.state.usage = configured
         return configured
+
+    def get_booking_service() -> BookingPreparationService:
+        resolver = application.state.booking_resolver
+        if resolver is None:
+            settings = Settings()
+            resolver = SearchAPIBookingResolver(SearchAPIClient(settings.searchapi_key))
+            application.state.booking_resolver = resolver
+        return BookingPreparationService(
+            registry,
+            application.state.booking_sessions,
+            resolver,
+            application.state.handoff_launcher,
+        )
 
     @application.get("/api/health")
     async def health() -> dict[str, str]:
@@ -159,6 +189,40 @@ def create_app(
             raise HTTPException(
                 status_code=502, detail="provider usage unavailable"
             ) from None
+
+    @application.post("/api/booking/prepare", response_model=BookingSessionResponse)
+    async def prepare_booking(
+        request: PrepareBookingRequest,
+    ) -> BookingSessionResponse:
+        try:
+            return await get_booking_service().prepare(request)
+        except BookingContextExpiredError:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "booking_context_expired",
+                    "message": "Booking context expired; run a fresh search before preparing booking.",
+                },
+            ) from None
+
+    @application.post(
+        "/api/booking/{session_id}/handoff/{ticket_id}",
+        response_class=RedirectResponse,
+    )
+    async def start_booking_handoff(
+        session_id: str,
+        ticket_id: str,
+        acknowledge_material_change: bool = False,
+    ) -> RedirectResponse:
+        try:
+            url = await get_booking_service().handoff_url(
+                session_id, ticket_id, acknowledge_material_change
+            )
+        except KeyError as error:
+            raise HTTPException(status_code=404, detail=str(error)) from None
+        except PermissionError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from None
+        return RedirectResponse(url, status_code=303)
 
     return application
 

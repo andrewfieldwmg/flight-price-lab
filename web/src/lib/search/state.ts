@@ -10,6 +10,7 @@ export interface SearchUiState {
   hubsStarted: number;
   hubsCompleted: number;
   directionProgress: Record<"OUTBOUND" | "RETURN", { started: number; completed: number }>;
+  directionCompleted: Record<"OUTBOUND" | "RETURN", boolean>;
   outboundSelectionTouched: boolean;
   returnSelectionTouched: boolean;
 }
@@ -26,6 +27,7 @@ export const initialSearchState: SearchUiState = {
     OUTBOUND: { started: 0, completed: 0 },
     RETURN: { started: 0, completed: 0 },
   },
+  directionCompleted: { OUTBOUND: false, RETURN: false },
   outboundSelectionTouched: false,
   returnSelectionTouched: false,
 };
@@ -74,17 +76,19 @@ export function searchReducer(
     const returnOptions = uniqueOptions(action.snapshot.return);
     const selectedOutboundId = outboundOptions.some((item) => item.id === action.selectedOutboundId) ? action.selectedOutboundId : preferred(outboundOptions);
     const selectedReturnId = returnOptions.some((item) => item.id === action.selectedReturnId) ? action.selectedReturnId : preferred(returnOptions);
-    return { ...state, snapshot: action.snapshot, selectedOutboundId, selectedReturnId, directionProgress: action.directionProgress, hubsStarted: action.directionProgress.OUTBOUND.started + action.directionProgress.RETURN.started, hubsCompleted: action.directionProgress.OUTBOUND.completed + action.directionProgress.RETURN.completed };
+    return { ...state, snapshot: action.snapshot, selectedOutboundId, selectedReturnId, directionProgress: action.directionProgress, directionCompleted: { OUTBOUND: true, RETURN: action.snapshot.return !== null }, hubsStarted: action.directionProgress.OUTBOUND.started + action.directionProgress.RETURN.started, hubsCompleted: action.directionProgress.OUTBOUND.completed + action.directionProgress.RETURN.completed };
   }
   if (action.type === "event") {
     const direction = action.data.direction;
     const directionProgress = { ...state.directionProgress };
+    const directionCompleted = { ...state.directionCompleted };
     if (direction === "OUTBOUND" || direction === "RETURN") {
       const current = directionProgress[direction];
       directionProgress[direction] = {
         started: current.started + (action.event === "hub_started" ? 1 : 0),
         completed: current.completed + (action.event === "hub_completed" ? 1 : 0),
       };
+      if (action.event === "direction_completed") directionCompleted[direction] = true;
     }
     return {
       ...state,
@@ -92,6 +96,7 @@ export function searchReducer(
       hubsCompleted:
         state.hubsCompleted + (action.event === "hub_completed" ? 1 : 0),
       directionProgress,
+      directionCompleted,
     };
   }
   if (action.type === "disconnect") return { ...state, sseDisconnected: true };

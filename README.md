@@ -100,6 +100,14 @@ as complete raw JSON so normalization can be designed from captured real respons
 Live calls are manual and confirmation-gated during schema discovery; automated tests
 use an in-memory HTTP transport and never contact SearchAPI.
 
+## Assisted handoff validation
+
+Manual browser checks completed in August 2026 established the current V1 handoff
+capabilities: Ryanair and easyJet are `EXACT_FLIGHT_HANDOFF`; Wizz Air remains
+`PREFILLED_SEARCH` because route, date, and passenger composition were confirmed but
+exact-flight preservation was not independently verified. SearchAPI/airline price
+differences remain visible as repricing deltas and are never silently reconciled.
+
 ## Vercel deployment
 
 The repository deploys as one Vercel Services project. Set the Vercel project

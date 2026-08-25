@@ -4,6 +4,7 @@ import type {
   SearchEvent,
   SearchSnapshot,
   TripSearchRequest,
+  BookingSession,
 } from "./types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL
@@ -107,4 +108,50 @@ export async function getCalendarPrices(input: {
 
 export function getProviderUsage(refresh = false): Promise<ProviderUsage> {
   return apiFetch(`/api/provider-usage${refresh ? "?refresh=true" : ""}`);
+}
+
+export function prepareBooking(searchId: string, selectedOptionIds: string[]): Promise<BookingSession> {
+  return prepareBookingRequest(searchId, selectedOptionIds);
+}
+
+async function prepareBookingRequest(searchId: string, selectedOptionIds: string[]): Promise<BookingSession> {
+  const response = await fetch(resolveApiUrl("/api/booking/prepare"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ search_id: searchId, selected_option_ids: selectedOptionIds }),
+  });
+  const body = await response.json().catch(() => null) as BookingSession | { detail?: string } | null;
+  if (process.env.NODE_ENV === "development") {
+    const prepared = body as BookingSession | null;
+    console.debug("BOOKING_PREPARE_RESPONSE", {
+      status: response.status,
+      booking_session_id: prepared?.booking_session_id,
+      tickets_length: Array.isArray(prepared?.tickets) ? prepared.tickets.length : undefined,
+      tickets: Array.isArray(prepared?.tickets) ? prepared.tickets.map((ticket) => ({
+        ticket_id: ticket.ticket_id,
+        carrier: ticket.carrier,
+        capability: ticket.capability,
+        original_price: ticket.original_price,
+        current_price: ticket.current_price,
+      })) : undefined,
+    });
+  }
+  if (!response.ok) {
+    const detail: unknown = body && "detail" in body ? body.detail : null;
+    const message = typeof detail === "string"
+      ? detail
+      : detail && typeof detail === "object" && "message" in detail
+        ? String((detail as { message: unknown }).message)
+        : null;
+    throw new Error(message ?? `HTTP ${response.status}`);
+  }
+  if (!body || !("booking_session_id" in body) || !Array.isArray(body.tickets)) {
+    throw new Error("Invalid booking preparation response");
+  }
+  return body;
+}
+
+export function bookingHandoffUrl(sessionId: string, ticketId: string, acknowledge: boolean): string {
+  const suffix = acknowledge ? "?acknowledge_material_change=true" : "";
+  return resolveApiUrl(`/api/booking/${encodeURIComponent(sessionId)}/handoff/${encodeURIComponent(ticketId)}${suffix}`);
 }

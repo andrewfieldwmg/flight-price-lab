@@ -1,0 +1,16 @@
+{
+  "carrier": "U2",
+  "flight_number": "U2 8309",
+  "route_verified": false,
+  "date_verified": false,
+  "departure_time_verified": false,
+  "arrival_time_verified": false,
+  "exact_flight_verified": true,
+  "observed_adults": 2,
+  "observed_children": 2,
+  "passenger_composition_verified": true,
+  "booking_option_price": 328,
+  "rendered_price": null,
+  "fare_selected": false,
+  "network_evidence": []
+}
