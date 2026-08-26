@@ -74,6 +74,7 @@ class ProviderSearchResult:
     normalization_ms: float = 0
     postgres_write_ms: float = 0
     request_timing: dict[str, object] | None = None
+    database_operation: dict[str, object] | None = None
 
 
 class ProviderGateway(Protocol):
@@ -159,6 +160,7 @@ class SearchAPIProviderGateway:
         http_duration_ms = 0.0
         http_status: int | None = None
         cache_write_ms = 0.0
+        database_operation: dict[str, object] | None = None
         common = {
             "trip_id": trip_id,
             "search_key": trip_search_key,
@@ -253,12 +255,51 @@ class SearchAPIProviderGateway:
                         result_count=result_count,
                     )
                     cache_write_ms = (perf_counter() - cache_write_clock) * 1000
+                    detailed = (
+                        self._cache.write_timing(cache_key)  # type: ignore[attr-defined]
+                        if hasattr(self._cache, "write_timing")
+                        else None
+                    )
                     search_log(
-                        "POSTGRES_WRITE_TIMING",
+                        "POSTGRES_OPERATION_TIMING",
                         trip_id=trip_id,
+                        operation="write_search_cache",
                         table="search_cache",
                         duration_ms=round(cache_write_ms, 2),
+                        connection_acquire_ms=round(
+                            detailed.get("connection_acquire_ms", 0) if detailed else 0,
+                            2,
+                        ),
+                        query_ms=round(
+                            detailed.get("query_ms", cache_write_ms)
+                            if detailed
+                            else cache_write_ms,
+                            2,
+                        ),
+                        commit_ms=round(
+                            detailed.get("commit_ms", 0) if detailed else 0, 2
+                        ),
                     )
+                    database_operation = {
+                        "operation": "write_search_cache",
+                        "table": "search_cache",
+                        "duration_ms": round(cache_write_ms, 2),
+                        "connection_acquire_ms": round(
+                            detailed.get("connection_acquire_ms", 0)
+                            if detailed
+                            else 0,
+                            2,
+                        ),
+                        "query_ms": round(
+                            detailed.get("query_ms", cache_write_ms)
+                            if detailed
+                            else cache_write_ms,
+                            2,
+                        ),
+                        "commit_ms": round(
+                            detailed.get("commit_ms", 0) if detailed else 0, 2
+                        ),
+                    }
                 except (OSError, SQLAlchemyError):
                     fallback = _VolatileResponseCache()
                     self._cache = fallback
@@ -320,6 +361,7 @@ class SearchAPIProviderGateway:
             normalization_ms=normalization_ms,
             postgres_write_ms=cache_write_ms,
             request_timing=request_timing,
+            database_operation=database_operation,
         )
 
     async def calendar(self, **arguments: object) -> list[CalendarPrice]:

@@ -7,6 +7,9 @@ from dataclasses import dataclass, field
 from time import perf_counter
 from typing import Protocol
 
+from sqlalchemy.engine import Connection
+from sqlalchemy.orm import Session
+
 from flight_price_lab.api.models import SearchSnapshot, TripSearchRequest
 from flight_price_lab.api.search_logging import search_log
 from flight_price_lab.models.flight import FlightOffer
@@ -24,7 +27,13 @@ class SearchRegistry(Protocol):
         self, snapshot: SearchSnapshot, request: TripSearchRequest | None = None
     ) -> None: ...
     async def get(self, search_id: str) -> SearchSnapshot | None: ...
-    async def update(self, snapshot: SearchSnapshot) -> None: ...
+    async def update(
+        self,
+        snapshot: SearchSnapshot,
+        *,
+        persist: bool = False,
+        operation: str = "persist_partial_snapshot",
+    ) -> None: ...
     async def register_booking_candidate(
         self, search_id: str, option_id: str, offers: tuple[FlightOffer, ...]
     ) -> None: ...
@@ -35,6 +44,7 @@ class SearchRegistry(Protocol):
         self, search_id: str, event: str, data: dict[str, object]
     ) -> None: ...
     def events(self, search_id: str) -> AsyncIterator[SearchEvent]: ...
+    def close_persistence(self, search_id: str) -> None: ...
 
 
 class BookingCandidatePersistence(Protocol):
@@ -71,20 +81,39 @@ class InMemorySearchRegistry:
         self._candidate_store = candidate_store
         self._search_store = search_store
         self._postgres_write_ms: dict[str, float] = {}
-        self._reported_postgres_write_ms: dict[str, float] = {}
+        self._persistence_connections: dict[str, Connection] = {}
+        self._persistence_sessions: dict[str, Session] = {}
+        self._pending_candidates: dict[str, int] = {}
 
-    def _record_postgres_write(
-        self, search_id: str, table: str, started: float
+    def _record_database_operation(
+        self,
+        snapshot: SearchSnapshot,
+        *,
+        operation: str,
+        table: str,
+        connection_acquire_ms: float,
+        query_ms: float,
+        commit_ms: float,
     ) -> None:
-        duration_ms = (perf_counter() - started) * 1000
+        duration_ms = connection_acquire_ms + query_ms + commit_ms
+        search_id = snapshot.search_id
         self._postgres_write_ms[search_id] = (
             self._postgres_write_ms.get(search_id, 0) + duration_ms
         )
+        timing: dict[str, object] = {
+            "operation": operation,
+            "table": table,
+            "duration_ms": round(duration_ms, 2),
+            "connection_acquire_ms": round(connection_acquire_ms, 2),
+            "query_ms": round(query_ms, 2),
+            "commit_ms": round(commit_ms, 2),
+        }
+        snapshot.diagnostics.database_operations.append(timing)
+        snapshot.diagnostics.postgres_write_ms += duration_ms
         search_log(
-            "POSTGRES_WRITE_TIMING",
+            "POSTGRES_OPERATION_TIMING",
             trip_id=search_id,
-            table=table,
-            duration_ms=round(duration_ms, 2),
+            **timing,
         )
 
     def postgres_write_ms(self, search_id: str) -> float:
@@ -95,9 +124,31 @@ class InMemorySearchRegistry:
     ) -> None:
         self._entries[snapshot.search_id] = _Entry(snapshot=deepcopy(snapshot))
         if self._search_store is not None and request is not None:
-            started = perf_counter()
-            self._search_store.create(snapshot, request)
-            self._record_postgres_write(snapshot.search_id, "search_sessions", started)
+            acquire_clock = perf_counter()
+            connection = self._search_store.engine.connect()  # type: ignore[attr-defined]
+            acquire_ms = (perf_counter() - acquire_clock) * 1000
+            session = Session(bind=connection, expire_on_commit=False)
+            self._persistence_connections[snapshot.search_id] = connection
+            self._persistence_sessions[snapshot.search_id] = session
+            self._pending_candidates[snapshot.search_id] = 0
+            self._search_store.create(  # type: ignore[call-arg]
+                snapshot, request, session=session, commit=False
+            )
+            query_clock = perf_counter()
+            session.flush()
+            query_ms = (perf_counter() - query_clock) * 1000
+            commit_clock = perf_counter()
+            session.commit()
+            commit_ms = (perf_counter() - commit_clock) * 1000
+            self._record_database_operation(
+                snapshot,
+                operation="create_search_session",
+                table="search_sessions",
+                connection_acquire_ms=acquire_ms,
+                query_ms=query_ms,
+                commit_ms=commit_ms,
+            )
+            self._entries[snapshot.search_id].snapshot = deepcopy(snapshot)
 
     async def get(self, search_id: str) -> SearchSnapshot | None:
         entry = self._entries.get(search_id)
@@ -107,16 +158,46 @@ class InMemorySearchRegistry:
             return self._search_store.get(search_id)
         return None
 
-    async def update(self, snapshot: SearchSnapshot) -> None:
+    async def update(
+        self,
+        snapshot: SearchSnapshot,
+        *,
+        persist: bool = False,
+        operation: str = "persist_partial_snapshot",
+    ) -> None:
         self._entries[snapshot.search_id].snapshot = deepcopy(snapshot)
-        if self._search_store is not None:
-            started = perf_counter()
-            self._search_store.update(snapshot)
-            self._record_postgres_write(snapshot.search_id, "search_sessions", started)
-            total = self.postgres_write_ms(snapshot.search_id)
-            previous = self._reported_postgres_write_ms.get(snapshot.search_id, 0)
-            snapshot.diagnostics.postgres_write_ms += total - previous
-            self._reported_postgres_write_ms[snapshot.search_id] = total
+        if self._search_store is not None and persist:
+            session = self._persistence_sessions[snapshot.search_id]
+            if self._pending_candidates.get(snapshot.search_id, 0):
+                candidate_clock = perf_counter()
+                session.flush()
+                candidate_query_ms = (perf_counter() - candidate_clock) * 1000
+                self._record_database_operation(
+                    snapshot,
+                    operation="persist_booking_candidates",
+                    table="booking_candidates",
+                    connection_acquire_ms=0,
+                    query_ms=candidate_query_ms,
+                    commit_ms=0,
+                )
+                self._pending_candidates[snapshot.search_id] = 0
+            self._search_store.update(  # type: ignore[call-arg]
+                snapshot, session=session, commit=False
+            )
+            query_clock = perf_counter()
+            session.flush()
+            query_ms = (perf_counter() - query_clock) * 1000
+            commit_clock = perf_counter()
+            session.commit()
+            commit_ms = (perf_counter() - commit_clock) * 1000
+            self._record_database_operation(
+                snapshot,
+                operation=operation,
+                table="search_sessions",
+                connection_acquire_ms=0,
+                query_ms=query_ms,
+                commit_ms=commit_ms,
+            )
             self._entries[snapshot.search_id].snapshot = deepcopy(snapshot)
 
     async def register_booking_candidate(
@@ -124,9 +205,20 @@ class InMemorySearchRegistry:
     ) -> None:
         self._entries[search_id].booking_candidates[option_id] = deepcopy(offers)
         if self._candidate_store is not None:
-            started = perf_counter()
-            self._candidate_store.put(search_id, option_id, offers)
-            self._record_postgres_write(search_id, "booking_candidates", started)
+            session = self._persistence_sessions.get(search_id)
+            if session is not None:
+                self._candidate_store.put(  # type: ignore[call-arg]
+                    search_id,
+                    option_id,
+                    offers,
+                    session=session,
+                    commit=False,
+                )
+                self._pending_candidates[search_id] = (
+                    self._pending_candidates.get(search_id, 0) + 1
+                )
+            else:
+                self._candidate_store.put(search_id, option_id, offers)
 
     async def get_booking_candidate(
         self, search_id: str, option_id: str
@@ -160,3 +252,12 @@ class InMemorySearchRegistry:
             yield event
             if event.event in ("search_completed", "search_failed"):
                 return
+
+    def close_persistence(self, search_id: str) -> None:
+        session = self._persistence_sessions.pop(search_id, None)
+        connection = self._persistence_connections.pop(search_id, None)
+        self._pending_candidates.pop(search_id, None)
+        if session is not None:
+            session.close()
+        if connection is not None:
+            connection.close()

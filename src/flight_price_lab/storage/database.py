@@ -11,6 +11,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from hashlib import sha256
 from pathlib import Path
+from time import perf_counter
 from typing import TYPE_CHECKING, Any
 
 from dotenv import dotenv_values
@@ -216,12 +217,17 @@ class SearchResponseCache:
         self,
         database_url: str | None = None,
         *,
+        engine: Engine | None = None,
         raw_root: str | Path = "data/raw/searchapi",
         ttl: timedelta = timedelta(minutes=60),
     ) -> None:
-        self.engine = create_database_engine(database_url)
+        self.engine = engine or create_database_engine(database_url)
         self.raw_root = Path(raw_root)
         self.ttl = ttl
+        self._write_timings: dict[str, dict[str, float]] = {}
+
+    def write_timing(self, cache_key: str) -> dict[str, float] | None:
+        return self._write_timings.get(cache_key)
 
     def get(
         self, parameters: dict[str, Any], *, now: datetime | None = None
@@ -290,9 +296,26 @@ class SearchResponseCache:
             expires_at=created + self.ttl,
             result_count=result_count,
         )
-        with Session(self.engine) as session:
+        acquire_clock = perf_counter()
+        connection = self.engine.connect()
+        acquire_ms = (perf_counter() - acquire_clock) * 1000
+        session = Session(bind=connection, expire_on_commit=False)
+        try:
+            query_clock = perf_counter()
             session.merge(entry)
+            session.flush()
+            query_ms = (perf_counter() - query_clock) * 1000
+            commit_clock = perf_counter()
             session.commit()
+            commit_ms = (perf_counter() - commit_clock) * 1000
+        finally:
+            session.close()
+            connection.close()
+        self._write_timings[entry.cache_key] = {
+            "connection_acquire_ms": acquire_ms,
+            "query_ms": query_ms,
+            "commit_ms": commit_ms,
+        }
         return CachedSearch(payload, path.resolve(), result_count)
 
     def entries(self) -> list[SearchCacheEntry]:
@@ -363,11 +386,19 @@ class SearchResponseCache:
 class BookingCandidateStore:
     """Persist selected-option provenance independently from public snapshots."""
 
-    def __init__(self, database_url: str | None = None) -> None:
-        self.engine = create_database_engine(database_url)
+    def __init__(
+        self, database_url: str | None = None, *, engine: Engine | None = None
+    ) -> None:
+        self.engine = engine or create_database_engine(database_url)
 
     def put(
-        self, search_id: str, option_id: str, offers: tuple[FlightOffer, ...]
+        self,
+        search_id: str,
+        option_id: str,
+        offers: tuple[FlightOffer, ...],
+        *,
+        session: Session | None = None,
+        commit: bool = True,
     ) -> None:
         from flight_price_lab.models.flight import FlightOffer
 
@@ -382,9 +413,14 @@ class BookingCandidateStore:
             offers_json=json.dumps(serialized, separators=(",", ":")),
             created_at=datetime.now(UTC),
         )
-        with Session(self.engine) as session:
-            session.merge(entry)
-            session.commit()
+        if session is not None:
+            session.add(entry)
+            if commit:
+                session.commit()
+            return
+        with Session(self.engine) as owned_session:
+            owned_session.merge(entry)
+            owned_session.commit()
 
     def get(self, search_id: str, option_id: str) -> tuple[FlightOffer, ...] | None:
         from flight_price_lab.models.flight import FlightOffer
@@ -400,10 +436,19 @@ class BookingCandidateStore:
 class SearchSessionStore:
     """Persist latest search state for cross-instance recovery and history access."""
 
-    def __init__(self, database_url: str | None = None) -> None:
-        self.engine = create_database_engine(database_url)
+    def __init__(
+        self, database_url: str | None = None, *, engine: Engine | None = None
+    ) -> None:
+        self.engine = engine or create_database_engine(database_url)
 
-    def create(self, snapshot: Any, request: Any) -> None:
+    def create(
+        self,
+        snapshot: Any,
+        request: Any,
+        *,
+        session: Session | None = None,
+        commit: bool = True,
+    ) -> None:
         now = datetime.now(UTC)
         entry = SearchSessionEntry(
             search_id=snapshot.search_id,
@@ -415,15 +460,26 @@ class SearchSessionStore:
             updated_at=now,
             completed_at=None,
         )
-        with Session(self.engine) as session:
+        if session is not None:
             session.add(entry)
-            session.commit()
+            if commit:
+                session.commit()
+            return
+        with Session(self.engine) as owned_session:
+            owned_session.add(entry)
+            owned_session.commit()
 
-    def update(self, snapshot: Any) -> None:
+    def update(
+        self,
+        snapshot: Any,
+        *,
+        session: Session | None = None,
+        commit: bool = True,
+    ) -> None:
         now = datetime.now(UTC)
         terminal = snapshot.status.value in {"completed", "partial_failure", "failed"}
-        with Session(self.engine) as session:
-            entry = session.get(SearchSessionEntry, snapshot.search_id)
+        def apply(target: Session) -> None:
+            entry = target.get(SearchSessionEntry, snapshot.search_id)
             if entry is None:
                 raise KeyError(f"search session {snapshot.search_id} was not persisted")
             entry.status = snapshot.status.value
@@ -431,7 +487,14 @@ class SearchSessionStore:
             entry.updated_at = now
             if terminal:
                 entry.completed_at = now
-            session.commit()
+            if commit:
+                target.commit()
+
+        if session is not None:
+            apply(session)
+            return
+        with Session(self.engine) as owned_session:
+            apply(owned_session)
 
     def get(self, search_id: str) -> Any | None:
         from flight_price_lab.api.models import SearchSnapshot

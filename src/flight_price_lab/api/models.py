@@ -229,6 +229,7 @@ class SearchDiagnostics(BaseModel):
     median_provider_call_ms: float = 0
     p95_provider_call_ms: float = 0
     provider_requests: list[dict[str, object]] = Field(default_factory=list)
+    database_operations: list[dict[str, object]] = Field(default_factory=list)
 
 
 class SearchSnapshot(BaseModel):

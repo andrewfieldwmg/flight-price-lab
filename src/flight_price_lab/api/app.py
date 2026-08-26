@@ -48,7 +48,9 @@ from flight_price_lab.config import Settings
 from flight_price_lab.providers.searchapi import SearchAPIClient, SearchAPIError
 from flight_price_lab.storage.database import (
     BookingCandidateStore,
+    SearchResponseCache,
     SearchSessionStore,
+    create_database_engine,
     database_health,
 )
 
@@ -70,8 +72,9 @@ def create_app(
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    candidate_store = BookingCandidateStore()
-    search_store = SearchSessionStore()
+    database_engine = create_database_engine()
+    candidate_store = BookingCandidateStore(engine=database_engine)
+    search_store = SearchSessionStore(engine=database_engine)
     registry = InMemorySearchRegistry(candidate_store, search_store)
     application.state.registry = registry
     application.state.search_store = search_store
@@ -88,7 +91,8 @@ def create_app(
         if configured is None:
             settings = Settings()
             configured = SearchAPIProviderGateway(
-                SearchAPIClient(settings.searchapi_key)
+                SearchAPIClient(settings.searchapi_key),
+                SearchResponseCache(engine=database_engine),
             )
             application.state.provider = configured
         return configured
@@ -282,6 +286,9 @@ def create_app(
                             ),
                             "ranking_ms": diagnostics.get("ranking_filtering_ms"),
                             "provider_requests": provider_requests,
+                            "database_operations": diagnostics.get(
+                                "database_operations", []
+                            ),
                             "stream": stream_timings,
                         }
                         event.data["stream_timings"] = stream_timings

@@ -152,6 +152,8 @@ class TripSearchService:
         self._active_snapshot: SearchSnapshot | None = None
         self._active_provider_calls = 0
         self._provider_calls_concurrent_peak = 0
+        self._checkpoint_lock = asyncio.Lock()
+        self._last_checkpoint_clock = 0.0
 
     async def start(self, request: TripSearchRequest) -> str:
         trip_id = await self.create(request)
@@ -204,7 +206,10 @@ class TripSearchService:
         snapshot.status = SearchStatus.RUNNING
         snapshot.diagnostics.search_started_at = datetime.now(UTC)
         self._active_snapshot = snapshot
-        await self.registry.update(snapshot)
+        await self.registry.update(
+            snapshot, persist=True, operation="update_running_session"
+        )
+        self._last_checkpoint_clock = perf_counter()
         await self._event(
             search_id,
             "search_started",
@@ -212,26 +217,31 @@ class TripSearchService:
             search_key=snapshot.search_key,
         )
         try:
-            await self._direction(
-                snapshot,
-                request,
-                Direction.OUTBOUND,
-                tuple(request.origins),
-                tuple(request.destinations),
-                request.outbound_date,
-                self._self_transfer_enabled(request, Direction.OUTBOUND),
-            )
-            if request.return_date is not None:
-                snapshot.return_ = DirectionResults()
-                await self._direction(
+            direction_tasks = [
+                self._direction(
                     snapshot,
                     request,
-                    Direction.RETURN,
-                    tuple(request.destinations),
+                    Direction.OUTBOUND,
                     tuple(request.origins),
-                    request.return_date,
-                    self._self_transfer_enabled(request, Direction.RETURN),
+                    tuple(request.destinations),
+                    request.outbound_date,
+                    self._self_transfer_enabled(request, Direction.OUTBOUND),
                 )
+            ]
+            if request.return_date is not None:
+                snapshot.return_ = DirectionResults()
+                direction_tasks.append(
+                    self._direction(
+                        snapshot,
+                        request,
+                        Direction.RETURN,
+                        tuple(request.destinations),
+                        tuple(request.origins),
+                        request.return_date,
+                        self._self_transfer_enabled(request, Direction.RETURN),
+                    )
+                )
+            await asyncio.gather(*direction_tasks)
             snapshot.status = (
                 SearchStatus.PARTIAL_FAILURE
                 if snapshot.errors
@@ -272,7 +282,9 @@ class TripSearchService:
             snapshot.diagnostics.final_serialization_ms = (
                 perf_counter() - serialization_clock
             ) * 1000
-            await self.registry.update(snapshot)
+            await self.registry.update(
+                snapshot, persist=True, operation="persist_final_result"
+            )
             await self._event(
                 search_id, "search_completed", status=snapshot.status.value
             )
@@ -288,8 +300,22 @@ class TripSearchService:
             snapshot.errors.append(
                 SearchError(code="provider_error", message=type(error).__name__)
             )
-            await self.registry.update(snapshot)
+            await self.registry.update(
+                snapshot, persist=True, operation="persist_failed_result"
+            )
             await self._event(search_id, "search_failed", code="provider_error")
+        finally:
+            self.registry.close_persistence(search_id)
+
+    async def _checkpoint_if_due(self, snapshot: SearchSnapshot) -> None:
+        async with self._checkpoint_lock:
+            now = perf_counter()
+            if now - self._last_checkpoint_clock < 5:
+                return
+            await self.registry.update(
+                snapshot, persist=True, operation="persist_partial_snapshot"
+            )
+            self._last_checkpoint_clock = now
 
     @staticmethod
     def _self_transfer_enabled(
@@ -412,6 +438,10 @@ class TripSearchService:
             snapshot.diagnostics.postgres_write_ms += response.postgres_write_ms
             if response.request_timing is not None:
                 snapshot.diagnostics.provider_requests.append(response.request_timing)
+            if response.database_operation is not None:
+                snapshot.diagnostics.database_operations.append(
+                    response.database_operation
+                )
             await self.registry.update(snapshot)
         return response.offers
 
@@ -451,7 +481,11 @@ class TripSearchService:
                     direction=direction,
                 )
             )
-            await self.registry.update(snapshot)
+            await self.registry.update(
+                snapshot,
+                persist=True,
+                operation=f"persist_{direction.value.lower()}_complete",
+            )
             await self._event(
                 snapshot.search_id, "direction_completed", direction=direction.value
             )
@@ -499,6 +533,14 @@ class TripSearchService:
             await self._event(
                 snapshot.search_id, "results_updated", direction=direction.value
             )
+            if self_transfer:
+                async with self._checkpoint_lock:
+                    await self.registry.update(
+                        snapshot,
+                        persist=True,
+                        operation=f"persist_{direction.value.lower()}_baseline",
+                    )
+                    self._last_checkpoint_clock = perf_counter()
         direct_duration_ms = (perf_counter() - direction_clock) * 1000
         if direction is Direction.OUTBOUND:
             snapshot.diagnostics.direct_outbound_ms = direct_duration_ms
@@ -529,7 +571,11 @@ class TripSearchService:
                         direction=direction,
                     )
                 )
-        await self.registry.update(snapshot)
+        await self.registry.update(
+            snapshot,
+            persist=True,
+            operation=f"persist_{direction.value.lower()}_complete",
+        )
         await self._event(
             snapshot.search_id, "direction_completed", direction=direction.value
         )
@@ -673,6 +719,7 @@ class TripSearchService:
                         perf_counter() - ranking_clock
                     ) * 1000
                     await self.registry.update(snapshot)
+                    await self._checkpoint_if_due(snapshot)
                     await self._event(
                         snapshot.search_id,
                         "results_updated",

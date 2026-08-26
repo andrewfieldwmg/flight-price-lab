@@ -327,6 +327,17 @@ def test_provider_tasks_remain_bounded_concurrent() -> None:
     assert provider.maximum_active == 2
 
 
+def test_round_trip_nonstop_provider_calls_start_concurrently() -> None:
+    provider = ConcurrentProvider()
+    snapshot, _, _ = asyncio.run(
+        run_search(SelfTransferPolicy.NONE, provider=provider)
+    )
+
+    assert len(provider.calls) == 2
+    assert provider.maximum_active == 2
+    assert snapshot.diagnostics.provider_calls_concurrent_peak == 2
+
+
 def test_baseline_event_precedes_synthetic_alternative() -> None:
     snapshot, registry, _ = asyncio.run(run_search(SelfTransferPolicy.OUTBOUND_ONLY))
 
@@ -456,6 +467,21 @@ def test_streamed_search_emits_progressive_outbound_and_return_events() -> None:
         "provider_requests",
         "stream",
     } <= set(events[-1]["data"]["timings"])
+
+
+def test_stream_events_do_not_each_trigger_postgres_writes() -> None:
+    response = TestClient(create_app(MockProvider())).post(
+        "/api/search/stream",
+        json=request(SelfTransferPolicy.BOTH).model_dump(mode="json", by_alias=True),
+    )
+    events = [json.loads(line) for line in response.text.splitlines() if line]
+    operations = events[-1]["data"]["timings"]["database_operations"]
+
+    assert len(operations) < len(events)
+    assert not any(
+        "hub" in str(item["operation"]) or "event" in str(item["operation"])
+        for item in operations
+    )
 
 
 def test_completed_stream_recovers_from_fresh_application_instance() -> None:
