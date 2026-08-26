@@ -422,6 +422,32 @@ class BookingCandidateStore:
             owned_session.merge(entry)
             owned_session.commit()
 
+    def put_many(
+        self,
+        search_id: str,
+        candidates: dict[str, tuple[FlightOffer, ...]],
+        *,
+        session: Session,
+    ) -> None:
+        from flight_price_lab.models.flight import FlightOffer
+
+        entries: list[BookingCandidateEntry] = []
+        for option_id, offers in candidates.items():
+            serialized = []
+            for offer in offers:
+                if not isinstance(offer, FlightOffer):
+                    raise TypeError("booking constituent must be a FlightOffer")
+                serialized.append(offer.model_dump(mode="json"))
+            entries.append(
+                BookingCandidateEntry(
+                    search_id=search_id,
+                    option_id=option_id,
+                    offers_json=json.dumps(serialized, separators=(",", ":")),
+                    created_at=datetime.now(UTC),
+                )
+            )
+        session.add_all(entries)
+
     def get(self, search_id: str, option_id: str) -> tuple[FlightOffer, ...] | None:
         from flight_price_lab.models.flight import FlightOffer
 

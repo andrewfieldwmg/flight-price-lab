@@ -3,6 +3,7 @@
 import json
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from time import perf_counter
 from typing import Any
 
 from flight_price_lab.config import Settings
@@ -32,7 +33,7 @@ def canonical_parameters() -> dict[str, Any]:
         "flight_type": "one_way",
         "stops": "one_stop_or_fewer",
         "included_connecting_airports": list(HUBS),
-        "layover_duration_min": 180,
+        "layover_duration_min": 120,
         "layover_duration_max": 360,
         "separate_tickets": 0,
     }
@@ -46,17 +47,18 @@ def _candidate_count(payload: dict[str, Any]) -> int:
     )
 
 
-def capture(*, execute: bool) -> tuple[dict[str, Any], Path, int, int, int]:
+def capture(*, execute: bool) -> tuple[dict[str, Any], Path, int, int, int, float]:
     cache = SearchResponseCache()
     parameters = canonical_parameters()
     cached = cache.get(parameters)
     if cached is not None:
-        return cached.payload, cached.raw_response_path, 0, 1, 0
+        return cached.payload, cached.raw_response_path, 0, 1, 0, 0
     if not execute:
         raise RuntimeError("broad query is not cached; rerun with --execute")
     print("Broad query cache miss. Make exactly one SearchAPI request? [y/N]")
     if input().strip().lower() not in {"y", "yes"}:
         raise RuntimeError("cancelled; no provider request made")
+    request_clock = perf_counter()
     payload = SearchAPIClient(Settings().searchapi_key).search_one_way(  # type: ignore[call-arg]
         departure_id=",".join(ORIGINS),
         arrival_id=",".join(DESTINATIONS),
@@ -66,12 +68,13 @@ def capture(*, execute: bool) -> tuple[dict[str, Any], Path, int, int, int]:
         currency="GBP",
         stops="one_stop_or_fewer",
         included_connecting_airports=",".join(HUBS),
-        layover_duration_min=180,
+        layover_duration_min=120,
         layover_duration_max=360,
         separate_tickets=0,
     )
+    elapsed_ms = (perf_counter() - request_clock) * 1000
     saved = cache.put(parameters, payload, result_count=_candidate_count(payload))
-    return payload, saved.raw_response_path, 1, 0, 1
+    return payload, saved.raw_response_path, 1, 0, 1, elapsed_ms
 
 
 def _saved_direct_offers(exclude: Path) -> dict[tuple[str, str], list[FlightOffer]]:
@@ -162,7 +165,7 @@ def analyze(payload: dict[str, Any], raw_path: Path) -> dict[str, Any]:
         if len(offer.legs) == 1
         or (
             offer.legs[0].destination in HUBS
-            and timedelta(minutes=180)
+            and timedelta(minutes=120)
             <= offer.legs[1].departure - offer.legs[0].arrival
             <= timedelta(minutes=360)
         )
@@ -190,6 +193,23 @@ def analyze(payload: dict[str, Any], raw_path: Path) -> dict[str, Any]:
     synthetic_schedules = {_schedule(item) for item in synthetic}
     frontier_schedules = {_schedule(item) for item in synthetic_frontier}
     overlap = broad_schedules & synthetic_schedules
+    broad_top_20 = {
+        _schedule(item)
+        for item in sorted(
+            connected,
+            key=lambda item: (
+                item.total_price,
+                item.legs[-1].arrival - item.legs[0].departure,
+            ),
+        )[:20]
+    }
+    synthetic_top_20 = {
+        _schedule(item)
+        for item in sorted(
+            synthetic,
+            key=lambda item: (item.total_price, item.total_duration),
+        )[:20]
+    }
     cheapest_synthetic = min(synthetic, key=lambda item: item.total_price, default=None)
     cheapest_broad = min(feasible, key=lambda item: item.total_price, default=None)
     return {
@@ -227,6 +247,13 @@ def analyze(payload: dict[str, Any], raw_path: Path) -> dict[str, Any]:
         "synthetic_frontier": [_hub_summary(item) for item in synthetic_frontier],
         "broad_only_count": len(broad_schedules - synthetic_schedules),
         "synthetic_only_count": len(synthetic_schedules - broad_schedules),
+        "top_20_overlap_count": len(broad_top_20 & synthetic_top_20),
+        "top_20_overlap_percent": (
+            100 * len(broad_top_20 & synthetic_top_20) / len(synthetic_top_20)
+            if synthetic_top_20
+            else 0
+        ),
+        "exact_constituent_lineage_recoverable": False,
     }
 
 
@@ -236,7 +263,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--execute", action="store_true")
     args = parser.parse_args()
-    payload, path, calls, hits, misses = capture(execute=args.execute)
+    payload, path, calls, hits, misses, elapsed_ms = capture(execute=args.execute)
     report = analyze(payload, path)
     report.update(
         provider_calls=calls,
@@ -244,6 +271,7 @@ def main() -> None:
         cache_misses=misses,
         raw_response_path=str(path),
         analyzed_at=datetime.now(UTC).isoformat(),
+        provider_elapsed_ms=elapsed_ms,
     )
     print(json.dumps(report, indent=2))
 

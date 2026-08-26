@@ -482,6 +482,10 @@ def test_stream_events_do_not_each_trigger_postgres_writes() -> None:
         "hub" in str(item["operation"]) or "event" in str(item["operation"])
         for item in operations
     )
+    names = [str(item["operation"]) for item in operations]
+    assert names.count("persist_final_result") == 1
+    assert sum(name.endswith("_complete") for name in names) <= 1
+    assert names.count("persist_booking_candidates") <= 4
 
 
 def test_completed_stream_recovers_from_fresh_application_instance() -> None:

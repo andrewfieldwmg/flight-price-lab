@@ -83,7 +83,9 @@ class InMemorySearchRegistry:
         self._postgres_write_ms: dict[str, float] = {}
         self._persistence_connections: dict[str, Connection] = {}
         self._persistence_sessions: dict[str, Session] = {}
-        self._pending_candidates: dict[str, int] = {}
+        self._pending_candidates: dict[
+            str, dict[str, tuple[FlightOffer, ...]]
+        ] = {}
 
     def _record_database_operation(
         self,
@@ -130,7 +132,7 @@ class InMemorySearchRegistry:
             session = Session(bind=connection, expire_on_commit=False)
             self._persistence_connections[snapshot.search_id] = connection
             self._persistence_sessions[snapshot.search_id] = session
-            self._pending_candidates[snapshot.search_id] = 0
+            self._pending_candidates[snapshot.search_id] = {}
             self._search_store.create(  # type: ignore[call-arg]
                 snapshot, request, session=session, commit=False
             )
@@ -168,8 +170,12 @@ class InMemorySearchRegistry:
         self._entries[snapshot.search_id].snapshot = deepcopy(snapshot)
         if self._search_store is not None and persist:
             session = self._persistence_sessions[snapshot.search_id]
-            if self._pending_candidates.get(snapshot.search_id, 0):
+            pending = self._pending_candidates.get(snapshot.search_id, {})
+            if pending:
                 candidate_clock = perf_counter()
+                self._candidate_store.put_many(  # type: ignore[attr-defined]
+                    snapshot.search_id, pending, session=session
+                )
                 session.flush()
                 candidate_query_ms = (perf_counter() - candidate_clock) * 1000
                 self._record_database_operation(
@@ -180,7 +186,7 @@ class InMemorySearchRegistry:
                     query_ms=candidate_query_ms,
                     commit_ms=0,
                 )
-                self._pending_candidates[snapshot.search_id] = 0
+                self._pending_candidates[snapshot.search_id] = {}
             self._search_store.update(  # type: ignore[call-arg]
                 snapshot, session=session, commit=False
             )
@@ -207,16 +213,7 @@ class InMemorySearchRegistry:
         if self._candidate_store is not None:
             session = self._persistence_sessions.get(search_id)
             if session is not None:
-                self._candidate_store.put(  # type: ignore[call-arg]
-                    search_id,
-                    option_id,
-                    offers,
-                    session=session,
-                    commit=False,
-                )
-                self._pending_candidates[search_id] = (
-                    self._pending_candidates.get(search_id, 0) + 1
-                )
+                self._pending_candidates.setdefault(search_id, {})[option_id] = offers
             else:
                 self._candidate_store.put(search_id, option_id, offers)
 

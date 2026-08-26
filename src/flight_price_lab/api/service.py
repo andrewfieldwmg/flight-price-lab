@@ -154,6 +154,7 @@ class TripSearchService:
         self._provider_calls_concurrent_peak = 0
         self._checkpoint_lock = asyncio.Lock()
         self._last_checkpoint_clock = 0.0
+        self._directions_remaining = 0
 
     async def start(self, request: TripSearchRequest) -> str:
         trip_id = await self.create(request)
@@ -241,6 +242,7 @@ class TripSearchService:
                         self._self_transfer_enabled(request, Direction.RETURN),
                     )
                 )
+            self._directions_remaining = len(direction_tasks)
             await asyncio.gather(*direction_tasks)
             snapshot.status = (
                 SearchStatus.PARTIAL_FAILURE
@@ -316,6 +318,20 @@ class TripSearchService:
                 snapshot, persist=True, operation="persist_partial_snapshot"
             )
             self._last_checkpoint_clock = now
+
+    async def _checkpoint_direction_complete(
+        self, snapshot: SearchSnapshot, direction: Direction
+    ) -> None:
+        async with self._checkpoint_lock:
+            self._directions_remaining -= 1
+            if self._directions_remaining <= 0:
+                return
+            await self.registry.update(
+                snapshot,
+                persist=True,
+                operation=f"persist_{direction.value.lower()}_complete",
+            )
+            self._last_checkpoint_clock = perf_counter()
 
     @staticmethod
     def _self_transfer_enabled(
@@ -481,11 +497,7 @@ class TripSearchService:
                     direction=direction,
                 )
             )
-            await self.registry.update(
-                snapshot,
-                persist=True,
-                operation=f"persist_{direction.value.lower()}_complete",
-            )
+            await self._checkpoint_direction_complete(snapshot, direction)
             await self._event(
                 snapshot.search_id, "direction_completed", direction=direction.value
             )
@@ -571,11 +583,7 @@ class TripSearchService:
                         direction=direction,
                     )
                 )
-        await self.registry.update(
-            snapshot,
-            persist=True,
-            operation=f"persist_{direction.value.lower()}_complete",
-        )
+        await self._checkpoint_direction_complete(snapshot, direction)
         await self._event(
             snapshot.search_id, "direction_completed", direction=direction.value
         )
