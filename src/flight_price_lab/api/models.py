@@ -224,12 +224,22 @@ class SearchDiagnostics(BaseModel):
     postgres_write_ms: float = 0
     final_serialization_ms: float = 0
     provider_calls_total: int = 0
+    provider_requests_planned: int = 0
+    provider_requests_started: int = 0
+    provider_requests_succeeded: int = 0
+    provider_requests_failed: int = 0
+    provider_requests_timed_out: int = 0
+    provider_requests_cancelled: int = 0
     provider_calls_concurrent_peak: int = 0
     slowest_provider_call_ms: float = 0
     median_provider_call_ms: float = 0
     p95_provider_call_ms: float = 0
     provider_requests: list[dict[str, object]] = Field(default_factory=list)
     database_operations: list[dict[str, object]] = Field(default_factory=list)
+    planned_provider_requests: list[dict[str, object]] = Field(default_factory=list)
+    last_task_terminal_at: datetime | None = None
+    final_persistence_started_at: datetime | None = None
+    final_persistence_completed_at: datetime | None = None
 
 
 class SearchSnapshot(BaseModel):

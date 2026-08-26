@@ -88,9 +88,7 @@ def create_app(
 
     def new_search_service() -> TripSearchService:
         concurrency = Settings().search_provider_concurrency
-        return TripSearchService(
-            get_provider(), registry, max_concurrency=concurrency
-        )
+        return TripSearchService(get_provider(), registry, max_concurrency=concurrency)
 
     def get_provider() -> ProviderGateway:
         configured = application.state.provider
@@ -198,6 +196,7 @@ def create_app(
                         provider_requests = [
                             {
                                 "request_id": item.get("request_id"),
+                                "planned_id": item.get("planned_id"),
                                 "direction": item.get("direction"),
                                 "query_type": item.get("query_type"),
                                 "route": item.get("route"),
@@ -205,7 +204,9 @@ def create_app(
                                 "completed_at": item.get("completed_at"),
                                 "duration_ms": item.get("duration_ms"),
                                 "cache_hit": item.get("cache_hit"),
-                                "status": item.get("http_status"),
+                                "http_status": item.get("http_status"),
+                                "status": item.get("status"),
+                                "error_type": item.get("error_type"),
                                 "result_count": item.get("result_count"),
                             }
                             for item in raw_requests
@@ -250,12 +251,12 @@ def create_app(
                                 if first_results_at
                                 else None
                             ),
-                            "time_to_complete_ms": (
-                                perf_counter() - request_clock
-                            )
+                            "time_to_complete_ms": (perf_counter() - request_clock)
                             * 1000,
                             "request_received_to_provider_calls_started_ms": (
-                                (min(started_values) - request_received_at).total_seconds()
+                                (
+                                    min(started_values) - request_received_at
+                                ).total_seconds()
                                 * 1000
                                 if started_values
                                 else None
@@ -271,30 +272,57 @@ def create_app(
                             "provider_calls_total": diagnostics.get(
                                 "provider_calls_total"
                             ),
+                            "provider_requests_planned": diagnostics.get(
+                                "provider_requests_planned"
+                            ),
+                            "provider_requests_started": diagnostics.get(
+                                "provider_requests_started"
+                            ),
+                            "provider_requests_succeeded": diagnostics.get(
+                                "provider_requests_succeeded"
+                            ),
+                            "provider_requests_failed": diagnostics.get(
+                                "provider_requests_failed"
+                            ),
+                            "provider_requests_timed_out": diagnostics.get(
+                                "provider_requests_timed_out"
+                            ),
+                            "provider_requests_cancelled": diagnostics.get(
+                                "provider_requests_cancelled"
+                            ),
                             "provider_calls_concurrent_peak": diagnostics.get(
                                 "provider_calls_concurrent_peak"
                             ),
                             "provider_median_ms": diagnostics.get(
                                 "median_provider_call_ms"
                             ),
-                            "provider_p95_ms": diagnostics.get(
-                                "p95_provider_call_ms"
-                            ),
+                            "provider_p95_ms": diagnostics.get("p95_provider_call_ms"),
                             "provider_slowest_ms": diagnostics.get(
                                 "slowest_provider_call_ms"
                             ),
-                            "postgres_total_ms": diagnostics.get(
-                                "postgres_write_ms"
-                            ),
+                            "postgres_total_ms": diagnostics.get("postgres_write_ms"),
                             "normalization_ms": diagnostics.get("normalization_ms"),
-                            "synthesis_ms": diagnostics.get(
-                                "itinerary_synthesis_ms"
-                            ),
+                            "synthesis_ms": diagnostics.get("itinerary_synthesis_ms"),
                             "ranking_ms": diagnostics.get("ranking_filtering_ms"),
                             "provider_requests": provider_requests,
                             "database_operations": diagnostics.get(
                                 "database_operations", []
                             ),
+                            "planned_provider_requests": diagnostics.get(
+                                "planned_provider_requests", []
+                            ),
+                            "orchestration_tail": {
+                                "last_task_terminal_at": diagnostics.get(
+                                    "last_task_terminal_at"
+                                ),
+                                "final_persistence_started_at": diagnostics.get(
+                                    "final_persistence_started_at"
+                                ),
+                                "final_persistence_completed_at": diagnostics.get(
+                                    "final_persistence_completed_at"
+                                ),
+                                "final_event_sent_at": sent_at.isoformat(),
+                            },
                             "stream": stream_timings,
                         }
                         event.data["stream_timings"] = stream_timings
@@ -304,14 +332,17 @@ def create_app(
                             trip_id=search_id,
                             timings=timings,
                         )
-                    yield json.dumps(
-                        {
-                            "sequence": event.sequence,
-                            "event": event.event,
-                            "data": event.data,
-                        },
-                        separators=(",", ":"),
-                    ) + "\n"
+                    yield (
+                        json.dumps(
+                            {
+                                "sequence": event.sequence,
+                                "event": event.event,
+                                "data": event.data,
+                            },
+                            separators=(",", ":"),
+                        )
+                        + "\n"
+                    )
                 await task
             finally:
                 if not task.done():

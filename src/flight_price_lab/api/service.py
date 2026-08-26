@@ -224,6 +224,12 @@ class TripSearchService:
         self._provider_queries_total = direction_count + (
             2 * len(self.hubs) * transfer_direction_count
         )
+        snapshot.diagnostics.planned_provider_requests = self._plan_provider_work(
+            request
+        )
+        snapshot.diagnostics.provider_requests_planned = len(
+            snapshot.diagnostics.planned_provider_requests
+        )
         await self.registry.update(
             snapshot, persist=True, operation="update_running_session"
         )
@@ -261,6 +267,7 @@ class TripSearchService:
                 )
             self._directions_remaining = len(direction_tasks)
             await asyncio.gather(*direction_tasks)
+            snapshot.diagnostics.last_task_terminal_at = datetime.now(UTC)
             snapshot.status = (
                 SearchStatus.PARTIAL_FAILURE
                 if snapshot.errors
@@ -301,9 +308,15 @@ class TripSearchService:
             snapshot.diagnostics.final_serialization_ms = (
                 perf_counter() - serialization_clock
             ) * 1000
+            snapshot.diagnostics.final_persistence_started_at = datetime.now(UTC)
             await self.registry.update(
                 snapshot, persist=True, operation="persist_final_result"
             )
+            snapshot.diagnostics.final_persistence_completed_at = datetime.now(UTC)
+            snapshot.diagnostics.total_duration_ms = (
+                perf_counter() - search_clock
+            ) * 1000
+            await self.registry.update(snapshot)
             await self._event(
                 search_id, "search_completed", status=snapshot.status.value
             )
@@ -325,6 +338,87 @@ class TripSearchService:
             await self._event(search_id, "search_failed", code="provider_error")
         finally:
             self.registry.close_persistence(search_id)
+
+    def _plan_provider_work(
+        self, request: TripSearchRequest
+    ) -> list[dict[str, object]]:
+        """Describe every exhaustive constituent request before work starts."""
+
+        planned: list[dict[str, object]] = []
+
+        def add(
+            direction: Direction,
+            query_type: str,
+            origins: tuple[str, ...],
+            destinations: tuple[str, ...],
+            travel_date: date,
+            hub: str | None = None,
+        ) -> None:
+            route = f"{','.join(origins)}->{','.join(destinations)}"
+            identity = (
+                f"{direction.value}|{query_type}|{route}|{travel_date.isoformat()}"
+            )
+            planned.append(
+                {
+                    "planned_id": sha256(identity.encode()).hexdigest()[:16],
+                    "direction": direction.value,
+                    "query_type": query_type,
+                    "route": route,
+                    "hub": hub,
+                }
+            )
+
+        directions = [
+            (
+                Direction.OUTBOUND,
+                tuple(request.origins),
+                tuple(request.destinations),
+                request.outbound_date,
+            )
+        ]
+        if request.return_date is not None:
+            directions.append(
+                (
+                    Direction.RETURN,
+                    tuple(request.destinations),
+                    tuple(request.origins),
+                    request.return_date,
+                )
+            )
+        for direction, origins, destinations, travel_date in directions:
+            add(direction, "direct_baseline", origins, destinations, travel_date)
+            if not self._self_transfer_enabled(request, direction):
+                continue
+            for hub in self.hubs:
+                add(
+                    direction,
+                    "hub_first_leg",
+                    origins,
+                    (hub,),
+                    travel_date,
+                    hub,
+                )
+                add(
+                    direction,
+                    "hub_second_leg",
+                    (hub,),
+                    destinations,
+                    travel_date,
+                    hub,
+                )
+        return planned
+
+    @staticmethod
+    def _planned_id(
+        direction: Direction,
+        query_type: str,
+        origins: tuple[str, ...],
+        destinations: tuple[str, ...],
+        travel_date: date,
+    ) -> str:
+        route = f"{','.join(origins)}->{','.join(destinations)}"
+        identity = f"{direction.value}|{query_type}|{route}|{travel_date.isoformat()}"
+        return sha256(identity.encode()).hexdigest()[:16]
 
     async def _checkpoint_if_due(self, snapshot: SearchSnapshot) -> None:
         async with self._checkpoint_lock:
@@ -425,37 +519,105 @@ class TripSearchService:
         query_type: str,
         hub: str | None,
     ) -> list[FlightOffer]:
-        async with self._semaphore:
-            self._active_provider_calls += 1
-            self._provider_calls_concurrent_peak = max(
-                self._provider_calls_concurrent_peak, self._active_provider_calls
-            )
-            try:
-                response = await self.provider.search_direct(
-                    origins=origins,
-                    destinations=destinations,
-                    travel_date=travel_date,
-                    adults=request.adults,
-                    children=request.children,
-                    currency=request.currency,
-                    cabin_bags=request.baggage.cabin_bags,
-                    checked_bags=request.baggage.checked_bags,
-                    bypass_cache=request.refresh_prices,
-                    trip_id=(
-                        self._active_snapshot.trip_id if self._active_snapshot else ""
-                    ),
-                    trip_search_key=(
-                        self._active_snapshot.search_key
-                        if self._active_snapshot
-                        else ""
-                    ),
-                    direction=direction.value,
-                    query_type=query_type,
-                    hub=hub,
+        snapshot = self._active_snapshot
+        planned_id = self._planned_id(
+            direction, query_type, origins, destinations, travel_date
+        )
+        request_started_at = datetime.now(UTC)
+        request_clock = perf_counter()
+        try:
+            async with self._semaphore:
+                request_started_at = datetime.now(UTC)
+                request_clock = perf_counter()
+                if snapshot is not None:
+                    snapshot.diagnostics.provider_requests_started += 1
+                self._active_provider_calls += 1
+                self._provider_calls_concurrent_peak = max(
+                    self._provider_calls_concurrent_peak,
+                    self._active_provider_calls,
                 )
-            finally:
-                self._active_provider_calls -= 1
+                try:
+                    response = await self.provider.search_direct(
+                        origins=origins,
+                        destinations=destinations,
+                        travel_date=travel_date,
+                        adults=request.adults,
+                        children=request.children,
+                        currency=request.currency,
+                        cabin_bags=request.baggage.cabin_bags,
+                        checked_bags=request.baggage.checked_bags,
+                        bypass_cache=request.refresh_prices,
+                        trip_id=(
+                            self._active_snapshot.trip_id
+                            if self._active_snapshot
+                            else ""
+                        ),
+                        trip_search_key=(
+                            self._active_snapshot.search_key
+                            if self._active_snapshot
+                            else ""
+                        ),
+                        direction=direction.value,
+                        query_type=query_type,
+                        hub=hub,
+                    )
+                finally:
+                    self._active_provider_calls -= 1
+        except asyncio.CancelledError:
+            self._record_terminal_provider_request(
+                planned_id=planned_id,
+                direction=direction,
+                query_type=query_type,
+                origins=origins,
+                destinations=destinations,
+                hub=hub,
+                started_at=request_started_at,
+                duration_ms=(perf_counter() - request_clock) * 1000,
+                status="CANCELLED",
+                error_type="CancelledError",
+            )
+            raise
+        except Exception as error:
+            error_type = type(error).__name__
+            timed_out = (
+                isinstance(error, TimeoutError) or "timeout" in str(error).lower()
+            )
+            http_error = isinstance(error, SearchAPIError) and not timed_out
+            if snapshot is not None:
+                snapshot.diagnostics.provider_calls_this_invocation += 1
+            self._record_terminal_provider_request(
+                planned_id=planned_id,
+                direction=direction,
+                query_type=query_type,
+                origins=origins,
+                destinations=destinations,
+                hub=hub,
+                started_at=request_started_at,
+                duration_ms=(perf_counter() - request_clock) * 1000,
+                status=(
+                    "TIMEOUT"
+                    if timed_out
+                    else "HTTP_ERROR"
+                    if http_error
+                    else "EXCEPTION"
+                ),
+                error_type=error_type,
+            )
+            raise
         if not isinstance(response, ProviderSearchResult):
+            self._record_terminal_provider_request(
+                planned_id=planned_id,
+                direction=direction,
+                query_type=query_type,
+                origins=origins,
+                destinations=destinations,
+                hub=hub,
+                started_at=request_started_at,
+                duration_ms=(perf_counter() - request_clock) * 1000,
+                status="SUCCESS",
+                error_type="",
+                result_count=len(response),
+            )
             await self._record_provider_progress(len(response))
             return response
         snapshot = self._active_snapshot
@@ -471,7 +633,12 @@ class TripSearchService:
             snapshot.diagnostics.normalization_ms += response.normalization_ms
             snapshot.diagnostics.postgres_write_ms += response.postgres_write_ms
             if response.request_timing is not None:
-                snapshot.diagnostics.provider_requests.append(response.request_timing)
+                timing = dict(response.request_timing)
+                timing["planned_id"] = planned_id
+                timing["status"] = "SUCCESS"
+                timing["error_type"] = None
+                snapshot.diagnostics.provider_requests.append(timing)
+            snapshot.diagnostics.provider_requests_succeeded += 1
             if response.database_operation is not None:
                 snapshot.diagnostics.database_operations.append(
                     response.database_operation
@@ -479,6 +646,52 @@ class TripSearchService:
             await self.registry.update(snapshot)
         await self._record_provider_progress(len(response.offers))
         return response.offers
+
+    def _record_terminal_provider_request(
+        self,
+        *,
+        planned_id: str,
+        direction: Direction,
+        query_type: str,
+        origins: tuple[str, ...],
+        destinations: tuple[str, ...],
+        hub: str | None,
+        started_at: datetime,
+        duration_ms: float,
+        status: str,
+        error_type: str,
+        result_count: int = 0,
+    ) -> None:
+        snapshot = self._active_snapshot
+        if snapshot is None:
+            return
+        completed_at = datetime.now(UTC)
+        snapshot.diagnostics.provider_requests.append(
+            {
+                "planned_id": planned_id,
+                "request_id": None,
+                "direction": direction.value,
+                "query_type": query_type,
+                "hub": hub,
+                "route": f"{','.join(origins)}->{','.join(destinations)}",
+                "started_at": started_at.isoformat(),
+                "completed_at": completed_at.isoformat(),
+                "duration_ms": round(duration_ms, 2),
+                "http_status": None,
+                "cache_hit": False,
+                "result_count": result_count,
+                "status": status,
+                "error_type": error_type,
+            }
+        )
+        if status == "SUCCESS":
+            snapshot.diagnostics.provider_requests_succeeded += 1
+        elif status == "TIMEOUT":
+            snapshot.diagnostics.provider_requests_timed_out += 1
+        elif status == "CANCELLED":
+            snapshot.diagnostics.provider_requests_cancelled += 1
+        else:
+            snapshot.diagnostics.provider_requests_failed += 1
 
     async def _record_provider_progress(self, result_count: int) -> None:
         """Publish route-query progress without adding persistence writes."""

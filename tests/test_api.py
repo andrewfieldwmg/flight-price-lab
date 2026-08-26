@@ -346,11 +346,25 @@ def test_provider_progress_counts_routes_and_options() -> None:
     assert int(events[-1]["options_found"]) >= 2
 
 
+def test_round_trip_provider_plan_reconciles_and_contains_return_cia() -> None:
+    service = TripSearchService(MockProvider(), InMemorySearchRegistry())
+    search_request = request(SelfTransferPolicy.BOTH).model_copy(
+        update={"destinations": ["CAG", "OLB", "AHO"]}
+    )
+    planned = service._plan_provider_work(search_request)
+
+    assert len(planned) == 34
+    assert any(
+        item["direction"] == "RETURN"
+        and item["query_type"] == "hub_first_leg"
+        and item["route"] == "CAG,OLB,AHO->CIA"
+        for item in planned
+    )
+
+
 def test_round_trip_nonstop_provider_calls_start_concurrently() -> None:
     provider = ConcurrentProvider()
-    snapshot, _, _ = asyncio.run(
-        run_search(SelfTransferPolicy.NONE, provider=provider)
-    )
+    snapshot, _, _ = asyncio.run(run_search(SelfTransferPolicy.NONE, provider=provider))
 
     assert len(provider.calls) == 2
     assert provider.maximum_active == 2
@@ -380,6 +394,14 @@ def test_hub_failure_is_partial_not_total_failure() -> None:
     assert snapshot.outbound.baseline is not None
     assert snapshot.status is SearchStatus.PARTIAL_FAILURE
     assert any(error.code == "provider_timeout" for error in snapshot.errors)
+    diagnostics = snapshot.diagnostics
+    assert diagnostics.provider_requests_planned == 4
+    assert diagnostics.provider_requests_started == 4
+    assert diagnostics.provider_requests_succeeded == 2
+    assert diagnostics.provider_requests_timed_out == 2
+    assert diagnostics.provider_requests_failed == 0
+    assert len(diagnostics.provider_requests) == 4
+    assert all(item.get("status") for item in diagnostics.provider_requests)
 
 
 def test_savings_and_duration_are_calculated_against_nonstop() -> None:
@@ -461,13 +483,11 @@ def test_streamed_search_emits_progressive_outbound_and_return_events() -> None:
     names = [item["event"] for item in events]
     assert names[0] == "search_started"
     assert any(
-        item["event"] == "results_updated"
-        and item["data"]["direction"] == "OUTBOUND"
+        item["event"] == "results_updated" and item["data"]["direction"] == "OUTBOUND"
         for item in events
     )
     assert any(
-        item["event"] == "results_updated"
-        and item["data"]["direction"] == "RETURN"
+        item["event"] == "results_updated" and item["data"]["direction"] == "RETURN"
         for item in events
     )
     assert names[-1] == "search_completed"
