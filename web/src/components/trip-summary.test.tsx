@@ -45,13 +45,32 @@ describe("selected trip summary", () => {
     inbound.history = { ...comparison, previous_price: "540", price_change_amount: "-54", price_change_percent: "-10" };
     outbound.legs[0].constituent_price = "258";
     outbound.legs[0].history = { ...comparison, previous_price: "250", price_change_amount: "8", price_change_percent: "3.2" };
+    outbound.legs[1].constituent_price = "228";
     render(<TripSummary outbound={outbound} inbound={inbound} outboundBaseline={option({ id: "out" })} inboundBaseline={option({ id: "in", direction: "RETURN" })} outboundComparisonEnabled inboundComparisonEnabled />);
     expect(screen.getByText("↑ 6.3% since last seen")).toBeInTheDocument();
     expect(screen.getByText("£258")).toBeInTheDocument();
     expect(screen.getByText("↑ 3.2%")).toBeInTheDocument();
+    expect(screen.getByText("Loading…", { selector: ".summary-leg em" })).toBeInTheDocument();
+    expect(screen.getByLabelText(/Wizz Air Malta W4 6997\. Loading price history/)).toBeInTheDocument();
     expect(screen.getByText("↓ 10.0% since last seen")).toBeInTheDocument();
     expect(screen.getByText("Previously £918")).toBeInTheDocument();
     expect(screen.getByText("↑ 5.9% since last seen 3d ago")).toHaveAccessibleName("Trip price increased by 5.9 percent since last seen");
+  });
+
+  it("does not call unresolved summary history first seen", () => {
+    const unresolved = option({ id: "unresolved", history: undefined });
+    render(<TripSummary outbound={unresolved} inbound={null} outboundBaseline={unresolved} inboundBaseline={null} />);
+    expect(screen.getAllByLabelText("Loading price history").length).toBeGreaterThan(0);
+    expect(screen.getByText("Loading history…", { selector: ".summary-total-block small" })).toBeInTheDocument();
+    expect(screen.queryByText("First seen")).not.toBeInTheDocument();
+  });
+
+  it("shows First seen only for an explicitly resolved observation", () => {
+    const first = { history_status: "FIRST_SEEN" as const, previous_price: null, price_change_amount: null, price_change_percent: null, previous_observed_at: null, elapsed_seconds: null, previous_observation_run_id: null };
+    const selected = option({ id: "first", history: first });
+    render(<TripSummary outbound={selected} inbound={null} outboundBaseline={selected} inboundBaseline={null} />);
+    expect(screen.getAllByText("First seen")).toHaveLength(2);
+    expect(screen.queryByLabelText("Loading price history")).not.toBeInTheDocument();
   });
 
   it("omits an exact combined history total when prior runs differ", () => {
@@ -71,11 +90,11 @@ describe("selected trip summary", () => {
     selected.legs[0].constituent_price = "849";
     selected.legs[0].history = unchanged;
     render(<TripSummary outbound={selected} inbound={null} outboundBaseline={selected} inboundBaseline={null} />);
-    expect(screen.getByText("No change since last seen 1h ago")).toBeInTheDocument();
-    expect(screen.getByText("No change")).toBeInTheDocument();
+    expect(screen.getByText("— (0%) since last seen 1h ago")).toBeInTheDocument();
+    expect(screen.getByText("— (0%) since last seen")).toBeInTheDocument();
     expect(screen.queryByText(/Previously/)).not.toBeInTheDocument();
     expect(screen.getAllByText("£849")).toHaveLength(2);
-    expect(screen.queryByText("No change", { selector: ".summary-leg em" })).not.toBeInTheDocument();
+    expect(screen.queryByText("— (0%)", { selector: ".summary-leg em" })).not.toBeInTheDocument();
   });
 
   it("keeps baggage hidden until requested and leaves the base headline unchanged", () => {
@@ -108,7 +127,7 @@ describe("selected trip summary", () => {
     act(() => observerCallback?.([{ isIntersecting: false } as IntersectionObserverEntry], {} as IntersectionObserver));
     expect(screen.getByLabelText("Compact selected trip summary")).toBeInTheDocument();
     expect(screen.getByLabelText("Compact selected trip summary")).toHaveTextContent("18 Dec LGW→CAG");
-    expect(screen.getByLabelText("Compact selected trip summary")).toHaveTextContent("£486 · New");
+    expect(screen.getByLabelText("Compact selected trip summary")).toHaveTextContent("£486 · Loading…");
     act(() => observerCallback?.([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver));
     expect(screen.queryByLabelText("Compact selected trip summary")).not.toBeInTheDocument();
   });

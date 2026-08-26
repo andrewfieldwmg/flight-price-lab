@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { elapsedShort, historyAccessibleLabel, historySignal, historyTooltip, percentageChangeSignal, sinceLastSeen } from "./price-history";
+import { elapsedShort, historyAccessibleLabel, historySignal, historyTooltip, percentageChangeSignal, priceHistoryState, sinceLastSeen } from "./price-history";
 
 const history = {
   history_status: "PREVIOUS_FOUND" as const,
@@ -23,7 +23,7 @@ describe("observation history language", () => {
     const first = { ...history, history_status: "FIRST_SEEN" as const, previous_price: null };
     expect(historySignal(first)).toBe("New");
     expect(historySignal(first)).not.toMatch(/[↑↓→]/);
-    expect(sinceLastSeen(first)).toContain("No previous observation");
+    expect(sinceLastSeen(first)).toBe("First seen");
   });
 
   it("uses consistent directional arrows and accessible descriptions", () => {
@@ -33,9 +33,18 @@ describe("observation history language", () => {
     expect(historySignal(decrease)).toBe("↓ 4.1%");
     expect(historyAccessibleLabel(decrease)).toContain("decreased by 4.1 percent");
     const unchanged = { ...history, price_change_amount: "0", price_change_percent: "0" };
-    expect(historySignal(unchanged)).toBe("No change");
+    expect(historySignal(unchanged)).toBe("— (0%)");
     expect(historyAccessibleLabel(unchanged)).toBe("No price change since last seen");
-    expect(percentageChangeSignal(0)).toBe("No change");
+    expect(percentageChangeSignal(0)).toBe("— (0%)");
+  });
+
+  it("distinguishes unresolved history from explicitly first seen", () => {
+    expect(priceHistoryState(undefined)).toBe("LOADING");
+    expect(historySignal(undefined)).toBe("Loading…");
+    expect(historyAccessibleLabel(undefined)).toBe("Loading price history");
+    const first = { ...history, history_status: "FIRST_SEEN" as const, previous_price: null };
+    expect(priceHistoryState(first)).toBe("FIRST_SEEN");
+    expect(historySignal(first)).toBe("New");
   });
 
   it("formats observed elapsed intervals", () => {

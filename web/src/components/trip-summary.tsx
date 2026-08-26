@@ -7,7 +7,7 @@ import { localClock } from "./direction-results";
 import { money } from "./price-display";
 import { duration } from "./result-card";
 import { BookingPreparation } from "./booking-preparation";
-import { directionHistory, elapsedShort, historyAccessibleLabel, historySignal, percentageChangeSignal } from "@/lib/search/price-history";
+import { directionHistory, elapsedShort, historyAccessibleLabel, historySignal, percentageChangeSignal, priceHistoryState } from "@/lib/search/price-history";
 
 function range(low: number | string | null, high: number | string | null, currency: string) {
   if (low === null) return "unavailable";
@@ -93,11 +93,26 @@ export function TripSummary({ outbound, inbound, outboundBaseline, inboundBaseli
   const tripHistoryChange = previousTripTotal === null ? null : summary.baseAlternativePrice - previousTripTotal;
   const tripHistoryPercent = previousTripTotal ? (tripHistoryChange ?? 0) / previousTripTotal * 100 : null;
   const tripHistoryElapsed = outboundHistory?.elapsed_seconds ?? inboundHistory?.elapsed_seconds ?? null;
-  const tripHistoryCompact = tripHistoryPercent === null ? "New" : percentageChangeSignal(tripHistoryPercent);
-  const tripHistoryDetailed = tripHistoryPercent === null
-    ? "New"
+  const outboundHistoryState = priceHistoryState(outboundHistory);
+  const inboundHistoryState = inbound ? priceHistoryState(inboundHistory) : null;
+  const tripHistoryState = inbound
+    ? outboundHistoryState === "LOADING" || inboundHistoryState === "LOADING"
+      ? "LOADING"
+      : outboundHistoryState === "FIRST_SEEN" && inboundHistoryState === "FIRST_SEEN"
+        ? "FIRST_SEEN"
+        : commonPriorRun && tripHistoryPercent === 0 ? "UNCHANGED" : commonPriorRun ? "CHANGED" : "ERROR"
+    : outboundHistoryState;
+  const tripHistoryCompact = tripHistoryState === "LOADING" ? "Loading…" : tripHistoryState === "FIRST_SEEN" ? "First seen" : tripHistoryState === "ERROR" ? "Unavailable" : percentageChangeSignal(tripHistoryPercent ?? 0);
+  const tripHistoryDetailed = tripHistoryState === "LOADING"
+    ? "Loading history…"
+    : tripHistoryState === "FIRST_SEEN"
+      ? "First seen"
+      : tripHistoryState === "ERROR"
+        ? "History unavailable"
+        : tripHistoryPercent === null
+          ? "History unavailable"
     : tripHistoryPercent === 0
-      ? `No change since last seen ${elapsedShort(tripHistoryElapsed)} ago`
+      ? `— (0%) since last seen ${elapsedShort(tripHistoryElapsed)} ago`
       : `${percentageChangeSignal(tripHistoryPercent)} since last seen ${elapsedShort(tripHistoryElapsed)} ago`;
   return <>
     {compactVisible && <aside className="compact-trip-summary" aria-label="Compact selected trip summary">
@@ -108,7 +123,7 @@ export function TripSummary({ outbound, inbound, outboundBaseline, inboundBaseli
     </aside>}
     <section ref={fullSummary} className="summary-strip" aria-label="Selected trip summary">
       <div className="summary-primary">
-        <div className="summary-total-block"><span>Trip total</span><strong>{money(summary.baseAlternativePrice, currency)}</strong><small aria-label={tripHistoryChange === null ? "New trip price observation" : tripHistoryChange > 0 ? `Trip price increased by ${Math.abs(tripHistoryPercent ?? 0).toFixed(1)} percent since last seen` : tripHistoryChange < 0 ? `Trip price decreased by ${Math.abs(tripHistoryPercent ?? 0).toFixed(1)} percent since last seen` : "No trip price change since last seen"}>{tripHistoryDetailed}</small>{previousTripTotal !== null && tripHistoryChange !== 0 && <em>Previously {money(previousTripTotal, currency)}</em>}</div>
+        <div className="summary-total-block"><span>Trip total</span><strong>{money(summary.baseAlternativePrice, currency)}</strong><small role={tripHistoryState === "LOADING" ? "status" : undefined} aria-label={tripHistoryState === "LOADING" ? "Loading price history" : tripHistoryState === "FIRST_SEEN" ? "First price observation" : tripHistoryState === "ERROR" ? "Price history unavailable" : tripHistoryChange !== null && tripHistoryChange > 0 ? `Trip price increased by ${Math.abs(tripHistoryPercent ?? 0).toFixed(1)} percent since last seen` : tripHistoryChange !== null && tripHistoryChange < 0 ? `Trip price decreased by ${Math.abs(tripHistoryPercent ?? 0).toFixed(1)} percent since last seen` : "No trip price change since last seen"}>{tripHistoryDetailed}</small>{previousTripTotal !== null && tripHistoryChange !== 0 && <em>Previously {money(previousTripTotal, currency)}</em>}</div>
         {comparisonEnabled && <div><span>Save</span><strong>{money(saving, currency)} / {percentage.toFixed(0)}%</strong></div>}
         {comparisonEnabled && <div><span>Extra travel</span><strong>+{duration(summary.extraMinutes)}</strong></div>}
         <BookingPreparation searchId={searchId} optionIds={[outbound?.id, inbound?.id].filter((id): id is string => Boolean(id))} />
