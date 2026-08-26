@@ -121,6 +121,7 @@ export interface BookingTicket {
   price_change_status: "PRICE_DECREASED" | "UNCHANGED" | "MINOR_INCREASE" | "MATERIAL_INCREASE" | null;
   material_change_acknowledgement_required: boolean;
   capability: "EXACT_CHECKOUT_HANDOFF" | "EXACT_FLIGHT_HANDOFF" | "PREFILLED_SEARCH" | "GENERIC_BOOKING_PAGE" | "UNAVAILABLE" | null;
+  pricing_confidence: "VERIFIED" | "UNVERIFIED";
   fare_selected: boolean;
   adults: number;
   children: number;

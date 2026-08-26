@@ -52,6 +52,11 @@ class HandoffCapability(StrEnum):
     UNAVAILABLE = "UNAVAILABLE"
 
 
+class PricingConfidence(StrEnum):
+    VERIFIED = "VERIFIED"
+    UNVERIFIED = "UNVERIFIED"
+
+
 class BookingContextExpiredError(Exception):
     """The public option survived, but its private provider lineage did not."""
 
@@ -91,6 +96,7 @@ class BookingTicketResponse(BaseModel):
     price_change_status: PriceChangeStatus | None
     material_change_acknowledgement_required: bool
     capability: HandoffCapability | None
+    pricing_confidence: PricingConfidence = PricingConfidence.VERIFIED
     fare_selected: bool = False
     adults: int
     children: int
@@ -114,6 +120,7 @@ class ResolvedHandoff:
     booking_url: str
     booking_post_data: SecretStr
     capability: HandoffCapability
+    pricing_confidence: PricingConfidence = PricingConfidence.VERIFIED
     fare_selected: bool = False
     adults: int = 1
     children: int = 0
@@ -387,6 +394,11 @@ class SearchAPIBookingResolver:
                 booking_url=booking_request["url"],
                 booking_post_data=SecretStr(booking_request["post_data"]),
                 capability=capability,
+                pricing_confidence=(
+                    PricingConfidence.UNVERIFIED
+                    if carrier == "AZ"
+                    else PricingConfidence.VERIFIED
+                ),
                 adults=int(parameters.get("adults", 1)),
                 children=int(parameters.get("children", 0)),
                 exact_flight_verified=capability
@@ -588,12 +600,17 @@ class BookingPreparationService:
                         "status": (
                             BookingSessionState.VERIFY_ON_AIRLINE
                             if handoff.current_price is None
+                            or handoff.pricing_confidence
+                            is PricingConfidence.UNVERIFIED
                             else BookingSessionState.READY
                         ),
                         "price_change_status": change,
-                        "material_change_acknowledgement_required": change
-                        is PriceChangeStatus.MATERIAL_INCREASE,
+                        "material_change_acknowledgement_required": (
+                            change is PriceChangeStatus.MATERIAL_INCREASE
+                            and handoff.pricing_confidence is PricingConfidence.VERIFIED
+                        ),
                         "capability": handoff.capability,
+                        "pricing_confidence": handoff.pricing_confidence,
                         "fare_selected": handoff.fare_selected,
                         "adults": handoff.adults,
                         "children": handoff.children,
@@ -714,7 +731,12 @@ class BookingPreparationService:
         original = sum(
             (ticket.response.original_price for ticket in session.tickets), Decimal()
         )
-        prices = [ticket.response.current_price for ticket in session.tickets]
+        prices = [
+            ticket.response.current_price
+            if ticket.response.pricing_confidence is PricingConfidence.VERIFIED
+            else None
+            for ticket in session.tickets
+        ]
         current = (
             sum((price for price in prices if price is not None), Decimal())
             if prices and all(price is not None for price in prices)

@@ -92,12 +92,14 @@ export function BookingPreparation({ searchId, optionIds }: { searchId: string |
                 <p className="booking-schedule"><strong>{ticket.route.split(" → ")[0]} {localClock(ticket.departure_at)} → {ticket.route.split(" → ").at(-1)} {localClock(ticket.arrival_at)}</strong><br />{new Date(`${ticket.travel_date}T12:00:00`).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}<br />{ticket.adults} adult{ticket.adults === 1 ? "" : "s"} + {ticket.children} child{ticket.children === 1 ? "" : "ren"}</p>
                 <dl className="booking-prices">
                   <div><dt>Search price</dt><dd>{money(ticket.original_price, ticket.currency)}</dd></div>
-                  <div><dt>Current price</dt><dd>{ticket.current_price === null ? "Verify on airline" : money(ticket.current_price, ticket.currency)}</dd></div>
+                  <div><dt>{ticket.carrier === "AZ" ? "Latest booking-option price" : "Current price"}</dt><dd>{ticket.current_price === null ? "Verify on airline" : money(ticket.current_price, ticket.currency)}</dd></div>
+                  {ticket.carrier === "AZ" && <div><dt>Airline price</dt><dd>Verify on ITA</dd></div>}
                   <div><dt>Price change</dt><dd className={Number(ticket.price_delta) < 0 ? "price-decrease" : ""}>{changeLabel(ticket)}</dd></div>
                 </dl>
                 {ticket.status === "FAILED" ? <p className="booking-ticket-error">This ticket could not be prepared. No airline handoff was started.</p> : <>
                   {ticket.capability === "EXACT_FLIGHT_HANDOFF" && <p className="booking-capability"><strong>Exact flight ready</strong><br />Passenger composition preserved<br />Fare selection happens on {carrierName(ticket.carrier)}</p>}
                   {ticket.capability === "PREFILLED_SEARCH" && <p className="booking-capability"><strong>Search prefilled — confirm {ticket.flight_number}</strong><br />Route, date and passengers are preserved. Confirm the flight and current price on {carrierName(ticket.carrier)}.</p>}
+                  {ticket.carrier === "AZ" && <p className="booking-ticket-warning">ITA may reprice significantly during handoff. Confirm the fare before continuing.</p>}
                   {material && <label className="booking-acknowledgement"><input type="checkbox" checked={acknowledged[ticket.ticket_id] ?? false} onChange={(event) => setAcknowledged({ ...acknowledged, [ticket.ticket_id]: event.target.checked })} /> I acknowledge this material price increase</label>}
                   <form method="post" target="_blank" action={bookingHandoffUrl(session.booking_session_id, ticket.ticket_id, material)} onSubmit={() => setOpened({ ...opened, [ticket.ticket_id]: true })}><button className="airline-handoff-button" type="submit" disabled={!canOpen}>Continue on {carrierName(ticket.carrier)}</button></form>
                   <span className="booking-open-status">{opened[ticket.ticket_id] ? "Opened" : "Not opened"}</span>

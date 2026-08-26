@@ -16,6 +16,7 @@ function ticket(overrides = {}) {
     departure_at: "2026-12-18T14:25:00+00:00", arrival_at: "2026-12-18T17:25:00+01:00",
     currency: "GBP", status: "READY", price_change_status: "PRICE_DECREASED",
     material_change_acknowledgement_required: false, capability: "EXACT_FLIGHT_HANDOFF",
+    pricing_confidence: "VERIFIED",
     fare_selected: false, adults: 2, children: 2, exact_flight_verified: true,
     passenger_composition_verified: true, ...overrides,
   };
@@ -155,12 +156,16 @@ describe("BookingPreparation drawer", () => {
   });
 
   it("renders ITA Airways as a prefilled handoff requiring flight confirmation", async () => {
-    const ita = ticket({ ticket_id: "az", carrier: "AZ", flight_number: "AZ 217", route: "LCY → LIN", current_price: "276", price_delta: "0", capability: "PREFILLED_SEARCH", exact_flight_verified: false });
-    prepareBooking.mockResolvedValue(session({ current_total: "276", price_delta: "0", tickets: [ita] }));
+    const ita = ticket({ ticket_id: "az", carrier: "AZ", flight_number: "AZ 217", route: "LCY → LIN", original_price: "236", current_price: "276", price_delta: "40", capability: "PREFILLED_SEARCH", pricing_confidence: "UNVERIFIED", exact_flight_verified: false });
+    prepareBooking.mockResolvedValue(session({ original_total: "236", current_total: null, price_delta: null, tickets: [ita] }));
     render(<BookingPreparation searchId="search" optionIds={["ita"]} />);
     fireEvent.click(screen.getByRole("button", { name: "Prepare booking" }));
     expect(await screen.findByRole("button", { name: "Continue on ITA Airways" })).toBeEnabled();
     expect(screen.getByText("Search prefilled — confirm AZ 217")).toBeInTheDocument();
     expect(screen.getByText(/Confirm the flight and current price on ITA Airways/)).toBeInTheDocument();
+    expect(screen.getByText("Latest booking-option price")).toBeInTheDocument();
+    expect(screen.getByText("Verify on ITA")).toBeInTheDocument();
+    expect(screen.getByText("ITA may reprice significantly during handoff. Confirm the fare before continuing.")).toBeInTheDocument();
+    expect(screen.getByText("Verify on airlines")).toBeInTheDocument();
   });
 });

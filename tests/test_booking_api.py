@@ -14,6 +14,7 @@ from flight_price_lab.api.booking import (
     HandoffCapability,
     ITAAirwaysHandoffAdapter,
     PriceChangeStatus,
+    PricingConfidence,
     ResolvedHandoff,
     SearchAPIBookingResolver,
     WizzAirHandoffAdapter,
@@ -666,3 +667,44 @@ def test_ita_airways_handoff_bypasses_doubleclick_and_preserves_deeplink() -> No
     )
     assert response.status_code == 303
     assert response.headers["location"] == direct
+
+
+def test_ita_booking_option_price_is_unverified_and_excluded_from_total() -> None:
+    selected = route_offer("LIN", "LCY", date(2026, 12, 28), 20, "AZ 224", "236")
+    client = BookingOptionsClient({("LIN", "LCY"): ("AZ 224", "276")})
+    resolver = SearchAPIBookingResolver(client)  # type: ignore[arg-type]
+
+    handoff = asyncio.run(resolver.resolve(selected))
+
+    assert handoff.capability is HandoffCapability.PREFILLED_SEARCH
+    assert handoff.pricing_confidence is PricingConfidence.UNVERIFIED
+    assert handoff.current_price == Decimal(276)
+
+    app = create_app(booking_resolver=resolver, handoff_launcher=Launcher())
+    asyncio.run(
+        app.state.registry.create(
+            SearchSnapshot(search_id="ita-unverified", status="completed")
+        )
+    )
+    asyncio.run(
+        app.state.registry.register_booking_candidate(
+            "ita-unverified", "ita-option", (selected,)
+        )
+    )
+    prepared = (
+        TestClient(app)
+        .post(
+            "/api/booking/prepare",
+            json={
+                "search_id": "ita-unverified",
+                "selected_option_ids": ["ita-option"],
+            },
+        )
+        .json()
+    )
+
+    assert prepared["current_total"] is None
+    assert prepared["price_delta"] is None
+    assert prepared["tickets"][0]["current_price"] == "276"
+    assert prepared["tickets"][0]["pricing_confidence"] == "UNVERIFIED"
+    assert prepared["tickets"][0]["status"] == "VERIFY_ON_AIRLINE"
