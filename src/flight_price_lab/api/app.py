@@ -155,6 +155,8 @@ def create_app(
         request_clock = perf_counter()
         service = TripSearchService(get_provider(), registry)
         search_id = await service.create(request)
+        session_initialized_at = datetime.now(UTC)
+        session_initialization_ms = (perf_counter() - request_clock) * 1000
 
         async def stream():
             task = asyncio.create_task(service.run(search_id, request))
@@ -176,8 +178,44 @@ def create_app(
                         if direction == "RETURN" and first_return_at is None:
                             first_return_at = sent_at
                     if event.event in {"search_completed", "search_failed"}:
+                        snapshot = event.data.get("snapshot")
+                        diagnostics = (
+                            snapshot.get("diagnostics", {})
+                            if isinstance(snapshot, dict)
+                            else {}
+                        )
+                        raw_requests = diagnostics.get("provider_requests", [])
+                        provider_requests = [
+                            {
+                                "request_id": item.get("request_id"),
+                                "direction": item.get("direction"),
+                                "query_type": item.get("query_type"),
+                                "route": item.get("route"),
+                                "started_at": item.get("started_at"),
+                                "completed_at": item.get("completed_at"),
+                                "duration_ms": item.get("duration_ms"),
+                                "cache_hit": item.get("cache_hit"),
+                                "status": item.get("http_status"),
+                                "result_count": item.get("result_count"),
+                            }
+                            for item in raw_requests
+                            if isinstance(item, dict)
+                        ]
+                        started_values = [
+                            datetime.fromisoformat(str(item["started_at"]))
+                            for item in provider_requests
+                            if item.get("started_at")
+                        ]
+                        completed_values = [
+                            datetime.fromisoformat(str(item["completed_at"]))
+                            for item in provider_requests
+                            if item.get("completed_at")
+                        ]
                         stream_timings = {
+                            "invocation_started": request_received_at.isoformat(),
                             "request_received": request_received_at.isoformat(),
+                            "session_initialized": session_initialized_at.isoformat(),
+                            "session_initialization_ms": session_initialization_ms,
                             "first_event_sent": (
                                 first_event_at.isoformat() if first_event_at else None
                             ),
@@ -206,12 +244,52 @@ def create_app(
                                 perf_counter() - request_clock
                             )
                             * 1000,
+                            "request_received_to_provider_calls_started_ms": (
+                                (min(started_values) - request_received_at).total_seconds()
+                                * 1000
+                                if started_values
+                                else None
+                            ),
+                            "last_provider_call_completed_to_search_complete_ms": (
+                                (sent_at - max(completed_values)).total_seconds() * 1000
+                                if completed_values
+                                else None
+                            ),
+                        }
+                        timings = {
+                            "total_duration_ms": diagnostics.get("total_duration_ms"),
+                            "provider_calls_total": diagnostics.get(
+                                "provider_calls_total"
+                            ),
+                            "provider_calls_concurrent_peak": diagnostics.get(
+                                "provider_calls_concurrent_peak"
+                            ),
+                            "provider_median_ms": diagnostics.get(
+                                "median_provider_call_ms"
+                            ),
+                            "provider_p95_ms": diagnostics.get(
+                                "p95_provider_call_ms"
+                            ),
+                            "provider_slowest_ms": diagnostics.get(
+                                "slowest_provider_call_ms"
+                            ),
+                            "postgres_total_ms": diagnostics.get(
+                                "postgres_write_ms"
+                            ),
+                            "normalization_ms": diagnostics.get("normalization_ms"),
+                            "synthesis_ms": diagnostics.get(
+                                "itinerary_synthesis_ms"
+                            ),
+                            "ranking_ms": diagnostics.get("ranking_filtering_ms"),
+                            "provider_requests": provider_requests,
+                            "stream": stream_timings,
                         }
                         event.data["stream_timings"] = stream_timings
+                        event.data["timings"] = timings
                         search_log(
-                            "STREAM_TIMINGS",
+                            "SEARCH_SERVER_TIMING",
                             trip_id=search_id,
-                            **stream_timings,
+                            timings=timings,
                         )
                     yield json.dumps(
                         {

@@ -55,6 +55,9 @@ export async function streamSearch(
     for (const line of lines) {
       if (!line.trim()) continue;
       const value = JSON.parse(line) as { event: string; data: Record<string, unknown> };
+      if (value.event === "search_completed") {
+        console.info("SEARCH_SERVER_TIMING", value.data.timings);
+      }
       onEvent({ type: value.event, data: value.data });
     }
   };

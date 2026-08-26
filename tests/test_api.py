@@ -442,6 +442,20 @@ def test_streamed_search_emits_progressive_outbound_and_return_events() -> None:
     )
     assert names[-1] == "search_completed"
     assert events[-1]["data"]["snapshot"]["status"] == "completed"
+    assert {
+        "total_duration_ms",
+        "provider_calls_total",
+        "provider_calls_concurrent_peak",
+        "provider_median_ms",
+        "provider_p95_ms",
+        "provider_slowest_ms",
+        "postgres_total_ms",
+        "normalization_ms",
+        "synthesis_ms",
+        "ranking_ms",
+        "provider_requests",
+        "stream",
+    } <= set(events[-1]["data"]["timings"])
 
 
 def test_completed_stream_recovers_from_fresh_application_instance() -> None:

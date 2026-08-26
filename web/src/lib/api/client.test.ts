@@ -42,4 +42,18 @@ describe("POST search streaming", () => {
     expect(fetchMock.mock.calls[0][0]).toContain("/api/search/stream");
     fetchMock.mockRestore();
   });
+
+  it("logs sanitized server timing on search completion", async () => {
+    const consoleMock = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response('{"event":"search_completed","data":{"timings":{"provider_calls_total":2}}}\n'),
+    );
+
+    await streamSearch({} as never, () => undefined);
+
+    expect(consoleMock).toHaveBeenCalledWith("SEARCH_SERVER_TIMING", {
+      provider_calls_total: 2,
+    });
+    vi.restoreAllMocks();
+  });
 });
