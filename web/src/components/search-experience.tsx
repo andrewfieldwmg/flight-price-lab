@@ -33,8 +33,12 @@ export function SearchExperience() {
   const [cachedMinutes, setCachedMinutes] = useState<number | null>(null);
   const [excludeBaggage, setExcludeBaggage] = useState(true);
   const savedTrips = useRef(new Set<string>());
+  const searchClickedAt = useRef<number | null>(null);
+  const firstRenderedResultRecorded = useRef(false);
 
   async function submit(request: TripSearchRequest) {
+    searchClickedAt.current = performance.now();
+    firstRenderedResultRecorded.current = false;
     setStartError(null);
     dispatch({ type: "started", request });
     let activeSearchId: string | null = null;
@@ -62,6 +66,8 @@ export function SearchExperience() {
           dispatch({ type: "snapshot", snapshot: snapshot as SearchSnapshot });
         }
         dispatch({ type: "event", event: event.type, data: event.data });
+      }, (phase, elapsedMs) => {
+        console.info("SEARCH_CLIENT_TIMING", { phase, elapsed_ms: Math.round(elapsedMs) });
       });
     } catch (error) {
       if (activeSearchId) {
@@ -84,6 +90,19 @@ export function SearchExperience() {
   const isTerminal = state.snapshot ? terminal.has(state.snapshot.status) : false;
   const refreshProviderUsage = shouldRefreshProviderUsage(state.snapshot, isTerminal);
   const isSearching = Boolean(state.request) && !isTerminal && !startError;
+
+  useEffect(() => {
+    if (
+      firstRenderedResultRecorded.current
+      || searchClickedAt.current === null
+      || outboundOptions.length === 0
+    ) return;
+    firstRenderedResultRecorded.current = true;
+    console.info("SEARCH_CLIENT_TIMING", {
+      phase: "first_rendered_result",
+      elapsed_ms: Math.round(performance.now() - searchClickedAt.current),
+    });
+  }, [outboundOptions.length]);
   const outboundTransfers = state.request?.self_transfer_policy === "OUTBOUND_ONLY" || state.request?.self_transfer_policy === "BOTH";
   const returnTransfers = state.request?.self_transfer_policy === "RETURN_ONLY" || state.request?.self_transfer_policy === "BOTH";
   const progressText = useMemo(() => {

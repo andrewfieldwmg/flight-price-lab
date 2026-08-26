@@ -2,9 +2,12 @@
 
 import asyncio
 import json
-from datetime import date, datetime
+import math
+import statistics
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from hashlib import sha256
+from time import perf_counter
 from uuid import uuid4
 
 from flight_price_lab.analytics.carrier_baggage import (
@@ -147,6 +150,8 @@ class TripSearchService:
             tuple[object, ...], asyncio.Task[list[FlightOffer]]
         ] = {}
         self._active_snapshot: SearchSnapshot | None = None
+        self._active_provider_calls = 0
+        self._provider_calls_concurrent_peak = 0
 
     async def start(self, request: TripSearchRequest) -> str:
         trip_id = await self.create(request)
@@ -193,9 +198,11 @@ class TripSearchService:
         await self.registry.publish(session_id, name, data)
 
     async def run(self, search_id: str, request: TripSearchRequest) -> None:
+        search_clock = perf_counter()
         snapshot = await self.registry.get(search_id)
         assert snapshot is not None
         snapshot.status = SearchStatus.RUNNING
+        snapshot.diagnostics.search_started_at = datetime.now(UTC)
         self._active_snapshot = snapshot
         await self.registry.update(snapshot)
         await self._event(
@@ -236,6 +243,35 @@ class TripSearchService:
             snapshot.diagnostics.original_search_completed_at = (
                 datetime.now().astimezone()
             )
+            snapshot.diagnostics.search_completed_at = datetime.now(UTC)
+            snapshot.diagnostics.total_duration_ms = (
+                perf_counter() - search_clock
+            ) * 1000
+            snapshot.diagnostics.provider_calls_total = (
+                snapshot.diagnostics.provider_calls_this_invocation
+            )
+            snapshot.diagnostics.provider_calls_concurrent_peak = (
+                self._provider_calls_concurrent_peak
+            )
+            live_durations = [
+                float(item["duration_ms"])
+                for item in snapshot.diagnostics.provider_requests
+                if not bool(item.get("cache_hit"))
+            ]
+            if live_durations:
+                ordered = sorted(live_durations)
+                snapshot.diagnostics.slowest_provider_call_ms = ordered[-1]
+                snapshot.diagnostics.median_provider_call_ms = statistics.median(
+                    ordered
+                )
+                snapshot.diagnostics.p95_provider_call_ms = ordered[
+                    max(0, math.ceil(len(ordered) * 0.95) - 1)
+                ]
+            serialization_clock = perf_counter()
+            snapshot.model_dump_json(by_alias=True)
+            snapshot.diagnostics.final_serialization_ms = (
+                perf_counter() - serialization_clock
+            ) * 1000
             await self.registry.update(snapshot)
             await self._event(
                 search_id, "search_completed", status=snapshot.status.value
@@ -278,6 +314,10 @@ class TripSearchService:
         origins: tuple[str, ...],
         destinations: tuple[str, ...],
         travel_date: date,
+        *,
+        direction: Direction = Direction.OUTBOUND,
+        query_type: str = "unspecified",
+        hub: str | None = None,
     ) -> list[FlightOffer]:
         key: tuple[object, ...] = (
             tuple(sorted(origins)),
@@ -293,7 +333,13 @@ class TripSearchService:
         if task is None:
             task = asyncio.create_task(
                 self._execute_provider_search(
-                    request, origins, destinations, travel_date
+                    request,
+                    origins,
+                    destinations,
+                    travel_date,
+                    direction=direction,
+                    query_type=query_type,
+                    hub=hub,
                 )
             )
             self._provider_tasks[key] = task
@@ -315,25 +361,41 @@ class TripSearchService:
         origins: tuple[str, ...],
         destinations: tuple[str, ...],
         travel_date: date,
+        *,
+        direction: Direction,
+        query_type: str,
+        hub: str | None,
     ) -> list[FlightOffer]:
         async with self._semaphore:
-            response = await self.provider.search_direct(
-                origins=origins,
-                destinations=destinations,
-                travel_date=travel_date,
-                adults=request.adults,
-                children=request.children,
-                currency=request.currency,
-                cabin_bags=request.baggage.cabin_bags,
-                checked_bags=request.baggage.checked_bags,
-                bypass_cache=request.refresh_prices,
-                trip_id=(
-                    self._active_snapshot.trip_id if self._active_snapshot else ""
-                ),
-                trip_search_key=(
-                    self._active_snapshot.search_key if self._active_snapshot else ""
-                ),
+            self._active_provider_calls += 1
+            self._provider_calls_concurrent_peak = max(
+                self._provider_calls_concurrent_peak, self._active_provider_calls
             )
+            try:
+                response = await self.provider.search_direct(
+                    origins=origins,
+                    destinations=destinations,
+                    travel_date=travel_date,
+                    adults=request.adults,
+                    children=request.children,
+                    currency=request.currency,
+                    cabin_bags=request.baggage.cabin_bags,
+                    checked_bags=request.baggage.checked_bags,
+                    bypass_cache=request.refresh_prices,
+                    trip_id=(
+                        self._active_snapshot.trip_id if self._active_snapshot else ""
+                    ),
+                    trip_search_key=(
+                        self._active_snapshot.search_key
+                        if self._active_snapshot
+                        else ""
+                    ),
+                    direction=direction.value,
+                    query_type=query_type,
+                    hub=hub,
+                )
+            finally:
+                self._active_provider_calls -= 1
         if not isinstance(response, ProviderSearchResult):
             return response
         snapshot = self._active_snapshot
@@ -346,6 +408,10 @@ class TripSearchService:
             snapshot.diagnostics.provider_calls_avoided_this_invocation += (
                 response.provider_calls_avoided
             )
+            snapshot.diagnostics.normalization_ms += response.normalization_ms
+            snapshot.diagnostics.postgres_write_ms += response.postgres_write_ms
+            if response.request_timing is not None:
+                snapshot.diagnostics.provider_requests.append(response.request_timing)
             await self.registry.update(snapshot)
         return response.offers
 
@@ -359,13 +425,19 @@ class TripSearchService:
         travel_date: date,
         self_transfer: bool,
     ) -> None:
+        direction_clock = perf_counter()
         results = (
             snapshot.outbound if direction is Direction.OUTBOUND else snapshot.return_
         )
         assert results is not None
         try:
             direct = await self._provider_search(
-                request, origins, destinations, travel_date
+                request,
+                origins,
+                destinations,
+                travel_date,
+                direction=direction,
+                query_type="direct_baseline",
             )
         except Exception as error:  # noqa: BLE001  # provider boundary
             snapshot.errors.append(
@@ -427,11 +499,24 @@ class TripSearchService:
             await self._event(
                 snapshot.search_id, "results_updated", direction=direction.value
             )
+        direct_duration_ms = (perf_counter() - direction_clock) * 1000
+        if direction is Direction.OUTBOUND:
+            snapshot.diagnostics.direct_outbound_ms = direct_duration_ms
+        else:
+            snapshot.diagnostics.direct_return_ms = direct_duration_ms
         if self_transfer:
+            hub_clock = perf_counter()
             alternatives = await self._hub_alternatives(
                 snapshot, request, direction, origins, destinations, travel_date
             )
+            snapshot.diagnostics.hub_search_total_ms += (
+                perf_counter() - hub_clock
+            ) * 1000
+            ranking_clock = perf_counter()
             self._set_rankings(results, alternatives)
+            snapshot.diagnostics.ranking_filtering_ms += (
+                perf_counter() - ranking_clock
+            ) * 1000
             await self.registry.update(snapshot)
             await self._event(
                 snapshot.search_id, "results_updated", direction=direction.value
@@ -472,8 +557,24 @@ class TripSearchService:
             )
             try:
                 first, second = await asyncio.gather(
-                    self._provider_search(request, origins, (hub,), travel_date),
-                    self._provider_search(request, (hub,), destinations, travel_date),
+                    self._provider_search(
+                        request,
+                        origins,
+                        (hub,),
+                        travel_date,
+                        direction=direction,
+                        query_type="hub_first_leg",
+                        hub=hub,
+                    ),
+                    self._provider_search(
+                        request,
+                        (hub,),
+                        destinations,
+                        travel_date,
+                        direction=direction,
+                        query_type="hub_second_leg",
+                        hub=hub,
+                    ),
                 )
                 route_plan = RoutePlan(
                     origin_airports=origins,
@@ -496,7 +597,11 @@ class TripSearchService:
                 for item in (*first, *second):
                     leg = item.legs[0]
                     by_route.setdefault((leg.origin, leg.destination), []).append(item)
+                synthesis_clock = perf_counter()
                 synthesized = synthesize_via_hubs(by_route, route_plan)
+                snapshot.diagnostics.itinerary_synthesis_ms += (
+                    perf_counter() - synthesis_clock
+                ) * 1000
                 window = (
                     request.outbound_time_window
                     if direction is Direction.OUTBOUND
@@ -562,7 +667,11 @@ class TripSearchService:
                     )
                 async with update_lock:
                     accumulated.extend(options)
+                    ranking_clock = perf_counter()
                     self._set_rankings(results, accumulated)
+                    snapshot.diagnostics.ranking_filtering_ms += (
+                        perf_counter() - ranking_clock
+                    ) * 1000
                     await self.registry.update(snapshot)
                     await self._event(
                         snapshot.search_id,

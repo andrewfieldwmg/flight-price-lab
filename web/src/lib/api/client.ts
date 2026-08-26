@@ -30,12 +30,15 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
 export async function streamSearch(
   request: TripSearchRequest,
   onEvent: (event: SearchEvent) => void,
+  onTiming?: (phase: "response_headers" | "first_chunk" | "final_event", elapsedMs: number) => void,
 ): Promise<void> {
+  const started = performance.now();
   const response = await fetch(resolveApiUrl("/api/search/stream"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request),
   });
+  onTiming?.("response_headers", performance.now() - started);
   if (!response.ok) {
     const body = await response.json().catch(() => null);
     throw new Error(body?.error?.message ?? body?.detail ?? `HTTP ${response.status}`);
@@ -45,6 +48,7 @@ export async function streamSearch(
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  let receivedFirstChunk = false;
   const dispatchLines = (final = false) => {
     const lines = buffer.split("\n");
     buffer = final ? "" : (lines.pop() ?? "");
@@ -57,12 +61,17 @@ export async function streamSearch(
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
+    if (!receivedFirstChunk) {
+      receivedFirstChunk = true;
+      onTiming?.("first_chunk", performance.now() - started);
+    }
     buffer += decoder.decode(value, { stream: true });
     dispatchLines();
   }
   buffer += decoder.decode();
   if (buffer.trim()) buffer += "\n";
   dispatchLines(true);
+  onTiming?.("final_event", performance.now() - started);
 }
 
 export async function getSearchKey(request: TripSearchRequest): Promise<string> {

@@ -212,6 +212,23 @@ class SearchDiagnostics(BaseModel):
     provider_calls_avoided_this_invocation: int = 0
     original_provider_calls: int | None = None
     original_search_completed_at: datetime | None = None
+    search_started_at: datetime | None = None
+    search_completed_at: datetime | None = None
+    total_duration_ms: float | None = None
+    direct_outbound_ms: float = 0
+    direct_return_ms: float = 0
+    hub_search_total_ms: float = 0
+    normalization_ms: float = 0
+    itinerary_synthesis_ms: float = 0
+    ranking_filtering_ms: float = 0
+    postgres_write_ms: float = 0
+    final_serialization_ms: float = 0
+    provider_calls_total: int = 0
+    provider_calls_concurrent_peak: int = 0
+    slowest_provider_call_ms: float = 0
+    median_provider_call_ms: float = 0
+    p95_provider_call_ms: float = 0
+    provider_requests: list[dict[str, object]] = Field(default_factory=list)
 
 
 class SearchSnapshot(BaseModel):

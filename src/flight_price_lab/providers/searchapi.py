@@ -15,6 +15,10 @@ SEARCHAPI_ACCOUNT_ENDPOINT = "https://www.searchapi.io/api/v1/me"
 class SearchAPIError(RuntimeError):
     """A safe, concise SearchAPI request failure."""
 
+    def __init__(self, message: str, *, status_code: int | None = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+
 
 class SearchAPIClient:
     """SearchAPI client with bearer authentication and no automatic retries."""
@@ -140,7 +144,8 @@ class SearchAPIClient:
             )
             suffix = f": {provider_message}" if provider_message else ""
             raise SearchAPIError(
-                f"SearchAPI returned HTTP {error.response.status_code}{suffix}"
+                f"SearchAPI returned HTTP {error.response.status_code}{suffix}",
+                status_code=error.response.status_code,
             ) from None
         except (httpx.HTTPError, ValueError) as error:
             raise SearchAPIError(

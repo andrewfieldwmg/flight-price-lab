@@ -4,9 +4,11 @@ import asyncio
 from collections.abc import AsyncIterator
 from copy import deepcopy
 from dataclasses import dataclass, field
+from time import perf_counter
 from typing import Protocol
 
 from flight_price_lab.api.models import SearchSnapshot, TripSearchRequest
+from flight_price_lab.api.search_logging import search_log
 from flight_price_lab.models.flight import FlightOffer
 
 
@@ -68,13 +70,34 @@ class InMemorySearchRegistry:
         self._entries: dict[str, _Entry] = {}
         self._candidate_store = candidate_store
         self._search_store = search_store
+        self._postgres_write_ms: dict[str, float] = {}
+        self._reported_postgres_write_ms: dict[str, float] = {}
+
+    def _record_postgres_write(
+        self, search_id: str, table: str, started: float
+    ) -> None:
+        duration_ms = (perf_counter() - started) * 1000
+        self._postgres_write_ms[search_id] = (
+            self._postgres_write_ms.get(search_id, 0) + duration_ms
+        )
+        search_log(
+            "POSTGRES_WRITE_TIMING",
+            trip_id=search_id,
+            table=table,
+            duration_ms=round(duration_ms, 2),
+        )
+
+    def postgres_write_ms(self, search_id: str) -> float:
+        return self._postgres_write_ms.get(search_id, 0)
 
     async def create(
         self, snapshot: SearchSnapshot, request: TripSearchRequest | None = None
     ) -> None:
         self._entries[snapshot.search_id] = _Entry(snapshot=deepcopy(snapshot))
         if self._search_store is not None and request is not None:
+            started = perf_counter()
             self._search_store.create(snapshot, request)
+            self._record_postgres_write(snapshot.search_id, "search_sessions", started)
 
     async def get(self, search_id: str) -> SearchSnapshot | None:
         entry = self._entries.get(search_id)
@@ -87,14 +110,23 @@ class InMemorySearchRegistry:
     async def update(self, snapshot: SearchSnapshot) -> None:
         self._entries[snapshot.search_id].snapshot = deepcopy(snapshot)
         if self._search_store is not None:
+            started = perf_counter()
             self._search_store.update(snapshot)
+            self._record_postgres_write(snapshot.search_id, "search_sessions", started)
+            total = self.postgres_write_ms(snapshot.search_id)
+            previous = self._reported_postgres_write_ms.get(snapshot.search_id, 0)
+            snapshot.diagnostics.postgres_write_ms += total - previous
+            self._reported_postgres_write_ms[snapshot.search_id] = total
+            self._entries[snapshot.search_id].snapshot = deepcopy(snapshot)
 
     async def register_booking_candidate(
         self, search_id: str, option_id: str, offers: tuple[FlightOffer, ...]
     ) -> None:
         self._entries[search_id].booking_candidates[option_id] = deepcopy(offers)
         if self._candidate_store is not None:
+            started = perf_counter()
             self._candidate_store.put(search_id, option_id, offers)
+            self._record_postgres_write(search_id, "booking_candidates", started)
 
     async def get_booking_candidate(
         self, search_id: str, option_id: str

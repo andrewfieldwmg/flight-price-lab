@@ -156,6 +156,23 @@ export interface SearchSnapshot {
     provider_calls_avoided_this_invocation: number;
     original_provider_calls: number | null;
     original_search_completed_at: string | null;
+    search_started_at?: string | null;
+    search_completed_at?: string | null;
+    total_duration_ms?: number | null;
+    direct_outbound_ms?: number;
+    direct_return_ms?: number;
+    hub_search_total_ms?: number;
+    normalization_ms?: number;
+    itinerary_synthesis_ms?: number;
+    ranking_filtering_ms?: number;
+    postgres_write_ms?: number;
+    final_serialization_ms?: number;
+    provider_calls_total?: number;
+    provider_calls_concurrent_peak?: number;
+    slowest_provider_call_ms?: number;
+    median_provider_call_ms?: number;
+    p95_provider_call_ms?: number;
+    provider_requests?: Record<string, unknown>[];
   };
 }
 

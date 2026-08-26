@@ -4,7 +4,8 @@ import asyncio
 import json
 import os
 from contextlib import suppress
-from datetime import date
+from datetime import UTC, date, datetime
+from time import perf_counter
 from typing import Annotated
 
 from fastapi import FastAPI, HTTPException, Query, Request
@@ -41,6 +42,7 @@ from flight_price_lab.api.provider_usage import (
     SearchAPIUsageGateway,
 )
 from flight_price_lab.api.registry import InMemorySearchRegistry
+from flight_price_lab.api.search_logging import search_log
 from flight_price_lab.api.service import TripSearchService, trip_search_key
 from flight_price_lab.config import Settings
 from flight_price_lab.providers.searchapi import SearchAPIClient, SearchAPIError
@@ -149,13 +151,68 @@ def create_app(
     async def stream_search(request: TripSearchRequest) -> StreamingResponse:
         """Run and stream one search on the same request/function instance."""
 
+        request_received_at = datetime.now(UTC)
+        request_clock = perf_counter()
         service = TripSearchService(get_provider(), registry)
         search_id = await service.create(request)
 
         async def stream():
             task = asyncio.create_task(service.run(search_id, request))
+            first_event_at: datetime | None = None
+            first_results_at: datetime | None = None
+            first_outbound_at: datetime | None = None
+            first_return_at: datetime | None = None
             try:
                 async for event in registry.events(search_id):
+                    sent_at = datetime.now(UTC)
+                    if first_event_at is None:
+                        first_event_at = sent_at
+                    direction = event.data.get("direction")
+                    if event.event == "results_updated":
+                        if first_results_at is None:
+                            first_results_at = sent_at
+                        if direction == "OUTBOUND" and first_outbound_at is None:
+                            first_outbound_at = sent_at
+                        if direction == "RETURN" and first_return_at is None:
+                            first_return_at = sent_at
+                    if event.event in {"search_completed", "search_failed"}:
+                        stream_timings = {
+                            "request_received": request_received_at.isoformat(),
+                            "first_event_sent": (
+                                first_event_at.isoformat() if first_event_at else None
+                            ),
+                            "first_outbound_results_sent": (
+                                first_outbound_at.isoformat()
+                                if first_outbound_at
+                                else None
+                            ),
+                            "first_return_results_sent": (
+                                first_return_at.isoformat() if first_return_at else None
+                            ),
+                            "final_event_sent": sent_at.isoformat(),
+                            "time_to_first_event_ms": (
+                                (first_event_at - request_received_at).total_seconds()
+                                * 1000
+                                if first_event_at
+                                else None
+                            ),
+                            "time_to_first_results_ms": (
+                                (first_results_at - request_received_at).total_seconds()
+                                * 1000
+                                if first_results_at
+                                else None
+                            ),
+                            "time_to_complete_ms": (
+                                perf_counter() - request_clock
+                            )
+                            * 1000,
+                        }
+                        event.data["stream_timings"] = stream_timings
+                        search_log(
+                            "STREAM_TIMINGS",
+                            trip_id=search_id,
+                            **stream_timings,
+                        )
                     yield json.dumps(
                         {
                             "sequence": event.sequence,
