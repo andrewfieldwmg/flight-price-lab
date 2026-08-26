@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { elapsedShort, historyAccessibleLabel, historySignal, historyTooltip, percentageChangeSignal, priceHistoryState, sinceLastSeen } from "./price-history";
+import { elapsedCompactDay, elapsedShort, elapsedSummaryDay, historyAccessibleLabel, historySignal, historyTooltip, percentageChangeSignal, priceHistoryState, sinceLastSeen } from "./price-history";
 
 const history = {
   history_status: "PREVIOUS_FOUND" as const,
@@ -50,5 +50,19 @@ describe("observation history language", () => {
   it("formats observed elapsed intervals", () => {
     expect(elapsedShort(18 * 3600)).toBe("18h");
     expect(elapsedShort(15 * 86400)).toBe("2w");
+  });
+
+  it.each([
+    [3 * 3600, "today", "today"],
+    [24 * 3600 - 60, "today", "today"],
+    [24 * 3600, "1d ago", "since yesterday"],
+    [48 * 3600 - 60, "1d ago", "since yesterday"],
+    [48 * 3600, "2d ago", "since 2d ago"],
+    [72 * 3600, "3d ago", "since 3d ago"],
+  ])("uses day-level table and summary wording for %s seconds", (seconds, compact, summary) => {
+    expect(elapsedCompactDay(seconds)).toBe(compact);
+    expect(elapsedSummaryDay(seconds)).toBe(summary);
+    expect(compact).not.toMatch(/[hm]/);
+    expect(summary).not.toMatch(/\d+[hm]/);
   });
 });

@@ -7,7 +7,7 @@ import { localClock } from "./direction-results";
 import { money } from "./price-display";
 import { duration } from "./result-card";
 import { BookingPreparation } from "./booking-preparation";
-import { elapsedShort, historyAccessibleLabel, priceHistoryState } from "@/lib/search/price-history";
+import { elapsedSummaryDay, historyAccessibleLabel, priceHistoryState } from "@/lib/search/price-history";
 
 function summaryChangeSignal(history: PriceHistoryComparison | null | undefined): string {
   const state = priceHistoryState(history);
@@ -21,7 +21,11 @@ function summaryChangeSignal(history: PriceHistoryComparison | null | undefined)
 
 function summaryDirectionHistory(history: PriceHistoryComparison | null | undefined): string {
   const signal = summaryChangeSignal(history);
-  return priceHistoryState(history) === "CHANGED" ? `${signal} since last seen` : signal;
+  const state = priceHistoryState(history);
+  if (state === "CHANGED" || state === "UNCHANGED") {
+    return `${signal} ${elapsedSummaryDay(history?.elapsed_seconds ?? null)}`.trim();
+  }
+  return signal;
 }
 
 function summaryHistoryAccessibleLabel(history: PriceHistoryComparison | null | undefined): string {
@@ -51,7 +55,7 @@ function DirectionSummary({ label, option, showBaggage, date }: { label: string;
     {summaryDirectionHistory(option.history) && <div className="summary-history" aria-label={summaryHistoryAccessibleLabel(option.history)}>{summaryDirectionHistory(option.history)}</div>}
     <div className="summary-route">
       {option.legs.map((leg, index) => <div key={`${leg.flight_number}-${index}`}>
-        <div className="summary-leg" aria-label={`${leg.origin} ${localClock(leg.departure_at)} to ${leg.destination} ${localClock(leg.arrival_at)} ${leg.airline} ${leg.flight_number}${option.is_self_transfer && leg.constituent_price !== null && leg.constituent_price !== undefined && summaryChangeSignal(leg.history) ? `. ${summaryHistoryAccessibleLabel(leg.history)}` : ""}`}><strong>{leg.origin}</strong> {localClock(leg.departure_at)} <span>→</span> <strong>{leg.destination}</strong> {localClock(leg.arrival_at)} <small>({leg.airline} {leg.flight_number})</small>{option.is_self_transfer && leg.constituent_price !== null && leg.constituent_price !== undefined && <b>{money(leg.constituent_price, option.currency)} {summaryChangeSignal(leg.history) && <em>{summaryChangeSignal(leg.history)}</em>}</b>}</div>
+        <div className="summary-leg" aria-label={`${leg.origin} ${localClock(leg.departure_at)} to ${leg.destination} ${localClock(leg.arrival_at)} ${leg.airline} ${leg.flight_number}${option.is_self_transfer && leg.constituent_price !== null && leg.constituent_price !== undefined && summaryChangeSignal(leg.history) ? `. ${summaryHistoryAccessibleLabel(leg.history)}` : ""}`}><strong>{leg.origin}</strong> {localClock(leg.departure_at)} <span>→</span> <strong>{leg.destination}</strong> {localClock(leg.arrival_at)} <small>({leg.airline} {leg.flight_number})</small>{option.is_self_transfer && leg.constituent_price !== null && leg.constituent_price !== undefined && <b>{money(leg.constituent_price, option.currency)} {summaryChangeSignal(leg.history) && <em>{summaryDirectionHistory(leg.history)}</em>}</b>}</div>
         {index < option.legs.length - 1 && <div className="summary-transfer">{option.connection_airport} · {duration(option.connection_minutes)} transfer</div>}
       </div>)}
     </div>
@@ -132,8 +136,8 @@ export function TripSummary({ outbound, inbound, outboundBaseline, inboundBaseli
         : tripHistoryPercent === null
           ? "History unavailable"
     : tripHistoryPercent === 0
-      ? `No change since last seen ${elapsedShort(tripHistoryElapsed)} ago`
-      : `${tripHistoryPercent > 0 ? "↑" : "↓"} ${Math.abs(tripHistoryPercent).toFixed(1)}% since last seen ${elapsedShort(tripHistoryElapsed)} ago`;
+      ? `No change ${elapsedSummaryDay(tripHistoryElapsed)}`
+      : `${tripHistoryPercent > 0 ? "↑" : "↓"} ${Math.abs(tripHistoryPercent).toFixed(1)}% ${elapsedSummaryDay(tripHistoryElapsed)}`;
   return <>
     {compactVisible && <aside className="compact-trip-summary" aria-label="Compact selected trip summary">
       <div><span>Trip total</span><strong>{money(summary.baseAlternativePrice, currency)}{tripHistoryCompact && ` · ${tripHistoryCompact}`}</strong></div>

@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import type { ConnectionProfile, DirectionResults as Results, TripOption } from "@/lib/api/types";
 import { money } from "./price-display";
 import { duration } from "./result-card";
-import { elapsedShort, historyAccessibleLabel, historySignal, historyTooltip, priceHistoryState } from "@/lib/search/price-history";
+import { elapsedCompactDay, historyAccessibleLabel, historySignal, historyTooltip, priceHistoryState } from "@/lib/search/price-history";
 
 export type SortKey = "saving" | "price" | "departure" | "arrival" | "transfer" | "journey" | "extra";
 type ViewMode = "all" | "efficient";
@@ -201,6 +201,6 @@ function HistoryCell({ option }: { option: TripOption }) {
   return <td data-label="Change" className={`history-cell ${Number(option.history?.price_change_amount ?? 0) > 0 ? "history-up" : Number(option.history?.price_change_amount ?? 0) < 0 ? "history-down" : ""}`} title={historyTooltip(option.history, option.base_price, option.currency)}>
     {state === "LOADING"
       ? <span className="loading-spinner history-loading-spinner" role="status" aria-label="Loading price history" />
-      : <><strong aria-label={historyAccessibleLabel(option.history)}>{historySignal(option.history)}</strong>{option.history?.history_status === "PREVIOUS_FOUND" && <small>{elapsedShort(option.history.elapsed_seconds)} ago</small>}</>}
+      : <><strong aria-label={historyAccessibleLabel(option.history)}>{historySignal(option.history)}</strong>{option.history?.history_status === "PREVIOUS_FOUND" && <small>{elapsedCompactDay(option.history.elapsed_seconds)}</small>}</>}
   </td>;
 }

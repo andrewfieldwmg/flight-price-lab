@@ -47,13 +47,13 @@ describe("selected trip summary", () => {
     outbound.legs[0].history = { ...comparison, previous_price: "250", price_change_amount: "8", price_change_percent: "3.2" };
     outbound.legs[1].constituent_price = "228";
     render(<TripSummary outbound={outbound} inbound={inbound} outboundBaseline={option({ id: "out" })} inboundBaseline={option({ id: "in", direction: "RETURN" })} outboundComparisonEnabled inboundComparisonEnabled />);
-    expect(screen.getByText("↑ 6.3% since last seen")).toBeInTheDocument();
+    expect(screen.getByText("↑ 6.3% since 3d ago")).toBeInTheDocument();
     expect(screen.getByText("£258")).toBeInTheDocument();
-    expect(screen.getByText("↑ 3.2%")).toBeInTheDocument();
+    expect(screen.getByText("↑ 3.2% since 3d ago")).toBeInTheDocument();
     expect(screen.getByText("New", { selector: ".summary-leg em" })).toBeInTheDocument();
-    expect(screen.getByText("↓ 10.0% since last seen")).toBeInTheDocument();
+    expect(screen.getByText("↓ 10.0% since 3d ago")).toBeInTheDocument();
     expect(screen.getByText("Previously £918")).toBeInTheDocument();
-    expect(screen.getByText("↑ 5.9% since last seen 3d ago")).toHaveAccessibleName("Trip price increased by 5.9 percent since last seen");
+    expect(screen.getByText("↑ 5.9% since 3d ago")).toHaveAccessibleName("Trip price increased by 5.9 percent since last seen");
   });
 
   it("keeps the legacy summary fallback separate from table loading presentation", () => {
@@ -79,7 +79,7 @@ describe("selected trip summary", () => {
     inbound.history = { ...comparison, previous_observation_run_id: "return-run" };
     render(<TripSummary outbound={outbound} inbound={inbound} outboundBaseline={option({ id: "out" })} inboundBaseline={option({ id: "in", direction: "RETURN" })} />);
     expect(screen.queryByText(/Previously/)).not.toBeInTheDocument();
-    expect(screen.getAllByText(/since last seen/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/since yesterday/).length).toBeGreaterThan(0);
   });
 
   it("collapses unchanged nonstop history without repeating leg price", () => {
@@ -88,11 +88,18 @@ describe("selected trip summary", () => {
     selected.legs[0].constituent_price = "849";
     selected.legs[0].history = unchanged;
     render(<TripSummary outbound={selected} inbound={null} outboundBaseline={selected} inboundBaseline={null} />);
-    expect(screen.getByText("No change since last seen 1h ago")).toBeInTheDocument();
-    expect(screen.getByText("No change")).toBeInTheDocument();
+    expect(screen.getAllByText("No change today")).toHaveLength(2);
     expect(screen.queryByText(/Previously/)).not.toBeInTheDocument();
     expect(screen.getAllByText("£849")).toHaveLength(2);
     expect(screen.queryByText("No change", { selector: ".summary-leg em" })).not.toBeInTheDocument();
+  });
+
+  it("uses natural day-level wording for a one-day increase", () => {
+    const increased = { history_status: "PREVIOUS_FOUND" as const, previous_price: "800", price_change_amount: "49", price_change_percent: "6.125", previous_observed_at: "2026-08-20T08:00:00Z", elapsed_seconds: 24 * 3600, previous_observation_run_id: "run-1" };
+    const selected = option({ id: "increased", base_price: "849", history: increased });
+    render(<TripSummary outbound={selected} inbound={null} outboundBaseline={selected} inboundBaseline={null} />);
+    expect(screen.getAllByText("↑ 6.1% since yesterday")).toHaveLength(2);
+    expect(screen.queryByText(/\d+[hm] ago/)).not.toBeInTheDocument();
   });
 
   it("keeps baggage hidden until requested and leaves the base headline unchanged", () => {

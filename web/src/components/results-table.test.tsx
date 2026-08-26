@@ -180,7 +180,7 @@ describe("dense flight results", () => {
       price_change_amount: "-20",
       price_change_percent: "-5",
       previous_observed_at: "2026-08-20T08:00:00Z",
-      elapsed_seconds: 86400,
+      elapsed_seconds: 3 * 3600,
       previous_observation_run_id: "run-1",
     };
     const decreased = option({ id: "decreased", base_price: "380", history: comparison });
@@ -190,6 +190,8 @@ describe("dense flight results", () => {
     expect(screen.getByText("↓ 5.0%")).toHaveAccessibleName("Price decreased by 5.0 percent since last seen");
     expect(screen.getByText("— (0%)")).toHaveAccessibleName("No price change since last seen");
     expect(screen.getByText("New")).toHaveAccessibleName("First price observation");
+    expect(screen.getAllByText("today")).toHaveLength(2);
+    expect(screen.queryByText(/\d+[hm] ago/)).not.toBeInTheDocument();
   });
 
   it("shows unresolved history as loading rather than New", () => {

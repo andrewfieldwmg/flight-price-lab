@@ -16,6 +16,25 @@ export function elapsedShort(seconds: number | null): string {
   return `${Math.floor(seconds / (7 * 86400))}w`;
 }
 
+export function elapsedDayCount(seconds: number | null): number | null {
+  if (seconds === null) return null;
+  return Math.max(0, Math.floor(seconds / 86400));
+}
+
+export function elapsedCompactDay(seconds: number | null): string {
+  const days = elapsedDayCount(seconds);
+  if (days === null) return "";
+  return days === 0 ? "today" : `${days}d ago`;
+}
+
+export function elapsedSummaryDay(seconds: number | null): string {
+  const days = elapsedDayCount(seconds);
+  if (days === null) return "";
+  if (days === 0) return "today";
+  if (days === 1) return "since yesterday";
+  return `since ${days}d ago`;
+}
+
 export function elapsedDetailed(seconds: number | null): string {
   if (seconds === null) return "unknown interval";
   const days = Math.floor(seconds / 86400);
