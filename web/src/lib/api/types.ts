@@ -136,6 +136,7 @@ export interface BookingSession {
   original_total: string;
   current_total: string | null;
   price_delta: string | null;
+  booking_provider_calls_this_invocation: number;
 }
 
 export interface DirectionResults {
@@ -185,6 +186,7 @@ export interface SearchSnapshot {
     final_serialization_ms?: number;
     provider_calls_total?: number;
     provider_calls_concurrent_peak?: number;
+    backend_cache_age_seconds?: number | null;
     slowest_provider_call_ms?: number;
     median_provider_call_ms?: number;
     p95_provider_call_ms?: number;
@@ -199,8 +201,18 @@ export interface SearchEvent {
 
 export interface CalendarPrice {
   date: string;
-  price: string;
+  price: string | null;
   currency: string;
+  state: "LOADED" | "CACHED" | "STALE_AVAILABLE" | "UNAVAILABLE" | "ERROR";
+  classification: "LOW" | "TYPICAL" | "HIGH" | null;
+  observed_at: string | null;
+}
+
+export interface CalendarResponse {
+  dates: CalendarPrice[];
+  calendar_provider_calls_this_invocation: number;
+  calendar_calls_avoided: number;
+  failures: number;
 }
 
 export interface ProviderUsage {

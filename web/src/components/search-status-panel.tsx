@@ -24,6 +24,10 @@ function cachedAt(snapshot: SearchSnapshot) {
 
 const providerCallsLabel = (count: number) => `${count} provider ${count === 1 ? "call" : "calls"}`;
 const avoidedCallsLabel = (count: number) => `${count} ${count === 1 ? "call" : "calls"} avoided`;
+function cacheAge(minutes: number) {
+  if (minutes < 60) return `${minutes}m ago`;
+  return `${Math.floor(minutes / 60)}h ago`;
+}
 
 export function SearchStatusPanel({ snapshot, cachedMinutes, directionProgress, pendingText }: { snapshot: SearchSnapshot | null; cachedMinutes: number | null; directionProgress: SearchUiState["directionProgress"]; pendingText?: string }) {
   const [expanded, setExpanded] = useState(false);
@@ -35,7 +39,8 @@ export function SearchStatusPanel({ snapshot, cachedMinutes, directionProgress, 
   const status = snapshot.status === "completed" || partial ? "Search complete" : "Searching";
   const calls = diagnostics.provider_calls_this_invocation;
   const avoided = diagnostics.provider_calls_avoided_this_invocation;
-  const cachedLabel = cachedMinutes !== null ? `cached ${cachedMinutes} min ago` : source === "Backend cache" ? "backend cached" : null;
+  const backendCachedMinutes = diagnostics.backend_cache_age_seconds == null ? null : Math.floor(diagnostics.backend_cache_age_seconds / 60);
+  const cachedLabel = cachedMinutes !== null ? `Cached · ${cacheAge(cachedMinutes)}` : source === "Backend cache" ? `Cached${backendCachedMinutes === null ? "" : ` · ${cacheAge(backendCachedMinutes)}`}` : null;
   const collapsed = source !== "Live"
     ? [status, cachedLabel, providerCallsLabel(calls), avoidedCallsLabel(avoided)].filter(Boolean).join(" · ")
     : [status, providerCallsLabel(calls), partial ? `${failed} failed` : `${failed} failures`].join(" · ");

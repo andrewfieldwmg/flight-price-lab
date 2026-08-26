@@ -20,11 +20,11 @@ const results: SearchSnapshot = {
 describe("completed search localStorage cache", () => {
   beforeEach(() => window.localStorage.clear());
 
-  it("expires after one hour", () => {
+  it("expires after twenty-four hours", () => {
     const saved = new Date("2026-08-24T12:00:00Z");
     saveLocalSearch("key-1", request, results, saved);
-    expect(loadLocalSearch("key-1", new Date("2026-08-24T12:59:59Z"))).not.toBeNull();
-    expect(loadLocalSearch("key-1", new Date("2026-08-24T13:00:00Z"))).toBeNull();
+    expect(loadLocalSearch("key-1", new Date("2026-08-25T11:59:59Z"))).not.toBeNull();
+    expect(loadLocalSearch("key-1", new Date("2026-08-25T12:00:00Z"))).toBeNull();
   });
 
   it("restores the completed table snapshot and selection source", () => {

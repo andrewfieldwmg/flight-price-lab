@@ -23,7 +23,7 @@ function ticket(overrides = {}) {
 }
 
 function session(overrides = {}) {
-  return { booking_session_id: "opaque-session", state: "READY", original_total: "849", current_total: "813", price_delta: "-36", tickets: [ticket()], ...overrides };
+  return { booking_session_id: "opaque-session", state: "READY", original_total: "849", current_total: "813", price_delta: "-36", booking_provider_calls_this_invocation: 1, tickets: [ticket()], ...overrides };
 }
 
 describe("BookingPreparation drawer", () => {
@@ -110,14 +110,15 @@ describe("BookingPreparation drawer", () => {
     expect(handoff).toBeEnabled();
   });
 
-  it("reprices again only through Refresh prices", async () => {
+  it("reprices again only through Refresh booking prices", async () => {
     prepareBooking.mockResolvedValue(session());
     render(<BookingPreparation searchId="search" optionIds={["outbound"]} />);
     fireEvent.click(screen.getByRole("button", { name: "Prepare booking" }));
     await screen.findByRole("dialog");
     expect(prepareBooking).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByRole("button", { name: "Refresh prices" }));
+    fireEvent.click(screen.getByRole("button", { name: "Refresh booking prices" }));
     await waitFor(() => expect(prepareBooking).toHaveBeenCalledTimes(2));
+    expect(prepareBooking).toHaveBeenLastCalledWith("search", ["outbound"], true);
   });
 
   it("marks a changed selection stale and only prepares it on explicit action", async () => {
@@ -130,7 +131,7 @@ describe("BookingPreparation drawer", () => {
     expect(screen.getByRole("button", { name: "Prepare selected trip" })).toBeInTheDocument();
     expect(prepareBooking).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: "Prepare new selection" }));
-    await waitFor(() => expect(prepareBooking).toHaveBeenLastCalledWith("search", ["new"]));
+    await waitFor(() => expect(prepareBooking).toHaveBeenLastCalledWith("search", ["new"], false));
     fireEvent.click(screen.getByRole("button", { name: "Close prepared booking" }));
     fireEvent.click(screen.getByRole("button", { name: "View prepared booking" }));
     expect(prepareBooking).toHaveBeenCalledTimes(2);

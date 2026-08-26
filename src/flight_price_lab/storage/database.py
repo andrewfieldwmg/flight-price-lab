@@ -7,7 +7,7 @@ import logging
 import os
 import re
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from hashlib import sha256
 from pathlib import Path
@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any
 from dotenv import dotenv_values
 from sqlalchemy import (
     Boolean,
+    Date,
     DateTime,
     Index,
     Integer,
@@ -48,6 +49,7 @@ class SearchCacheEntry(Base):
     provider: Mapped[str] = mapped_column(String(50), nullable=False)
     request_json: Mapped[str] = mapped_column(Text, nullable=False)
     raw_response_path: Mapped[str] = mapped_column(Text, nullable=False)
+    response_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
@@ -193,6 +195,227 @@ class TripOptionObservation(Base):
     constituent_fingerprints_json: Mapped[str] = mapped_column(Text, nullable=False)
 
 
+class CalendarPriceObservation(Base):
+    __tablename__ = "calendar_price_observation"
+    __table_args__ = (
+        Index(
+            "ix_calendar_price_market_date_observed",
+            "market_key",
+            "travel_date",
+            "observed_at",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    market_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    travel_date: Mapped[date] = mapped_column(Date, nullable=False)
+    direction: Mapped[str] = mapped_column(String(16), nullable=False)
+    observed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    lowest_direct_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    passenger_context: Mapped[str] = mapped_column(Text, nullable=False)
+    source_search_key: Mapped[str] = mapped_column(String(64), nullable=False)
+
+
+class CalendarPriceStore:
+    """Immutable direct-fare observations with a 24-hour freshness window."""
+
+    def __init__(
+        self,
+        database_url: str | None = None,
+        *,
+        engine: Engine | None = None,
+        ttl: timedelta = timedelta(hours=24),
+    ) -> None:
+        self.engine = engine or create_database_engine(database_url)
+        self.ttl = ttl
+
+    @staticmethod
+    def market_key(
+        origins: list[str] | tuple[str, ...],
+        destinations: list[str] | tuple[str, ...],
+        adults: int,
+        children: int,
+        currency: str,
+        direction: str,
+    ) -> str:
+        payload = {
+            "origins": sorted(set(origins)),
+            "destinations": sorted(set(destinations)),
+            "adults": adults,
+            "children": children,
+            "currency": currency.upper(),
+            "direction": direction.upper(),
+            "stops": "nonstop",
+        }
+        return sha256(
+            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+
+    def get_fresh(
+        self,
+        *,
+        origins: list[str] | tuple[str, ...],
+        destinations: list[str] | tuple[str, ...],
+        travel_date: date,
+        adults: int,
+        children: int,
+        currency: str,
+        direction: str,
+        now: datetime | None = None,
+    ) -> CalendarPriceObservation | None:
+        current = now or datetime.now(UTC)
+        key = self.market_key(
+            origins, destinations, adults, children, currency, direction
+        )
+        with Session(self.engine) as session:
+            entry = session.scalar(
+                select(CalendarPriceObservation)
+                .where(
+                    CalendarPriceObservation.market_key == key,
+                    CalendarPriceObservation.travel_date == travel_date,
+                    CalendarPriceObservation.observed_at > current - self.ttl,
+                )
+                .order_by(CalendarPriceObservation.observed_at.desc())
+                .limit(1)
+            )
+            if entry is not None:
+                session.expunge(entry)
+            return entry
+
+    def get_latest(
+        self,
+        *,
+        origins: list[str] | tuple[str, ...],
+        destinations: list[str] | tuple[str, ...],
+        travel_date: date,
+        adults: int,
+        children: int,
+        currency: str,
+        direction: str,
+    ) -> CalendarPriceObservation | None:
+        """Return the newest observation regardless of age for failure fallback."""
+
+        key = self.market_key(
+            origins, destinations, adults, children, currency, direction
+        )
+        with Session(self.engine) as session:
+            entry = session.scalar(
+                select(CalendarPriceObservation)
+                .where(
+                    CalendarPriceObservation.market_key == key,
+                    CalendarPriceObservation.travel_date == travel_date,
+                )
+                .order_by(CalendarPriceObservation.observed_at.desc())
+                .limit(1)
+            )
+            if entry is not None:
+                session.expunge(entry)
+            return entry
+
+    def put(
+        self,
+        *,
+        origins: list[str] | tuple[str, ...],
+        destinations: list[str] | tuple[str, ...],
+        travel_date: date,
+        direction: str,
+        lowest_direct_price: Decimal,
+        currency: str,
+        adults: int,
+        children: int,
+        source_search_key: str,
+        observed_at: datetime | None = None,
+    ) -> CalendarPriceObservation:
+        entry = CalendarPriceObservation(
+            market_key=self.market_key(
+                origins, destinations, adults, children, currency, direction
+            ),
+            travel_date=travel_date,
+            direction=direction.upper(),
+            observed_at=observed_at or datetime.now(UTC),
+            lowest_direct_price=lowest_direct_price,
+            currency=currency.upper(),
+            passenger_context=json.dumps(
+                {"adults": adults, "children": children}, separators=(",", ":")
+            ),
+            source_search_key=source_search_key,
+        )
+        with Session(self.engine) as session:
+            session.add(entry)
+            session.commit()
+            session.refresh(entry)
+            session.expunge(entry)
+        return entry
+
+    def reuse_search_baseline(
+        self,
+        *,
+        origins: list[str] | tuple[str, ...],
+        destinations: list[str] | tuple[str, ...],
+        travel_date: date,
+        adults: int,
+        children: int,
+        currency: str,
+        direction: str,
+        now: datetime | None = None,
+    ) -> CalendarPriceObservation | None:
+        """Read through recent durable search snapshots before calling the provider."""
+
+        current = now or datetime.now(UTC)
+        with Session(self.engine) as session:
+            rows = session.scalars(
+                select(SearchSessionEntry)
+                .where(
+                    SearchSessionEntry.status.in_(("completed", "partial_failure")),
+                    SearchSessionEntry.updated_at > current - self.ttl,
+                )
+                .order_by(SearchSessionEntry.updated_at.desc())
+            )
+            for row in rows:
+                request = json.loads(row.request_json)
+                snapshot = json.loads(row.snapshot_json)
+                is_return = direction.upper() == "RETURN"
+                expected_origins = request.get(
+                    "destinations" if is_return else "origins"
+                )
+                expected_destinations = request.get(
+                    "origins" if is_return else "destinations"
+                )
+                expected_date = request.get(
+                    "return_date" if is_return else "outbound_date"
+                )
+                if (
+                    sorted(expected_origins or []) != sorted(origins)
+                    or sorted(expected_destinations or []) != sorted(destinations)
+                    or expected_date != travel_date.isoformat()
+                    or request.get("adults") != adults
+                    or request.get("children") != children
+                    or request.get("currency") != currency.upper()
+                ):
+                    continue
+                result = snapshot.get("return" if is_return else "outbound") or {}
+                baseline = result.get("baseline")
+                if not isinstance(baseline, dict) or baseline.get("base_price") is None:
+                    continue
+                observed_at = row.completed_at or row.updated_at
+                return self.put(
+                    origins=origins,
+                    destinations=destinations,
+                    travel_date=travel_date,
+                    direction=direction,
+                    lowest_direct_price=Decimal(str(baseline["base_price"])),
+                    currency=currency,
+                    adults=adults,
+                    children=children,
+                    source_search_key=row.search_key,
+                    observed_at=observed_at,
+                )
+        return None
+
+
 def normalize_database_url(url: str) -> str:
     """Use psycopg 3 for standard managed-Postgres URL forms."""
 
@@ -281,7 +504,7 @@ class SearchResponseCache:
         *,
         engine: Engine | None = None,
         raw_root: str | Path = "data/raw/searchapi",
-        ttl: timedelta = timedelta(minutes=60),
+        ttl: timedelta = timedelta(hours=24),
     ) -> None:
         self.engine = engine or create_database_engine(database_url)
         self.raw_root = Path(raw_root)
@@ -310,13 +533,16 @@ class SearchResponseCache:
             expires_at = entry.expires_at
             if expires_at.tzinfo is None:
                 expires_at = expires_at.replace(tzinfo=UTC)
-            path = Path(entry.raw_response_path)
             age_seconds = (current - created_at).total_seconds()
             if expires_at <= current:
                 return CacheLookup("expired", None, created_at, expires_at, age_seconds)
-            if not path.is_file():
+            path = Path(entry.raw_response_path)
+            if entry.response_json:
+                payload = json.loads(entry.response_json)
+            elif path.is_file():
+                payload = json.loads(path.read_text(encoding="utf-8"))
+            else:
                 return CacheLookup("miss", None, created_at, expires_at, age_seconds)
-            payload = json.loads(path.read_text(encoding="utf-8"))
             if not isinstance(payload, dict):
                 return CacheLookup("miss", None, created_at, expires_at, age_seconds)
             return CacheLookup(
@@ -340,28 +566,35 @@ class SearchResponseCache:
         destinations = "-".join(sorted(set(parameters["destinations"])))
         travel_date = parameters["date"]
         folder = self.raw_root / created.date().isoformat()
-        folder.mkdir(parents=True, exist_ok=True)
         stem = (
             f"{created.strftime('%Y%m%dT%H%M%S%fZ')}_{origins}_{destinations}_"
             f"{travel_date}"
         )
         contents = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
-        collision = 0
-        while True:
-            suffix = "" if collision == 0 else f"_{collision}"
-            path = folder / f"{stem}{suffix}.json"
-            try:
-                with path.open("x", encoding="utf-8", newline="\n") as capture:
-                    capture.write(contents)
-                break
-            except FileExistsError:
-                collision += 1
+        path = Path("unpersisted-searchapi-response.json")
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+            collision = 0
+            while True:
+                suffix = "" if collision == 0 else f"_{collision}"
+                path = folder / f"{stem}{suffix}.json"
+                try:
+                    with path.open("x", encoding="utf-8", newline="\n") as capture:
+                        capture.write(contents)
+                    break
+                except FileExistsError:
+                    collision += 1
+        except OSError:
+            LOGGER.warning(
+                "Raw provider capture unavailable; PostgreSQL cache retained"
+            )
         request_json = canonical_search_json(parameters)
         entry = SearchCacheEntry(
             cache_key=canonical_search_key(parameters),
             provider="SearchAPI",
             request_json=request_json,
             raw_response_path=str(path.resolve()),
+            response_json=contents,
             created_at=created,
             expires_at=created + self.ttl,
             result_count=result_count,
@@ -443,6 +676,7 @@ class SearchResponseCache:
             provider="SearchAPI",
             request_json=canonical_search_json(parameters),
             raw_response_path=str(capture.resolve()),
+            response_json=json.dumps(payload, ensure_ascii=False),
             created_at=created,
             expires_at=created + self.ttl,
             result_count=result_count,

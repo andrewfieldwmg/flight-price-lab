@@ -708,3 +708,51 @@ def test_ita_booking_option_price_is_unverified_and_excluded_from_total() -> Non
     assert prepared["tickets"][0]["current_price"] == "276"
     assert prepared["tickets"][0]["pricing_confidence"] == "UNVERIFIED"
     assert prepared["tickets"][0]["status"] == "VERIFY_ON_AIRLINE"
+
+
+def test_successful_booking_resolution_is_cached_and_explicit_refresh_bypasses() -> (
+    None
+):
+    class CountingResolver(Resolver):
+        def __init__(self) -> None:
+            super().__init__({"FR 2687": "813"})
+            self.calls = 0
+
+        async def resolve(self, selected: FlightOffer) -> ResolvedHandoff:
+            self.calls += 1
+            return await super().resolve(selected)
+
+    resolver = CountingResolver()
+    app = create_app(booking_resolver=resolver, handoff_launcher=Launcher())
+    selected = route_offer("STN", "CAG", date(2026, 12, 18), 19, "FR 2687", "849")
+    asyncio.run(
+        app.state.registry.create(
+            SearchSnapshot(search_id="booking-cache", status="completed")
+        )
+    )
+    asyncio.run(
+        app.state.registry.register_booking_candidate(
+            "booking-cache", "selected", (selected,)
+        )
+    )
+    client = TestClient(app)
+    request = {
+        "search_id": "booking-cache",
+        "selected_option_ids": ["selected"],
+    }
+
+    first = client.post("/api/booking/prepare", json=request).json()
+    second = client.post("/api/booking/prepare", json=request).json()
+    refreshed = client.post(
+        "/api/booking/prepare",
+        json={**request, "refresh_booking_prices": True},
+    ).json()
+
+    assert first["booking_provider_calls_this_invocation"] == 1
+    assert second["booking_provider_calls_this_invocation"] == 0
+    assert refreshed["booking_provider_calls_this_invocation"] == 1
+    assert resolver.calls == 2
+    assert all(
+        result["tickets"][0]["flight_number"] == "FR 2687"
+        for result in (first, second, refreshed)
+    )

@@ -58,7 +58,8 @@ def clean_persistence_tables() -> None:
             text(
                 "TRUNCATE TABLE search_cache, booking_candidates, search_sessions, "
                 "trip_option_observation, flight_observation, "
-                "search_observation_run, market_observation RESTART IDENTITY CASCADE"
+                "search_observation_run, market_observation, "
+                "calendar_price_observation RESTART IDENTITY CASCADE"
             )
         )
     engine.dispose()

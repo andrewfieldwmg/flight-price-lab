@@ -253,6 +253,7 @@ class SearchDiagnostics(BaseModel):
     provider_requests_timed_out: int = 0
     provider_requests_cancelled: int = 0
     provider_calls_concurrent_peak: int = 0
+    backend_cache_age_seconds: float | None = None
     slowest_provider_call_ms: float = 0
     median_provider_call_ms: float = 0
     p95_provider_call_ms: float = 0
@@ -288,12 +289,24 @@ class SearchKeyResponse(BaseModel):
 
 class CalendarPrice(BaseModel):
     date: date
-    price: Decimal
+    price: Decimal | None
     currency: str
+    state: str = "LOADED"
+    classification: str | None = None
+    observed_at: datetime | None = None
 
 
 class CalendarResponse(BaseModel):
-    prices: list[CalendarPrice]
+    dates: list[CalendarPrice]
+    calendar_provider_calls_this_invocation: int = 0
+    calendar_calls_avoided: int = 0
+    failures: int = 0
+
+    @property
+    def prices(self) -> list[CalendarPrice]:
+        """Compatibility accessor for internal callers during the API transition."""
+
+        return self.dates
 
 
 class ProviderUsage(BaseModel):

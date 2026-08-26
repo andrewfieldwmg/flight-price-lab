@@ -51,6 +51,7 @@ from flight_price_lab.routing.feasibility import BaggageProfile, SelfTransferPro
 from flight_price_lab.routing.hub_synthesis import synthesize_via_hubs
 from flight_price_lab.routing.planning import RoutePlan
 from flight_price_lab.storage.database import (
+    CalendarPriceStore,
     canonical_search_json,
     canonical_search_key,
 )
@@ -145,12 +146,14 @@ class TripSearchService:
         hubs: tuple[str, ...] = INITIAL_CANDIDATE_HUBS,
         max_concurrency: int = 4,
         price_history_store: PriceHistoryStore | None = None,
+        calendar_price_store: CalendarPriceStore | None = None,
     ) -> None:
         self.provider = provider
         self.registry = registry
         self.hubs = prioritize_candidate_hubs(hubs)
         self.max_concurrency = max_concurrency
         self._price_history_store = price_history_store
+        self._calendar_price_store = calendar_price_store
         self._semaphore = asyncio.Semaphore(max_concurrency)
         self._carrier_rules = load_carrier_baggage_rules()
         self._provider_tasks: dict[
@@ -656,6 +659,12 @@ class TripSearchService:
                 timing["status"] = "SUCCESS"
                 timing["error_type"] = None
                 snapshot.diagnostics.provider_requests.append(timing)
+                cache_age = timing.get("cache_age_seconds")
+                if isinstance(cache_age, (int, float)):
+                    snapshot.diagnostics.backend_cache_age_seconds = max(
+                        snapshot.diagnostics.backend_cache_age_seconds or 0,
+                        float(cache_age),
+                    )
             snapshot.diagnostics.provider_requests_succeeded += 1
             if response.provider_calls:
                 self._live_observed_offers.update(
@@ -787,6 +796,30 @@ class TripSearchService:
                 snapshot.search_id, "direction_completed", direction=direction.value
             )
             return
+        if direct and self._calendar_price_store is not None:
+            fresh = await asyncio.to_thread(
+                self._calendar_price_store.get_fresh,
+                origins=origins,
+                destinations=destinations,
+                travel_date=travel_date,
+                adults=request.adults,
+                children=request.children,
+                currency=request.currency,
+                direction=direction.value,
+            )
+            if fresh is None:
+                await asyncio.to_thread(
+                    self._calendar_price_store.put,
+                    origins=origins,
+                    destinations=destinations,
+                    travel_date=travel_date,
+                    direction=direction.value,
+                    lowest_direct_price=min(offer.total_price for offer in direct),
+                    currency=request.currency,
+                    adults=request.adults,
+                    children=request.children,
+                    source_search_key=snapshot.search_key,
+                )
         window = (
             request.outbound_time_window
             if direction is Direction.OUTBOUND

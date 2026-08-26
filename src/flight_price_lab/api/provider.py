@@ -32,7 +32,7 @@ from flight_price_lab.storage.database import (
 class _VolatileResponseCache:
     """Process-local fallback when Vercel's filesystem cannot host SQLite/raw JSON."""
 
-    def __init__(self, ttl: timedelta = timedelta(minutes=60)) -> None:
+    def __init__(self, ttl: timedelta = timedelta(hours=24)) -> None:
         self.ttl = ttl
         self.entries: dict[str, tuple[CachedSearch, datetime, datetime]] = {}
 
@@ -285,9 +285,7 @@ class SearchAPIProviderGateway:
                         "table": "search_cache",
                         "duration_ms": round(cache_write_ms, 2),
                         "connection_acquire_ms": round(
-                            detailed.get("connection_acquire_ms", 0)
-                            if detailed
-                            else 0,
+                            detailed.get("connection_acquire_ms", 0) if detailed else 0,
                             2,
                         ),
                         "query_ms": round(
@@ -350,6 +348,7 @@ class SearchAPIProviderGateway:
             ),
             "http_status": http_status,
             "cache_hit": provider_calls == 0,
+            "cache_age_seconds": lookup.age_seconds,
             "result_count": cached.result_count,
         }
         return ProviderSearchResult(

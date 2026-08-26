@@ -4,7 +4,7 @@ import asyncio
 import json
 import os
 from contextlib import suppress
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from time import perf_counter
 from typing import Annotated
 
@@ -17,6 +17,7 @@ from pydantic import ValidationError
 from flight_price_lab.api.booking import (
     BookingContextExpiredError,
     BookingPreparationService,
+    BookingResolutionCache,
     BookingResolver,
     BookingSessionResponse,
     GooglePostHandoffLauncher,
@@ -25,6 +26,7 @@ from flight_price_lab.api.booking import (
     PrepareBookingRequest,
     SearchAPIBookingResolver,
 )
+from flight_price_lab.api.calendar import DirectionalCalendarService
 from flight_price_lab.api.models import (
     CalendarResponse,
     ErrorResponse,
@@ -48,6 +50,7 @@ from flight_price_lab.config import Settings
 from flight_price_lab.providers.searchapi import SearchAPIClient, SearchAPIError
 from flight_price_lab.storage.database import (
     BookingCandidateStore,
+    CalendarPriceStore,
     SearchResponseCache,
     SearchSessionStore,
     create_database_engine,
@@ -77,12 +80,14 @@ def create_app(
     candidate_store = BookingCandidateStore(engine=database_engine)
     search_store = SearchSessionStore(engine=database_engine)
     price_history_store = PriceHistoryStore(database_engine)
+    calendar_price_store = CalendarPriceStore(engine=database_engine)
     registry = InMemorySearchRegistry(candidate_store, search_store)
     application.state.registry = registry
     application.state.search_store = search_store
     application.state.provider = provider
     application.state.booking_resolver = booking_resolver
     application.state.booking_sessions = InMemoryBookingSessionRegistry()
+    application.state.booking_resolution_cache = BookingResolutionCache()
     application.state.handoff_launcher = handoff_launcher or GooglePostHandoffLauncher()
     application.state.usage = (
         CachedProviderUsage(usage_gateway) if usage_gateway is not None else None
@@ -95,6 +100,7 @@ def create_app(
             registry,
             max_concurrency=concurrency,
             price_history_store=price_history_store,
+            calendar_price_store=calendar_price_store,
         )
 
     def get_provider() -> ProviderGateway:
@@ -129,6 +135,7 @@ def create_app(
             application.state.booking_sessions,
             resolver,
             application.state.handoff_launcher,
+            application.state.booking_resolution_cache,
         )
 
     @application.get("/api/health")
@@ -395,24 +402,31 @@ def create_app(
         adults: Annotated[int, Query(ge=1)],
         children: Annotated[int, Query(ge=0)] = 0,
         currency: Annotated[str, Query(min_length=3, max_length=3)] = "GBP",
+        direction: Annotated[str, Query(pattern="^(OUTBOUND|RETURN)$")] = "OUTBOUND",
     ) -> CalendarResponse:
         if date_to < date_from:
             raise HTTPException(status_code=422, detail="date_to precedes date_from")
-        try:
-            prices = await get_provider().calendar(
-                origins=origins,
-                destinations=destinations,
-                date_from=date_from,
-                date_to=date_to,
-                adults=adults,
-                children=children,
-                currency=currency.upper(),
+        if (date_to - date_from).days > 30:
+            raise HTTPException(
+                status_code=422, detail="calendar range exceeds 31 days"
             )
-        except TimeoutError:
-            raise HTTPException(status_code=504, detail="provider timeout") from None
-        except (SearchAPIError, NotImplementedError):
-            raise HTTPException(status_code=502, detail="provider error") from None
-        return CalendarResponse(prices=prices)
+        dates = [
+            date_from + timedelta(days=offset)
+            for offset in range((date_to - date_from).days + 1)
+        ]
+        return await DirectionalCalendarService(
+            get_provider(),
+            calendar_price_store,
+            max_concurrency=Settings().search_provider_concurrency,
+        ).prices(
+            origins=origins,
+            destinations=destinations,
+            dates=dates,
+            adults=adults,
+            children=children,
+            currency=currency.upper(),
+            direction=direction,
+        )
 
     @application.get("/api/provider-usage", response_model=ProviderUsage)
     async def provider_usage(refresh: bool = False) -> ProviderUsage:

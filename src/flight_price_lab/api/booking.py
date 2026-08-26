@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from enum import StrEnum
+from hashlib import sha256
 from pathlib import Path
 from typing import Protocol
 from urllib.parse import parse_qs, parse_qsl, urlparse
@@ -73,6 +74,7 @@ class PrepareBookingRequest(BaseModel):
     model_config = ConfigDict(frozen=True)
     search_id: str
     selected_option_ids: list[str] = Field(min_length=1)
+    refresh_booking_prices: bool = False
 
 
 class HandoffRequest(BaseModel):
@@ -112,6 +114,7 @@ class BookingSessionResponse(BaseModel):
     original_total: Decimal
     current_total: Decimal | None
     price_delta: Decimal | None
+    booking_provider_calls_this_invocation: int = 0
 
 
 @dataclass(frozen=True)
@@ -443,6 +446,7 @@ class _Session:
     session_id: str
     state: BookingSessionState
     tickets: list[_Ticket] = field(default_factory=list)
+    booking_provider_calls_this_invocation: int = 0
     expires_at: datetime = field(
         default_factory=lambda: datetime.now(UTC) + timedelta(minutes=15)
     )
@@ -478,6 +482,56 @@ class InMemoryBookingSessionRegistry:
         return None
 
 
+@dataclass(frozen=True)
+class _CachedResolution:
+    handoff: ResolvedHandoff
+    expires_at: datetime
+
+
+class BookingResolutionCache:
+    """Short-lived successful constituent repricing cache; failures are never stored."""
+
+    def __init__(self, ttl: timedelta = timedelta(minutes=15)) -> None:
+        self.ttl = ttl
+        self._entries: dict[str, _CachedResolution] = {}
+
+    @staticmethod
+    def key(offer: FlightOffer) -> str:
+        action = offer.raw_metadata.get("provider_action_metadata", {})
+        context = offer.raw_metadata.get("provider_search_context", {})
+        token = action.get("booking_token", "") if isinstance(action, dict) else ""
+        payload = {
+            "provider": offer.provider,
+            "provider_offer_id": offer.provider_offer_id,
+            "offer_fingerprint": offer.fingerprint,
+            "carrier": offer.legs[0].flight_number.split()[0].upper(),
+            "flight_numbers": [leg.flight_number for leg in offer.legs],
+            "date": offer.legs[0].departure.date().isoformat(),
+            "passenger_count": offer.passenger_count,
+            "adults": context.get("adults") if isinstance(context, dict) else None,
+            "children": context.get("children") if isinstance(context, dict) else None,
+            "currency": offer.currency,
+            "booking_context_digest": sha256(str(token).encode()).hexdigest(),
+        }
+        return sha256(
+            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+
+    def get(
+        self, offer: FlightOffer, now: datetime | None = None
+    ) -> ResolvedHandoff | None:
+        entry = self._entries.get(self.key(offer))
+        if entry is not None and entry.expires_at > (now or datetime.now(UTC)):
+            return entry.handoff
+        return None
+
+    def put(self, offer: FlightOffer, handoff: ResolvedHandoff) -> None:
+        self._entries[self.key(offer)] = _CachedResolution(
+            handoff=handoff,
+            expires_at=datetime.now(UTC) + self.ttl,
+        )
+
+
 class BookingPreparationService:
     def __init__(
         self,
@@ -485,11 +539,13 @@ class BookingPreparationService:
         sessions: InMemoryBookingSessionRegistry,
         resolver: BookingResolver,
         launcher: HandoffLauncher,
+        resolution_cache: BookingResolutionCache | None = None,
     ) -> None:
         self.searches = searches
         self.sessions = sessions
         self.resolver = resolver
         self.launcher = launcher
+        self.resolution_cache = resolution_cache or BookingResolutionCache()
 
     async def prepare(self, request: PrepareBookingRequest) -> BookingSessionResponse:
         session = _Session(str(uuid4()), BookingSessionState.CREATED)
@@ -582,7 +638,15 @@ class BookingPreparationService:
                 passenger_composition_verified=False,
             )
             try:
-                handoff = await self.resolver.resolve(offer)
+                handoff = (
+                    None
+                    if request.refresh_booking_prices
+                    else self.resolution_cache.get(offer)
+                )
+                if handoff is None:
+                    session.booking_provider_calls_this_invocation += 1
+                    handoff = await self.resolver.resolve(offer)
+                    self.resolution_cache.put(offer, handoff)
                 delta = (
                     handoff.current_price - offer.total_price
                     if handoff.current_price is not None
@@ -749,4 +813,7 @@ class BookingPreparationService:
             original_total=original,
             current_total=current,
             price_delta=current - original if current is not None else None,
+            booking_provider_calls_this_invocation=(
+                session.booking_provider_calls_this_invocation
+            ),
         )

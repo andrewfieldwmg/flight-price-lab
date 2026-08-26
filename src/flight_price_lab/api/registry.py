@@ -83,9 +83,7 @@ class InMemorySearchRegistry:
         self._postgres_write_ms: dict[str, float] = {}
         self._persistence_connections: dict[str, Connection] = {}
         self._persistence_sessions: dict[str, Session] = {}
-        self._pending_candidates: dict[
-            str, dict[str, tuple[FlightOffer, ...]]
-        ] = {}
+        self._pending_candidates: dict[str, dict[str, tuple[FlightOffer, ...]]] = {}
 
     def _record_database_operation(
         self,

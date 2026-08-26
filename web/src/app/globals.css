@@ -18,6 +18,25 @@ button { cursor:pointer; }
 .compact-field { display:block; background:#fff; padding:8px 10px; min-width:0; }
 .compact-field span { display:block; text-transform:uppercase; letter-spacing:.08em; font-size:9px; font-weight:800; color:var(--muted); margin-bottom:4px; }
 .compact-field input,.compact-field select { border:0; background:transparent; color:var(--ink); outline:0; width:100%; min-width:0; height:25px; font-weight:700; }
+.directional-date { position:relative; }
+.date-trigger { width:100%; border:0; background:transparent; padding:0; text-align:left; }
+.date-trigger span { display:block; }
+.date-trigger strong { display:block; height:25px; line-height:25px; white-space:nowrap; }
+.date-popover { position:absolute; z-index:90; top:calc(100% + 1px); left:0; width:520px; max-width:calc(100vw - 24px); padding:10px; background:#fff; border:1px solid var(--line); border-radius:0 0 7px 7px; box-shadow:0 12px 30px #102a2438; }
+.date-popover-nav { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+.date-popover-nav button { width:28px; height:28px; border:1px solid var(--line); border-radius:4px; background:#fff; }
+.date-price-grid { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:4px; }
+.date-price-cell { min-height:82px; border:1px solid var(--line); border-radius:5px; background:#fff; padding:6px 3px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; }
+.date-price-cell > span { margin:0; font-size:8px; }
+.date-price-cell > strong { font-size:15px; }
+.date-price-cell small { font-weight:800; font-variant-numeric:tabular-nums; }
+.date-price-cell em { min-height:12px; color:var(--muted); font-size:8px; font-style:normal; }
+.date-price-cell.low { background:#eef8e7; border-color:#b8d99f; }
+.date-price-cell.high { background:#fff5ef; }
+.date-price-cell.selected { outline:2px solid var(--teal); outline-offset:-2px; }
+.date-price-spinner { width:13px; height:13px; border:2px solid #ccd7d5; border-top-color:var(--teal); border-radius:50%; animation:spin .7s linear infinite; }
+.date-popover > p { margin:8px 2px 0; color:var(--muted); font-size:9px; line-height:1.35; }
+@keyframes spin { to { transform:rotate(360deg); } }
 .number-field input { font-variant-numeric:tabular-nums; }
 .search-button { border:0; background:var(--teal); color:white; text-transform:uppercase; font-size:11px; letter-spacing:.08em; font-weight:900; }
 .search-button:disabled { opacity:.55; }

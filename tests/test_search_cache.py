@@ -73,6 +73,29 @@ def test_identical_search_uses_persistent_cache_and_preserves_raw_json(
     assert Path(first.offers[0].raw_reference or "").is_file()
 
 
+def test_postgres_payload_survives_missing_instance_local_raw_file(
+    tmp_path: Path,
+) -> None:
+    cache = SearchResponseCache(postgres_test_url(), raw_root=tmp_path / "raw")
+    parameters = {
+        "origins": ["LGW"],
+        "destinations": ["CAG"],
+        "date": "2026-12-18",
+        "adults": 2,
+        "children": 2,
+        "currency": "GBP",
+        "flight_type": "one_way",
+        "stops": "nonstop",
+    }
+    cached = cache.put(parameters, fixture_payload(), result_count=1)
+    cached.raw_response_path.unlink()
+
+    restored = cache.get(parameters)
+
+    assert restored is not None
+    assert restored.payload["search_parameters"]["outbound_date"] == "2026-12-18"
+
+
 def test_cache_key_sorts_airports_and_excludes_ui_preferences() -> None:
     base = {
         "origins": ["STN", "LGW"],
@@ -116,7 +139,7 @@ def test_safe_existing_capture_can_seed_cache(tmp_path: Path) -> None:
     assert len(cache.entries()) == 1
 
 
-def test_default_cache_ttl_is_sixty_minutes(tmp_path: Path) -> None:
+def test_default_cache_ttl_is_twenty_four_hours(tmp_path: Path) -> None:
     cache = SearchResponseCache(
         postgres_test_url(),
         raw_root=tmp_path / "raw",
@@ -134,8 +157,10 @@ def test_default_cache_ttl_is_sixty_minutes(tmp_path: Path) -> None:
     created = datetime(2026, 8, 24, 12, tzinfo=UTC)
     cache.put(parameters, fixture_payload(), result_count=1, now=created)
 
-    assert cache.get(parameters, now=created + timedelta(minutes=59)) is not None
-    assert cache.get(parameters, now=created + timedelta(minutes=60)) is None
+    assert (
+        cache.get(parameters, now=created + timedelta(hours=23, minutes=59)) is not None
+    )
+    assert cache.get(parameters, now=created + timedelta(hours=24)) is None
 
 
 def trip_request(**updates: object) -> TripSearchRequest:
@@ -236,7 +261,7 @@ def test_expired_entry_causes_provider_call(tmp_path: Path) -> None:
         parameters,
         fixture_payload(),
         result_count=1,
-        now=datetime.now(UTC) - timedelta(minutes=61),
+        now=datetime.now(UTC) - timedelta(hours=24, minutes=1),
     )
     gateway = SearchAPIProviderGateway(client, cache)  # type: ignore[arg-type]
 
@@ -244,3 +269,18 @@ def test_expired_entry_causes_provider_call(tmp_path: Path) -> None:
 
     assert result.provider_calls == 1
     assert result.backend_cache_misses == 1
+
+
+def test_explicit_refresh_bypasses_fresh_twenty_four_hour_cache(tmp_path: Path) -> None:
+    client = FakeSearchClient(fixture_payload())
+    gateway = SearchAPIProviderGateway(
+        client,
+        SearchResponseCache(postgres_test_url(), raw_root=tmp_path / "raw"),
+    )  # type: ignore[arg-type]
+    normal = arguments()
+    first = asyncio.run(gateway.search_direct(**normal))
+    refreshed = asyncio.run(gateway.search_direct(**{**normal, "bypass_cache": True}))
+
+    assert first.provider_calls == 1
+    assert refreshed.provider_calls == 1
+    assert client.calls == 2

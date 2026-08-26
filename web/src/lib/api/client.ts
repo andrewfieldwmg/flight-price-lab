@@ -1,5 +1,5 @@
 import type {
-  CalendarPrice,
+  CalendarResponse,
   ProviderUsage,
   SearchEvent,
   SearchSnapshot,
@@ -97,35 +97,36 @@ export async function getCalendarPrices(input: {
   adults: number;
   children: number;
   currency: string;
-}): Promise<CalendarPrice[]> {
+  direction: "OUTBOUND" | "RETURN";
+}): Promise<CalendarResponse> {
   const params = new URLSearchParams({
     date_from: input.dateFrom,
     date_to: input.dateTo,
     adults: String(input.adults),
     children: String(input.children),
     currency: input.currency,
+    direction: input.direction,
   });
   input.origins.forEach((value) => params.append("origins", value));
   input.destinations.forEach((value) => params.append("destinations", value));
-  const response = await apiFetch<{ prices: CalendarPrice[] }>(
+  return apiFetch<CalendarResponse>(
     `/api/calendar?${params}`,
   );
-  return response.prices;
 }
 
 export function getProviderUsage(refresh = false): Promise<ProviderUsage> {
   return apiFetch(`/api/provider-usage${refresh ? "?refresh=true" : ""}`);
 }
 
-export function prepareBooking(searchId: string, selectedOptionIds: string[]): Promise<BookingSession> {
-  return prepareBookingRequest(searchId, selectedOptionIds);
+export function prepareBooking(searchId: string, selectedOptionIds: string[], refreshBookingPrices = false): Promise<BookingSession> {
+  return prepareBookingRequest(searchId, selectedOptionIds, refreshBookingPrices);
 }
 
-async function prepareBookingRequest(searchId: string, selectedOptionIds: string[]): Promise<BookingSession> {
+async function prepareBookingRequest(searchId: string, selectedOptionIds: string[], refreshBookingPrices: boolean): Promise<BookingSession> {
   const response = await fetch(resolveApiUrl("/api/booking/prepare"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ search_id: searchId, selected_option_ids: selectedOptionIds }),
+    body: JSON.stringify({ search_id: searchId, selected_option_ids: selectedOptionIds, refresh_booking_prices: refreshBookingPrices }),
   });
   const body = await response.json().catch(() => null) as BookingSession | { detail?: string } | null;
   if (process.env.NODE_ENV === "development") {

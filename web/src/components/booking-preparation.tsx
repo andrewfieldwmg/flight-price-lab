@@ -31,13 +31,13 @@ export function BookingPreparation({ searchId, optionIds }: { searchId: string |
   const validSelection = Boolean(searchId && optionIds.length);
   const loading = drawerState === "PREPARING";
 
-  async function prepare() {
+  async function prepare(refreshBookingPrices = false) {
     if (!searchId || !optionIds.length) return;
     setDrawerOpen(true);
     setDrawerState("PREPARING");
     setError(null);
     try {
-      const prepared = await prepareBooking(searchId, optionIds);
+      const prepared = await prepareBooking(searchId, optionIds, refreshBookingPrices);
       setSession(prepared);
       setPreparedFor([...optionIds]);
       setAcknowledged({});
@@ -73,7 +73,7 @@ export function BookingPreparation({ searchId, optionIds }: { searchId: string |
         </header>
         {drawerState === "PREPARING" && <div className="booking-drawer-state" role="status">Preparing selected flights…</div>}
         {drawerState === "ERROR" && <div className="booking-drawer-state booking-ticket-error" role="alert">{error}</div>}
-        {stale && drawerState !== "PREPARING" && <div className="booking-stale-state"><strong>Selection changed</strong><p>The prepared booking shown here belongs to your previous trip selection.</p><button type="button" onClick={prepare}>Prepare new selection</button></div>}
+        {stale && drawerState !== "PREPARING" && <div className="booking-stale-state"><strong>Selection changed</strong><p>The prepared booking shown here belongs to your previous trip selection.</p><button type="button" onClick={() => prepare()}>Prepare new selection</button></div>}
         {mayRenderCards && session && <>
           <div className="booking-current-total">{currentTotal === null ? "Verify on airlines" : money(currentTotal, currency)}</div>
           <div className="booking-total-context">
@@ -82,6 +82,7 @@ export function BookingPreparation({ searchId, optionIds }: { searchId: string |
             {delta !== null && delta > 0 && <strong>Price increased by {money(delta, currency)}</strong>}
             {delta === 0 && <strong>No price change</strong>}
           </div>
+          <div className="booking-provider-diagnostics">Booking provider calls now: {session.booking_provider_calls_this_invocation}</div>
           <div className="booking-cards">
             {tickets.map((ticket, index) => {
               const material = ticket.price_change_status === "MATERIAL_INCREASE" && ticket.material_change_acknowledgement_required;
@@ -108,13 +109,13 @@ export function BookingPreparation({ searchId, optionIds }: { searchId: string |
             })}
           </div>
         </>}
-        {drawerState !== "PREPARING" && !stale && <button type="button" className="booking-refresh" onClick={prepare}>Refresh prices</button>}
+        {drawerState !== "PREPARING" && !stale && <button type="button" className="booking-refresh" onClick={() => prepare(true)}>Refresh booking prices</button>}
       </aside>
     </div>, document.body
   ) : null;
 
   return <div className="booking-preparation-action">
-    <button className="primary-booking-cta" type="button" onClick={session && drawerState !== "ERROR" && !stale ? () => setDrawerOpen(true) : prepare} disabled={loading || !validSelection}>{loading ? "Preparing booking…" : stale ? "Prepare selected trip" : session && drawerState !== "ERROR" ? "View prepared booking" : "Prepare booking"}</button>
+    <button className="primary-booking-cta" type="button" onClick={session && drawerState !== "ERROR" && !stale ? () => setDrawerOpen(true) : () => prepare()} disabled={loading || !validSelection}>{loading ? "Preparing booking…" : stale ? "Prepare selected trip" : session && drawerState !== "ERROR" ? "View prepared booking" : "Prepare booking"}</button>
     {error && !drawerOpen && <span role="alert">{error}</span>}{drawer}
   </div>;
 }

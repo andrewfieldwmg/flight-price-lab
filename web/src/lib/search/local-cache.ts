@@ -1,6 +1,6 @@
 import type { SearchSnapshot, TripSearchRequest } from "@/lib/api/types";
 
-export const SEARCH_CACHE_TTL_MS = 60 * 60 * 1000;
+export const SEARCH_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const PREFIX = "flight-price-lab:";
 
 function devLog(event: string, fields: Record<string, unknown>) {

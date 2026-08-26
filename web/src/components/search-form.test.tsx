@@ -26,7 +26,7 @@ describe("search controls", () => {
   it("marks only the explicit refresh action as cache bypassing", () => {
     const onSearch = vi.fn();
     render(<SearchForm onSearch={onSearch} disabled={false} />);
-    fireEvent.click(screen.getByRole("button", { name: "Refresh prices" }));
+    fireEvent.click(screen.getByRole("button", { name: "Refresh live prices" }));
     expect(onSearch).toHaveBeenCalledWith(expect.objectContaining({ refresh_prices: true }));
   });
 
@@ -36,7 +36,7 @@ describe("search controls", () => {
     fireEvent.click(screen.getByRole("button", { name: "Clear" }));
     expect(screen.getByText("London (0)")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Search" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Refresh prices" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Refresh live prices" })).toBeDisabled();
   });
 
   it("keeps the dropdown open for selection and closes on Escape and outside click", () => {

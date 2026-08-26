@@ -84,11 +84,11 @@ export function SearchForm({ onSearch, disabled, onExcludeBaggageChange }: { onS
       <div className="primary-controls">
         <AirportMultiSelect label="From" group="London" airports={LONDON} selected={origins} onChange={setOrigins} />
         <AirportMultiSelect label="To" group="Sardinia" airports={SARDINIA} selected={destinations} onChange={setDestinations} />
-        <DateFields outbound={outboundDate} inbound={returnDate} roundTrip={roundTrip} onOutboundChange={setOutboundDate} onInboundChange={setReturnDate} />
+        <DateFields outbound={outboundDate} inbound={returnDate} roundTrip={roundTrip} origins={origins} destinations={destinations} adults={adults} childPassengers={children} currency="GBP" onOutboundChange={setOutboundDate} onInboundChange={setReturnDate} />
         <NumberField label="Adults" value={adults} min={1} onChange={setAdults} />
         <NumberField label="Children" value={children} min={0} onChange={setChildren} />
         <button className="search-button" value="search" disabled={disabled || !origins.length || !destinations.length}>{disabled ? "Searching…" : "Search"}</button>
-        <button className="refresh-button" value="refresh" disabled={disabled || !origins.length || !destinations.length}>Refresh prices</button>
+        <button className="refresh-button" value="refresh" disabled={disabled || !origins.length || !destinations.length}>Refresh live prices</button>
         <button className="reset-button" type="reset" disabled={disabled}>Reset</button>
       </div>
       <div className="constraint-grid">
