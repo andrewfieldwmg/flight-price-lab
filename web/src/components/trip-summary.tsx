@@ -143,11 +143,15 @@ export function TripSummary({ outbound, inbound, outboundBaseline, inboundBaseli
     </aside>}
     <section ref={fullSummary} className="summary-strip" aria-label="Selected trip summary">
       <div className="summary-primary">
-        <div className="summary-total-block"><span>Trip total</span><strong>{money(summary.baseAlternativePrice, currency)}</strong>{tripHistoryDetailed && <small aria-label={tripHistoryState === "FIRST_SEEN" ? "First price observation" : tripHistoryState === "ERROR" ? "Price history unavailable" : tripHistoryChange !== null && tripHistoryChange > 0 ? `Trip price increased by ${Math.abs(tripHistoryPercent ?? 0).toFixed(1)} percent since last seen` : tripHistoryChange !== null && tripHistoryChange < 0 ? `Trip price decreased by ${Math.abs(tripHistoryPercent ?? 0).toFixed(1)} percent since last seen` : "No trip price change since last seen"}>{tripHistoryDetailed}</small>}{previousTripTotal !== null && tripHistoryChange !== 0 && <em>Previously {money(previousTripTotal, currency)}</em>}</div>
-        {comparisonEnabled && <div><span>Save</span><strong>{money(saving, currency)} / {percentage.toFixed(0)}%</strong></div>}
-        {comparisonEnabled && <div><span>Extra travel</span><strong>+{duration(summary.extraMinutes)}</strong></div>}
-        <BookingPreparation searchId={searchId} optionIds={[outbound?.id, inbound?.id].filter((id): id is string => Boolean(id))} />
-        <label><input type="checkbox" checked={showBaggage} onChange={(event) => setShowBaggage(event.target.checked)} /> Show estimated baggage costs</label>
+        <div className="summary-top-row" data-testid="summary-top-row">
+          <div className="summary-total-block"><span>Trip total</span><strong>{money(summary.baseAlternativePrice, currency)}</strong>{tripHistoryDetailed && <small aria-label={tripHistoryState === "FIRST_SEEN" ? "First price observation" : tripHistoryState === "ERROR" ? "Price history unavailable" : tripHistoryChange !== null && tripHistoryChange > 0 ? `Trip price increased by ${Math.abs(tripHistoryPercent ?? 0).toFixed(1)} percent since last seen` : tripHistoryChange !== null && tripHistoryChange < 0 ? `Trip price decreased by ${Math.abs(tripHistoryPercent ?? 0).toFixed(1)} percent since last seen` : "No trip price change since last seen"}>{tripHistoryDetailed}</small>}{previousTripTotal !== null && tripHistoryChange !== 0 && <em>Previously {money(previousTripTotal, currency)}</em>}</div>
+          <BookingPreparation searchId={searchId} optionIds={[outbound?.id, inbound?.id].filter((id): id is string => Boolean(id))} />
+        </div>
+        <div className="summary-metrics">
+          {comparisonEnabled && <div><span>Save</span><strong>{money(saving, currency)} / {percentage.toFixed(0)}%</strong></div>}
+          {comparisonEnabled && <div><span>Extra travel</span><strong>+{duration(summary.extraMinutes)}</strong></div>}
+          <label><input type="checkbox" checked={showBaggage} onChange={(event) => setShowBaggage(event.target.checked)} /> Show estimated baggage costs</label>
+        </div>
       </div>
       <div className="summary-itineraries">
         {outbound && <DirectionSummary label="Outbound" option={outbound} showBaggage={showBaggage} date={resolvedOutboundDate} />}

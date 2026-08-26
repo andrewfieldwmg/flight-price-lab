@@ -134,6 +134,8 @@ describe("selected trip summary", () => {
     render(<TripSummary outbound={synthetic()} inbound={null} outboundBaseline={option({ id: "baseline" })} inboundBaseline={null} searchId="search" outboundDate="2026-12-18" />);
     const action = screen.getByRole("button", { name: "Prepare booking" });
     expect(action).toHaveClass("primary-booking-cta");
+    expect(screen.getByTestId("summary-top-row")).toContainElement(action);
+    expect(screen.getByTestId("summary-top-row")).toContainElement(screen.getByText("Trip total"));
     expect(action).toBeEnabled();
     expect(screen.getAllByRole("button", { name: "Prepare booking" })).toHaveLength(1);
   });
