@@ -78,6 +78,36 @@ class PartiallyFailingCalendarProvider(CalendarProvider):
         return await super().search_direct(**arguments)
 
 
+class ConcurrentCalendarProvider(CalendarProvider):
+    def __init__(self, failed_date: date | None = None) -> None:
+        super().__init__()
+        self.failed_date = failed_date
+        self.active = 0
+        self.peak = 0
+
+    async def search_direct(self, **arguments: object) -> list[FlightOffer]:
+        self.active += 1
+        self.peak = max(self.peak, self.active)
+        try:
+            await asyncio.sleep(0.02)
+            if arguments["travel_date"] == self.failed_date:
+                self.calls.append(arguments)
+                raise SearchAPIError("controlled provider failure")
+            return await super().search_direct(**arguments)
+        finally:
+            self.active -= 1
+
+
+class CountingCalendarStore(CalendarPriceStore):
+    def __init__(self) -> None:
+        super().__init__()
+        self.batch_writes = 0
+
+    def put_many(self, entries: list[dict[str, object]]):  # type: ignore[no-untyped-def]
+        self.batch_writes += 1
+        return super().put_many(entries)
+
+
 def test_calendar_uses_cheapest_direct_and_24_hour_observation_cache() -> None:
     provider = CalendarProvider()
     store = CalendarPriceStore()
@@ -114,9 +144,68 @@ def test_calendar_uses_cheapest_direct_and_24_hour_observation_cache() -> None:
     assert len(provider.calls) == 7
 
 
+def test_seven_missing_dates_run_four_at_a_time_and_persist_once() -> None:
+    provider = ConcurrentCalendarProvider()
+    store = CountingCalendarStore()
+    dates = [date(2027, 1, 1) + timedelta(days=index) for index in range(7)]
+
+    result = asyncio.run(
+        DirectionalCalendarService(provider, store, max_concurrency=4).prices(
+            origins=["LGW"],
+            destinations=["CAG"],
+            dates=dates,
+            adults=2,
+            children=2,
+            currency="GBP",
+            direction="OUTBOUND",
+        )
+    )
+
+    assert len(provider.calls) == 7
+    assert provider.peak == 4
+    assert result.calendar_calls_concurrent_peak == 4
+    assert store.batch_writes == 1
+
+
+def test_four_cached_dates_are_excluded_before_three_missing_are_scheduled() -> None:
+    provider = ConcurrentCalendarProvider()
+    store = CountingCalendarStore()
+    dates = [date(2027, 2, 1) + timedelta(days=index) for index in range(7)]
+    for travel_date in dates[:4]:
+        store.put(
+            origins=("LGW",),
+            destinations=("CAG",),
+            travel_date=travel_date,
+            direction="OUTBOUND",
+            lowest_direct_price=Decimal(200),
+            currency="GBP",
+            adults=2,
+            children=2,
+            source_search_key=f"cached-{travel_date}",
+        )
+
+    result = asyncio.run(
+        DirectionalCalendarService(provider, store, max_concurrency=4).prices(
+            origins=["LGW"],
+            destinations=["CAG"],
+            dates=dates,
+            adults=2,
+            children=2,
+            currency="GBP",
+            direction="OUTBOUND",
+        )
+    )
+
+    assert len(provider.calls) == 3
+    assert provider.peak == 3
+    assert result.calendar_calls_avoided == 4
+    assert result.calendar_calls_concurrent_peak == 3
+    assert store.batch_writes == 1
+
+
 def test_one_failed_date_isolated_and_response_remains_complete() -> None:
     failed_date = date(2026, 12, 18)
-    provider = PartiallyFailingCalendarProvider(failed_date)
+    provider = ConcurrentCalendarProvider(failed_date)
     client = TestClient(create_app(provider))
 
     response = client.get(
@@ -142,6 +231,7 @@ def test_one_failed_date_isolated_and_response_remains_complete() -> None:
     assert failed["price"] is None
     assert failed["classification"] is None
     assert sum(item["state"] == "LOADED" for item in payload["dates"]) == 6
+    assert payload["calendar_calls_concurrent_peak"] == 4
 
     reopened = client.get(response.request.url)
     assert reopened.status_code == 200

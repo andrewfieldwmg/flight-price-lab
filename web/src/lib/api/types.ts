@@ -213,6 +213,14 @@ export interface CalendarResponse {
   calendar_provider_calls_this_invocation: number;
   calendar_calls_avoided: number;
   failures: number;
+  request_timings: Array<{ date: string; started_at: string; completed_at: string; duration_ms: number; status: string; cache_hit: boolean }>;
+  calendar_calls_total: number;
+  calendar_calls_concurrent_peak: number;
+  calendar_provider_median_ms: number;
+  calendar_provider_p95_ms: number;
+  calendar_provider_slowest_ms: number;
+  calendar_total_duration_ms: number;
+  calendar_postgres_total_ms: number;
 }
 
 export interface ProviderUsage {

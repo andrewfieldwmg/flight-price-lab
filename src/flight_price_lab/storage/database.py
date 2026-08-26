@@ -285,6 +285,43 @@ class CalendarPriceStore:
                 session.expunge(entry)
             return entry
 
+    def get_fresh_many(
+        self,
+        *,
+        origins: list[str] | tuple[str, ...],
+        destinations: list[str] | tuple[str, ...],
+        travel_dates: list[date] | tuple[date, ...],
+        adults: int,
+        children: int,
+        currency: str,
+        direction: str,
+        now: datetime | None = None,
+    ) -> dict[date, CalendarPriceObservation]:
+        """Load the newest fresh observation for every requested date in one query."""
+
+        if not travel_dates:
+            return {}
+        current = now or datetime.now(UTC)
+        key = self.market_key(
+            origins, destinations, adults, children, currency, direction
+        )
+        with Session(self.engine) as session:
+            rows = session.scalars(
+                select(CalendarPriceObservation)
+                .where(
+                    CalendarPriceObservation.market_key == key,
+                    CalendarPriceObservation.travel_date.in_(travel_dates),
+                    CalendarPriceObservation.observed_at > current - self.ttl,
+                )
+                .order_by(CalendarPriceObservation.observed_at.desc())
+            ).all()
+            result: dict[date, CalendarPriceObservation] = {}
+            for row in rows:
+                if row.travel_date not in result:
+                    session.expunge(row)
+                    result[row.travel_date] = row
+            return result
+
     def get_latest(
         self,
         *,
@@ -314,6 +351,144 @@ class CalendarPriceStore:
             if entry is not None:
                 session.expunge(entry)
             return entry
+
+    def get_latest_many(
+        self,
+        *,
+        origins: list[str] | tuple[str, ...],
+        destinations: list[str] | tuple[str, ...],
+        travel_dates: list[date] | tuple[date, ...],
+        adults: int,
+        children: int,
+        currency: str,
+        direction: str,
+    ) -> dict[date, CalendarPriceObservation]:
+        """Load stale fallbacks for requested dates in one query."""
+
+        if not travel_dates:
+            return {}
+        key = self.market_key(
+            origins, destinations, adults, children, currency, direction
+        )
+        with Session(self.engine) as session:
+            rows = session.scalars(
+                select(CalendarPriceObservation)
+                .where(
+                    CalendarPriceObservation.market_key == key,
+                    CalendarPriceObservation.travel_date.in_(travel_dates),
+                )
+                .order_by(CalendarPriceObservation.observed_at.desc())
+            ).all()
+            result: dict[date, CalendarPriceObservation] = {}
+            for row in rows:
+                if row.travel_date not in result:
+                    session.expunge(row)
+                    result[row.travel_date] = row
+            return result
+
+    def put_many(
+        self, entries: list[dict[str, object]]
+    ) -> dict[date, CalendarPriceObservation]:
+        """Persist a calendar range in one transaction."""
+
+        if not entries:
+            return {}
+        rows = [CalendarPriceObservation(**entry) for entry in entries]
+        with Session(self.engine) as session:
+            session.add_all(rows)
+            session.commit()
+            for row in rows:
+                session.refresh(row)
+                session.expunge(row)
+        return {row.travel_date: row for row in rows}
+
+    def reuse_search_baselines_many(
+        self,
+        *,
+        origins: list[str] | tuple[str, ...],
+        destinations: list[str] | tuple[str, ...],
+        travel_dates: list[date] | tuple[date, ...],
+        adults: int,
+        children: int,
+        currency: str,
+        direction: str,
+        now: datetime | None = None,
+    ) -> dict[date, CalendarPriceObservation]:
+        """Reuse matching durable search baselines with one session scan/write."""
+
+        if not travel_dates:
+            return {}
+        current = now or datetime.now(UTC)
+        requested = set(travel_dates)
+        is_return = direction.upper() == "RETURN"
+        matches: dict[date, tuple[Decimal, datetime, str]] = {}
+        with Session(self.engine) as session:
+            rows = session.scalars(
+                select(SearchSessionEntry)
+                .where(
+                    SearchSessionEntry.status.in_(("completed", "partial_failure")),
+                    SearchSessionEntry.updated_at > current - self.ttl,
+                )
+                .order_by(SearchSessionEntry.updated_at.desc())
+            )
+            for row in rows:
+                request = json.loads(row.request_json)
+                expected_date = request.get(
+                    "return_date" if is_return else "outbound_date"
+                )
+                try:
+                    candidate_date = date.fromisoformat(expected_date)
+                except (TypeError, ValueError):
+                    continue
+                if candidate_date not in requested or candidate_date in matches:
+                    continue
+                if (
+                    sorted(
+                        request.get("destinations" if is_return else "origins") or []
+                    )
+                    != sorted(origins)
+                    or sorted(
+                        request.get("origins" if is_return else "destinations") or []
+                    )
+                    != sorted(destinations)
+                    or request.get("adults") != adults
+                    or request.get("children") != children
+                    or request.get("currency") != currency.upper()
+                ):
+                    continue
+                snapshot = json.loads(row.snapshot_json)
+                result = snapshot.get("return" if is_return else "outbound") or {}
+                baseline = result.get("baseline")
+                if (
+                    isinstance(baseline, dict)
+                    and baseline.get("base_price") is not None
+                ):
+                    matches[candidate_date] = (
+                        Decimal(str(baseline["base_price"])),
+                        row.completed_at or row.updated_at,
+                        row.search_key,
+                    )
+        if not matches:
+            return {}
+        return self.put_many(
+            [
+                {
+                    "market_key": self.market_key(
+                        origins, destinations, adults, children, currency, direction
+                    ),
+                    "travel_date": travel_date,
+                    "direction": direction.upper(),
+                    "observed_at": observed_at,
+                    "lowest_direct_price": price,
+                    "currency": currency.upper(),
+                    "passenger_context": json.dumps(
+                        {"adults": adults, "children": children}, separators=(",", ":")
+                    ),
+                    "source_search_key": search_key,
+                }
+                for travel_date, (price, observed_at, search_key) in matches.items()
+            ]
+        )
 
     def put(
         self,

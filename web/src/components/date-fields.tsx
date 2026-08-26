@@ -40,7 +40,19 @@ function DirectionalDatePicker({ label, value, disabled, origins, destinations, 
     setStates((current) => ({ ...current, ...Object.fromEntries(missing.map((date) => [date, "LOADING"])) }));
     try {
       const response = await getCalendarPrices({ origins, destinations, dateFrom: missing[0], dateTo: missing.at(-1)!, adults, children: childPassengers, currency, direction });
-      console.info("CALENDAR_DIAGNOSTICS", { direction, calendar_provider_calls_this_invocation: response.calendar_provider_calls_this_invocation, calendar_calls_avoided: response.calendar_calls_avoided, failures: response.failures });
+      console.info("CALENDAR_DIAGNOSTICS", {
+        direction,
+        calendar_provider_calls_this_invocation: response.calendar_provider_calls_this_invocation,
+        calendar_calls_avoided: response.calendar_calls_avoided,
+        failures: response.failures,
+        calendar_calls_concurrent_peak: response.calendar_calls_concurrent_peak,
+        calendar_provider_median_ms: response.calendar_provider_median_ms,
+        calendar_provider_p95_ms: response.calendar_provider_p95_ms,
+        calendar_provider_slowest_ms: response.calendar_provider_slowest_ms,
+        calendar_total_duration_ms: response.calendar_total_duration_ms,
+        calendar_postgres_total_ms: response.calendar_postgres_total_ms,
+        request_timings: response.request_timings,
+      });
       const returned = Object.fromEntries(response.dates.map((item) => [item.date, item]));
       setPrices((current) => ({ ...current, ...returned }));
       setStates((current) => ({ ...current, ...Object.fromEntries(missing.map((date) => [date, (returned[date]?.state as CellState | undefined) ?? "ERROR"])) }));

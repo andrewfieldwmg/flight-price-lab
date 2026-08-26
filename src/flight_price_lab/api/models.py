@@ -296,11 +296,28 @@ class CalendarPrice(BaseModel):
     observed_at: datetime | None = None
 
 
+class CalendarRequestTiming(BaseModel):
+    date: date
+    started_at: datetime
+    completed_at: datetime
+    duration_ms: float
+    status: str
+    cache_hit: bool
+
+
 class CalendarResponse(BaseModel):
     dates: list[CalendarPrice]
     calendar_provider_calls_this_invocation: int = 0
     calendar_calls_avoided: int = 0
     failures: int = 0
+    request_timings: list[CalendarRequestTiming] = Field(default_factory=list)
+    calendar_calls_total: int = 0
+    calendar_calls_concurrent_peak: int = 0
+    calendar_provider_median_ms: float = 0
+    calendar_provider_p95_ms: float = 0
+    calendar_provider_slowest_ms: float = 0
+    calendar_total_duration_ms: float = 0
+    calendar_postgres_total_ms: float = 0
 
     @property
     def prices(self) -> list[CalendarPrice]:
