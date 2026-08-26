@@ -1,13 +1,33 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { TripOption } from "@/lib/api/types";
+import type { PriceHistoryComparison, TripOption } from "@/lib/api/types";
 import { aggregateTrip } from "@/lib/search/calculations";
 import { localClock } from "./direction-results";
 import { money } from "./price-display";
 import { duration } from "./result-card";
 import { BookingPreparation } from "./booking-preparation";
-import { directionHistory, elapsedShort, historyAccessibleLabel, historySignal, percentageChangeSignal, priceHistoryState } from "@/lib/search/price-history";
+import { elapsedShort, historyAccessibleLabel, priceHistoryState } from "@/lib/search/price-history";
+
+function summaryChangeSignal(history: PriceHistoryComparison | null | undefined): string {
+  const state = priceHistoryState(history);
+  if (state === "LOADING") return "New";
+  if (state === "FIRST_SEEN") return "First seen";
+  if (state === "ERROR") return "History unavailable";
+  if (state === "UNCHANGED") return "No change";
+  const percent = Number(history?.price_change_percent ?? 0);
+  return `${percent > 0 ? "↑" : "↓"} ${Math.abs(percent).toFixed(1)}%`;
+}
+
+function summaryDirectionHistory(history: PriceHistoryComparison | null | undefined): string {
+  const signal = summaryChangeSignal(history);
+  return priceHistoryState(history) === "CHANGED" ? `${signal} since last seen` : signal;
+}
+
+function summaryHistoryAccessibleLabel(history: PriceHistoryComparison | null | undefined): string {
+  const state = priceHistoryState(history);
+  return state === "LOADING" || state === "FIRST_SEEN" ? "First price observation" : historyAccessibleLabel(history);
+}
 
 function range(low: number | string | null, high: number | string | null, currency: string) {
   if (low === null) return "unavailable";
@@ -28,10 +48,10 @@ function DirectionSummary({ label, option, showBaggage, date }: { label: string;
   const baggageEstimates = option.baggage_estimates ?? [];
   return <div className="summary-direction">
     <div className="summary-direction-head"><strong>{label} · {summaryDate(date)}</strong><b>{money(option.base_price, option.currency)}</b></div>
-    <div className="summary-history" aria-label={historyAccessibleLabel(option.history)}>{directionHistory(option.history)}</div>
+    {summaryDirectionHistory(option.history) && <div className="summary-history" aria-label={summaryHistoryAccessibleLabel(option.history)}>{summaryDirectionHistory(option.history)}</div>}
     <div className="summary-route">
       {option.legs.map((leg, index) => <div key={`${leg.flight_number}-${index}`}>
-        <div className="summary-leg" aria-label={`${leg.origin} ${localClock(leg.departure_at)} to ${leg.destination} ${localClock(leg.arrival_at)} ${leg.airline} ${leg.flight_number}${option.is_self_transfer && leg.constituent_price !== null && leg.constituent_price !== undefined ? `. ${historyAccessibleLabel(leg.history)}` : ""}`}><strong>{leg.origin}</strong> {localClock(leg.departure_at)} <span>→</span> <strong>{leg.destination}</strong> {localClock(leg.arrival_at)} <small>({leg.airline} {leg.flight_number})</small>{option.is_self_transfer && leg.constituent_price !== null && leg.constituent_price !== undefined && <b>{money(leg.constituent_price, option.currency)} <em>{historySignal(leg.history)}</em></b>}</div>
+        <div className="summary-leg" aria-label={`${leg.origin} ${localClock(leg.departure_at)} to ${leg.destination} ${localClock(leg.arrival_at)} ${leg.airline} ${leg.flight_number}${option.is_self_transfer && leg.constituent_price !== null && leg.constituent_price !== undefined && summaryChangeSignal(leg.history) ? `. ${summaryHistoryAccessibleLabel(leg.history)}` : ""}`}><strong>{leg.origin}</strong> {localClock(leg.departure_at)} <span>→</span> <strong>{leg.destination}</strong> {localClock(leg.arrival_at)} <small>({leg.airline} {leg.flight_number})</small>{option.is_self_transfer && leg.constituent_price !== null && leg.constituent_price !== undefined && <b>{money(leg.constituent_price, option.currency)} {summaryChangeSignal(leg.history) && <em>{summaryChangeSignal(leg.history)}</em>}</b>}</div>
         {index < option.legs.length - 1 && <div className="summary-transfer">{option.connection_airport} · {duration(option.connection_minutes)} transfer</div>}
       </div>)}
     </div>
@@ -102,9 +122,9 @@ export function TripSummary({ outbound, inbound, outboundBaseline, inboundBaseli
         ? "FIRST_SEEN"
         : commonPriorRun && tripHistoryPercent === 0 ? "UNCHANGED" : commonPriorRun ? "CHANGED" : "ERROR"
     : outboundHistoryState;
-  const tripHistoryCompact = tripHistoryState === "LOADING" ? "Loading…" : tripHistoryState === "FIRST_SEEN" ? "First seen" : tripHistoryState === "ERROR" ? "Unavailable" : percentageChangeSignal(tripHistoryPercent ?? 0);
+  const tripHistoryCompact = tripHistoryState === "LOADING" ? "New" : tripHistoryState === "FIRST_SEEN" ? "First seen" : tripHistoryState === "ERROR" ? "Unavailable" : tripHistoryState === "UNCHANGED" ? "No change" : `${(tripHistoryPercent ?? 0) > 0 ? "↑" : "↓"}${Math.abs(tripHistoryPercent ?? 0).toFixed(1)}%`;
   const tripHistoryDetailed = tripHistoryState === "LOADING"
-    ? "Loading history…"
+    ? "New"
     : tripHistoryState === "FIRST_SEEN"
       ? "First seen"
       : tripHistoryState === "ERROR"
@@ -112,18 +132,18 @@ export function TripSummary({ outbound, inbound, outboundBaseline, inboundBaseli
         : tripHistoryPercent === null
           ? "History unavailable"
     : tripHistoryPercent === 0
-      ? `— (0%) since last seen ${elapsedShort(tripHistoryElapsed)} ago`
-      : `${percentageChangeSignal(tripHistoryPercent)} since last seen ${elapsedShort(tripHistoryElapsed)} ago`;
+      ? `No change since last seen ${elapsedShort(tripHistoryElapsed)} ago`
+      : `${tripHistoryPercent > 0 ? "↑" : "↓"} ${Math.abs(tripHistoryPercent).toFixed(1)}% since last seen ${elapsedShort(tripHistoryElapsed)} ago`;
   return <>
     {compactVisible && <aside className="compact-trip-summary" aria-label="Compact selected trip summary">
-      <div><span>Trip total</span><strong>{money(summary.baseAlternativePrice, currency)} · {tripHistoryCompact}</strong></div>
+      <div><span>Trip total</span><strong>{money(summary.baseAlternativePrice, currency)}{tripHistoryCompact && ` · ${tripHistoryCompact}`}</strong></div>
       {comparisonEnabled && <div><span>Save</span><strong>{money(saving, currency)} / {percentage.toFixed(0)}%</strong></div>}
       {comparisonEnabled && <div><span>Extra travel</span><strong>+{duration(summary.extraMinutes)}</strong></div>}
       <b>{compactRoutes || routes}</b>
     </aside>}
     <section ref={fullSummary} className="summary-strip" aria-label="Selected trip summary">
       <div className="summary-primary">
-        <div className="summary-total-block"><span>Trip total</span><strong>{money(summary.baseAlternativePrice, currency)}</strong><small role={tripHistoryState === "LOADING" ? "status" : undefined} aria-label={tripHistoryState === "LOADING" ? "Loading price history" : tripHistoryState === "FIRST_SEEN" ? "First price observation" : tripHistoryState === "ERROR" ? "Price history unavailable" : tripHistoryChange !== null && tripHistoryChange > 0 ? `Trip price increased by ${Math.abs(tripHistoryPercent ?? 0).toFixed(1)} percent since last seen` : tripHistoryChange !== null && tripHistoryChange < 0 ? `Trip price decreased by ${Math.abs(tripHistoryPercent ?? 0).toFixed(1)} percent since last seen` : "No trip price change since last seen"}>{tripHistoryDetailed}</small>{previousTripTotal !== null && tripHistoryChange !== 0 && <em>Previously {money(previousTripTotal, currency)}</em>}</div>
+        <div className="summary-total-block"><span>Trip total</span><strong>{money(summary.baseAlternativePrice, currency)}</strong>{tripHistoryDetailed && <small aria-label={tripHistoryState === "FIRST_SEEN" ? "First price observation" : tripHistoryState === "ERROR" ? "Price history unavailable" : tripHistoryChange !== null && tripHistoryChange > 0 ? `Trip price increased by ${Math.abs(tripHistoryPercent ?? 0).toFixed(1)} percent since last seen` : tripHistoryChange !== null && tripHistoryChange < 0 ? `Trip price decreased by ${Math.abs(tripHistoryPercent ?? 0).toFixed(1)} percent since last seen` : "No trip price change since last seen"}>{tripHistoryDetailed}</small>}{previousTripTotal !== null && tripHistoryChange !== 0 && <em>Previously {money(previousTripTotal, currency)}</em>}</div>
         {comparisonEnabled && <div><span>Save</span><strong>{money(saving, currency)} / {percentage.toFixed(0)}%</strong></div>}
         {comparisonEnabled && <div><span>Extra travel</span><strong>+{duration(summary.extraMinutes)}</strong></div>}
         <BookingPreparation searchId={searchId} optionIds={[outbound?.id, inbound?.id].filter((id): id is string => Boolean(id))} />

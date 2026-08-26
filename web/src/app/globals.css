@@ -189,6 +189,7 @@ button { cursor:pointer; }
 .history-cell small { color:var(--muted); font-size:9px; margin-top:1px; }
 .history-cell.history-up strong { color:#a04431; }
 .history-cell.history-down strong { color:#167360; }
+.history-loading-spinner { display:inline-block; width:12px; height:12px; vertical-align:middle; }
 .route-cell { font-weight:700; }
 .time-warning { color:#b84c27; font-weight:800; background:#fff5ef !important; }
 .detail-row td { padding:0; background:#f8faf8; }

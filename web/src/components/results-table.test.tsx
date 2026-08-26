@@ -72,11 +72,11 @@ describe("dense flight results", () => {
   it("shows the search date and direction loading states", () => {
     const { rerender } = render(<DirectionResults title="Outbound" date="2026-12-18" results={{ ...results, baseline: null, nonstop_options: [], feasible_options: [] }} selectedId={null} onSelect={vi.fn()} complete={false} connectionProfile="CONSERVATIVE" selfTransferEnabled />);
     expect(screen.getByText("Friday 18 December 2026")).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("Loading outbound options…");
+    expect(screen.getByText("Loading outbound options…")).toBeInTheDocument();
     rerender(<DirectionResults title="Outbound" date="2026-12-18" results={results} selectedId={null} onSelect={vi.fn()} complete={false} connectionProfile="CONSERVATIVE" selfTransferEnabled />);
-    expect(screen.getByRole("status")).toHaveTextContent("Still loading more options…");
+    expect(screen.getByText("Still loading more options…")).toBeInTheDocument();
     rerender(<DirectionResults title="Outbound" date="2026-12-18" results={results} selectedId={null} onSelect={vi.fn()} complete connectionProfile="CONSERVATIVE" selfTransferEnabled />);
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.queryByText("Still loading more options…")).not.toBeInTheDocument();
   });
 
   it("shows all feasible options with the nonstop reference pinned initially", () => {
@@ -195,7 +195,8 @@ describe("dense flight results", () => {
   it("shows unresolved history as loading rather than New", () => {
     const unresolved = option({ id: "unresolved", history: undefined });
     render(<DirectionResults title="Outbound" date="2026-12-18" results={{ ...results, baseline: unresolved, nonstop_options: [unresolved] }} selectedId={null} onSelect={vi.fn()} complete connectionProfile="CONSERVATIVE" selfTransferEnabled={false} />);
-    expect(screen.getByLabelText("Loading price history")).toHaveTextContent("Loading…");
+    expect(screen.getByRole("status", { name: "Loading price history" })).toHaveClass("history-loading-spinner");
+    expect(screen.queryByText("Loading…")).not.toBeInTheDocument();
     expect(screen.queryByText("New")).not.toBeInTheDocument();
   });
 

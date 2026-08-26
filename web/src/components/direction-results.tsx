@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import type { ConnectionProfile, DirectionResults as Results, TripOption } from "@/lib/api/types";
 import { money } from "./price-display";
 import { duration } from "./result-card";
-import { elapsedShort, historyAccessibleLabel, historySignal, historyTooltip } from "@/lib/search/price-history";
+import { elapsedShort, historyAccessibleLabel, historySignal, historyTooltip, priceHistoryState } from "@/lib/search/price-history";
 
 export type SortKey = "saving" | "price" | "departure" | "arrival" | "transfer" | "journey" | "extra";
 type ViewMode = "all" | "efficient";
@@ -180,7 +180,7 @@ function FragmentRow({ option, selected, expanded, onClick, connectionProfile, s
       <tr className={`${selected ? "selected-row" : ""} ${expanded ? "expanded-row" : ""}`} onClick={onClick}>
         <td data-label="Select"><input type="radio" readOnly checked={selected} aria-label={`Select ${option.route.join("-")}`} /> <span className="type-pill">{option.is_nonstop ? "Direct" : "1-stop"}</span></td>
         <td data-label="Price" className="price-cell">{compactPrice(option)}</td>
-        <td data-label="Change" className={`history-cell ${Number(option.history?.price_change_amount ?? 0) > 0 ? "history-up" : Number(option.history?.price_change_amount ?? 0) < 0 ? "history-down" : ""}`} title={historyTooltip(option.history, option.base_price, option.currency)}><strong aria-label={historyAccessibleLabel(option.history)}>{historySignal(option.history)}</strong>{option.history?.history_status === "PREVIOUS_FOUND" && <small>{elapsedShort(option.history.elapsed_seconds)} ago</small>}</td>
+        <HistoryCell option={option} />
         {showComparisons && <td data-label="Saving vs nonstop" className="saving-cell">{option.is_nonstop ? "Reference" : saving > 0 ? `${money(saving, option.currency)} / ${Number(option.saving_vs_nonstop_percent).toFixed(0)}%` : "—"}</td>}
         <td data-label="Depart" className={isEarlyDeparture(option.departure_at) ? "time-warning" : ""}>{localClock(option.departure_at)}</td>
         <td data-label="Arrive" className={isLateArrival(option.arrival_at) ? "time-warning" : ""}>{localClock(option.arrival_at)}</td>
@@ -194,4 +194,13 @@ function FragmentRow({ option, selected, expanded, onClick, connectionProfile, s
       {expanded && <tr className="detail-row"><td colSpan={columnCount}><div className="row-detail"><div className="leg-list">{option.legs.map((leg, index) => <div key={`${leg.flight_number}-${index}`}><strong>{leg.origin} {localClock(leg.departure_at)} → {leg.destination} {localClock(leg.arrival_at)}</strong><span>{leg.airline} · {leg.flight_number}</span>{index < option.legs.length - 1 && <em>Stopover {option.connection_airport} · {duration(option.connection_minutes)}</em>}</div>)}</div><dl><div><dt>Base fare</dt><dd>{money(option.base_price, option.currency)}</dd></div><div><dt>Ancillary status</dt><dd>{option.price_completeness}</dd></div><div><dt>Connection profile</dt><dd>{connectionProfile}</dd></div></dl>{option.ticketing_type === "separate_tickets" && <p className="inline-warning">Separate tickets: missed-connection protection is not guaranteed.</p>}</div></td></tr>}
     </>
   );
+}
+
+function HistoryCell({ option }: { option: TripOption }) {
+  const state = priceHistoryState(option.history);
+  return <td data-label="Change" className={`history-cell ${Number(option.history?.price_change_amount ?? 0) > 0 ? "history-up" : Number(option.history?.price_change_amount ?? 0) < 0 ? "history-down" : ""}`} title={historyTooltip(option.history, option.base_price, option.currency)}>
+    {state === "LOADING"
+      ? <span className="loading-spinner history-loading-spinner" role="status" aria-label="Loading price history" />
+      : <><strong aria-label={historyAccessibleLabel(option.history)}>{historySignal(option.history)}</strong>{option.history?.history_status === "PREVIOUS_FOUND" && <small>{elapsedShort(option.history.elapsed_seconds)} ago</small>}</>}
+  </td>;
 }
