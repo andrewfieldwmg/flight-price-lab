@@ -11,6 +11,7 @@ from flight_price_lab.api.booking import (
     BritishAirwaysHandoffAdapter,
     EasyJetHandoffAdapter,
     HandoffCapability,
+    ITAAirwaysHandoffAdapter,
     PriceChangeStatus,
     ResolvedHandoff,
     SearchAPIBookingResolver,
@@ -590,4 +591,32 @@ def test_british_airways_adapter_validates_encoded_flight_context() -> None:
 
     assert BritishAirwaysHandoffAdapter().validate_redirect(url, handoff) == url
     assert BritishAirwaysHandoffAdapter.capability is HandoffCapability.PREFILLED_SEARCH
+    assert handoff.exact_flight_verified is False
+
+
+def test_ita_airways_adapter_validates_prefilled_flight_party_and_date() -> None:
+    handoff = ResolvedHandoff(
+        current_price=Decimal(276),
+        booking_url="https://www.google.com/travel/clk/f",
+        booking_post_data=SecretStr("u=opaque"),
+        capability=HandoffCapability.PREFILLED_SEARCH,
+        adults=2,
+        children=2,
+        carrier="AZ",
+        flight_number="AZ 217",
+        origin="LCY",
+        destination="LIN",
+        travel_date="2026-12-18",
+    )
+    url = (
+        "https://ad.doubleclick.net/ddm/clk/509395740?"
+        "https%3A%2F%2Fwww.ita-airways.com%2Fdeeplink%2Fpartner%3FOriginOut1=LCY"
+        "&DestinationOut1=LIN&DepartureOut1=2026-12-18T07%3A00%3A00"
+        "&ArrivalOut1=2026-12-18T09%3A50%3A00&FlightOut1=AZ217"
+        "&OperatingFlightOut1=AZ217&PaxAdult=2&PaxChild=2"
+        "&OfferedPrice=275.08&OfferedPriceCurrency=GBP"
+    )
+
+    assert ITAAirwaysHandoffAdapter().validate_redirect(url, handoff) == url
+    assert ITAAirwaysHandoffAdapter.capability is HandoffCapability.PREFILLED_SEARCH
     assert handoff.exact_flight_verified is False

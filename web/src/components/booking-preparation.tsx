@@ -11,7 +11,7 @@ type DrawerState = "IDLE" | "PREPARING" | "READY" | "PARTIAL" | "ERROR";
 function money(value: number | string, currency: string) {
   return new Intl.NumberFormat("en-GB", { style: "currency", currency, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value));
 }
-function carrierName(code: string) { return ({ FR: "Ryanair", U2: "easyJet", W4: "Wizz Air", XZ: "Aeroitalia", BA: "British Airways", VY: "Vueling", LX: "SWISS", DE: "Condor" } as Record<string, string>)[code] ?? code; }
+function carrierName(code: string) { return ({ FR: "Ryanair", U2: "easyJet", W4: "Wizz Air", XZ: "Aeroitalia", BA: "British Airways", AZ: "ITA Airways", VY: "Vueling", LX: "SWISS", DE: "Condor" } as Record<string, string>)[code] ?? code; }
 function changeLabel(ticket: BookingTicket) {
   if (ticket.price_delta === null) return "Verify on airline";
   const delta = Number(ticket.price_delta);

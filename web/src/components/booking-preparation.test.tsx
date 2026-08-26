@@ -153,4 +153,14 @@ describe("BookingPreparation drawer", () => {
     expect(screen.getByText("Search prefilled — confirm XZ 2331")).toBeInTheDocument();
     expect(screen.getByText("Search prefilled — confirm BA 534")).toBeInTheDocument();
   });
+
+  it("renders ITA Airways as a prefilled handoff requiring flight confirmation", async () => {
+    const ita = ticket({ ticket_id: "az", carrier: "AZ", flight_number: "AZ 217", route: "LCY → LIN", current_price: "276", price_delta: "0", capability: "PREFILLED_SEARCH", exact_flight_verified: false });
+    prepareBooking.mockResolvedValue(session({ current_total: "276", price_delta: "0", tickets: [ita] }));
+    render(<BookingPreparation searchId="search" optionIds={["ita"]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Prepare booking" }));
+    expect(await screen.findByRole("button", { name: "Continue on ITA Airways" })).toBeEnabled();
+    expect(screen.getByText("Search prefilled — confirm AZ 217")).toBeInTheDocument();
+    expect(screen.getByText(/Confirm the flight and current price on ITA Airways/)).toBeInTheDocument();
+  });
 });

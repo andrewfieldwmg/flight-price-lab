@@ -231,12 +231,44 @@ class BritishAirwaysHandoffAdapter:
         return parsed._replace(scheme="https").geturl()
 
 
+class ITAAirwaysHandoffAdapter:
+    """Validate ITA's partner deeplink context without claiming flight selection."""
+
+    capability = HandoffCapability.PREFILLED_SEARCH
+
+    def validate_redirect(self, url: str, handoff: ResolvedHandoff) -> str:
+        parsed = urlparse(url)
+        if parsed.netloc.lower() != "ad.doubleclick.net":
+            raise ValueError("ITA Airways partner handoff was not returned")
+        query = parse_qs(parsed.query)
+        origin_keys = [
+            key for key in query if "ita-airways.com/deeplink/partner?OriginOut1" in key
+        ]
+        flight = handoff.flight_number.replace(" ", "").upper()
+        departure = query.get("DepartureOut1", [""])[0]
+        expected = {
+            "DestinationOut1": handoff.destination,
+            "FlightOut1": flight,
+            "PaxAdult": str(handoff.adults),
+            "PaxChild": str(handoff.children),
+        }
+        if (
+            len(origin_keys) != 1
+            or query.get(origin_keys[0]) != [handoff.origin]
+            or any(query.get(key) != [value] for key, value in expected.items())
+            or not departure.startswith(handoff.travel_date)
+        ):
+            raise ValueError("ITA Airways redirect did not preserve search context")
+        return parsed._replace(scheme="https").geturl()
+
+
 HANDOFF_ADAPTERS: dict[str, CarrierHandoffAdapter] = {
     "FR": RyanairHandoffAdapter(),
     "U2": EasyJetHandoffAdapter(),
     "W4": WizzAirHandoffAdapter(),
     "XZ": AeroitaliaHandoffAdapter(),
     "BA": BritishAirwaysHandoffAdapter(),
+    "AZ": ITAAirwaysHandoffAdapter(),
 }
 
 
@@ -285,6 +317,7 @@ class SearchAPIBookingResolver:
             "W4": HandoffCapability.PREFILLED_SEARCH,
             "XZ": HandoffCapability.PREFILLED_SEARCH,
             "BA": HandoffCapability.PREFILLED_SEARCH,
+            "AZ": HandoffCapability.PREFILLED_SEARCH,
             "VY": HandoffCapability.UNAVAILABLE,
             "LX": HandoffCapability.UNAVAILABLE,
             "DE": HandoffCapability.UNAVAILABLE,
