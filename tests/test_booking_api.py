@@ -1,6 +1,7 @@
 import asyncio
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from urllib.parse import parse_qs, urlparse
 
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
@@ -594,7 +595,7 @@ def test_british_airways_adapter_validates_encoded_flight_context() -> None:
     assert handoff.exact_flight_verified is False
 
 
-def test_ita_airways_adapter_validates_prefilled_flight_party_and_date() -> None:
+def test_ita_airways_handoff_bypasses_doubleclick_and_preserves_deeplink() -> None:
     handoff = ResolvedHandoff(
         current_price=Decimal(276),
         booking_url="https://www.google.com/travel/clk/f",
@@ -603,20 +604,65 @@ def test_ita_airways_adapter_validates_prefilled_flight_party_and_date() -> None
         adults=2,
         children=2,
         carrier="AZ",
-        flight_number="AZ 217",
-        origin="LCY",
-        destination="LIN",
-        travel_date="2026-12-18",
+        flight_number="AZ 224",
+        origin="LIN",
+        destination="LCY",
+        travel_date="2026-12-28",
     )
-    url = (
-        "https://ad.doubleclick.net/ddm/clk/509395740?"
-        "https%3A%2F%2Fwww.ita-airways.com%2Fdeeplink%2Fpartner%3FOriginOut1=LCY"
-        "&DestinationOut1=LIN&DepartureOut1=2026-12-18T07%3A00%3A00"
-        "&ArrivalOut1=2026-12-18T09%3A50%3A00&FlightOut1=AZ217"
-        "&OperatingFlightOut1=AZ217&PaxAdult=2&PaxChild=2"
-        "&OfferedPrice=275.08&OfferedPriceCurrency=GBP"
+    direct = (
+        "https://www.ita-airways.com/deeplink/partner?OriginOut1=LIN"
+        "&DestinationOut1=LCY&DepartureOut1=2026-12-28T21%3A00%3A00"
+        "&ArrivalOut1=2026-12-28T21%3A55%3A00&BookingClassOut1=E"
+        "&FlightOut1=AZ224&FareBasisOut1=KEULGTX9&OperatingFlightOut1=AZ224"
+        "&PaxAdult=2&PaxChild=2&OfferedPrice=276.00&OfferedPriceCurrency=GBP"
+        "&Mode=CART&partnerId=google&Language=en&Country=GB"
+        "&ENC=opaque%2Bvalue%2Fkeep%3D"
     )
+    wrapper = f"https://ad.doubleclick.net/ddm/clk/509395740?{direct}"
+    destination = ITAAirwaysHandoffAdapter().validate_redirect(wrapper, handoff)
+    query = parse_qs(urlparse(destination).query)
 
-    assert ITAAirwaysHandoffAdapter().validate_redirect(url, handoff) == url
+    assert destination == direct
+    assert urlparse(destination).hostname == "www.ita-airways.com"
+    assert query["FlightOut1"] == ["AZ224"]
+    assert query["PaxAdult"] == ["2"]
+    assert query["PaxChild"] == ["2"]
+    assert "ENC=opaque%2Bvalue%2Fkeep%3D" in destination
+    assert "ad.doubleclick.net" not in destination
     assert ITAAirwaysHandoffAdapter.capability is HandoffCapability.PREFILLED_SEARCH
     assert handoff.exact_flight_verified is False
+
+    class ITAResolver:
+        async def resolve(self, selected: FlightOffer) -> ResolvedHandoff:
+            del selected
+            return handoff
+
+    class ITALauncher:
+        async def launch(self, resolved: ResolvedHandoff) -> str:
+            return ITAAirwaysHandoffAdapter().validate_redirect(wrapper, resolved)
+
+    app = create_app(booking_resolver=ITAResolver(), handoff_launcher=ITALauncher())
+    search_id = "ita-search"
+    selected = route_offer("LIN", "LCY", date(2026, 12, 28), 21, "AZ 224", "276")
+    asyncio.run(
+        app.state.registry.create(
+            SearchSnapshot(search_id=search_id, trip_id=search_id, status="completed")
+        )
+    )
+    asyncio.run(
+        app.state.registry.register_booking_candidate(
+            search_id, "ita-option", (selected,)
+        )
+    )
+    client = TestClient(app)
+    prepared = client.post(
+        "/api/booking/prepare",
+        json={"search_id": search_id, "selected_option_ids": ["ita-option"]},
+    ).json()
+    ticket = prepared["tickets"][0]
+    response = client.post(
+        f"/api/booking/{prepared['booking_session_id']}/handoff/{ticket['ticket_id']}",
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert response.headers["location"] == direct

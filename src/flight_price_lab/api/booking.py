@@ -235,31 +235,48 @@ class ITAAirwaysHandoffAdapter:
     """Validate ITA's partner deeplink context without claiming flight selection."""
 
     capability = HandoffCapability.PREFILLED_SEARCH
+    _allowed_hosts = frozenset({"ita-airways.com", "www.ita-airways.com"})
+    _deeplink_markers = (
+        "https://www.ita-airways.com/deeplink/partner?",
+        "https://ita-airways.com/deeplink/partner?",
+    )
+
+    def _direct_destination(self, url: str) -> str:
+        parsed = urlparse(url)
+        if parsed.hostname in self._allowed_hosts:
+            return url
+        if parsed.hostname != "ad.doubleclick.net":
+            raise ValueError("ITA Airways partner handoff was not returned")
+        for marker in self._deeplink_markers:
+            offset = url.find(marker)
+            if offset >= 0:
+                destination = url[offset:]
+                target = urlparse(destination)
+                if (
+                    target.hostname in self._allowed_hosts
+                    and target.path == "/deeplink/partner"
+                ):
+                    return destination
+        raise ValueError("ITA Airways destination was missing from tracking wrapper")
 
     def validate_redirect(self, url: str, handoff: ResolvedHandoff) -> str:
-        parsed = urlparse(url)
-        if parsed.netloc.lower() != "ad.doubleclick.net":
-            raise ValueError("ITA Airways partner handoff was not returned")
+        destination = self._direct_destination(url)
+        parsed = urlparse(destination)
         query = parse_qs(parsed.query)
-        origin_keys = [
-            key for key in query if "ita-airways.com/deeplink/partner?OriginOut1" in key
-        ]
         flight = handoff.flight_number.replace(" ", "").upper()
         departure = query.get("DepartureOut1", [""])[0]
         expected = {
+            "OriginOut1": handoff.origin,
             "DestinationOut1": handoff.destination,
             "FlightOut1": flight,
             "PaxAdult": str(handoff.adults),
             "PaxChild": str(handoff.children),
         }
-        if (
-            len(origin_keys) != 1
-            or query.get(origin_keys[0]) != [handoff.origin]
-            or any(query.get(key) != [value] for key, value in expected.items())
-            or not departure.startswith(handoff.travel_date)
-        ):
+        if any(
+            query.get(key) != [value] for key, value in expected.items()
+        ) or not departure.startswith(handoff.travel_date):
             raise ValueError("ITA Airways redirect did not preserve search context")
-        return parsed._replace(scheme="https").geturl()
+        return destination
 
 
 HANDOFF_ADAPTERS: dict[str, CarrierHandoffAdapter] = {
