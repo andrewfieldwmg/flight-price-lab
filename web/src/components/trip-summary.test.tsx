@@ -37,6 +37,35 @@ describe("selected trip summary", () => {
     expect(screen.getByText("Return · Mon 28 Dec 2026")).toBeInTheDocument();
   });
 
+  it("shows composite and constituent history without manufacturing unmatched trip totals", () => {
+    const outbound = synthetic();
+    const inbound = synthetic("RETURN");
+    const comparison = { history_status: "PREVIOUS_FOUND" as const, previous_price: "378", price_change_amount: "24", price_change_percent: "6.35", previous_observed_at: "2026-08-20T08:00:00Z", elapsed_seconds: 3 * 86400, previous_observation_run_id: "common-run" };
+    outbound.history = comparison;
+    inbound.history = { ...comparison, previous_price: "540", price_change_amount: "-54", price_change_percent: "-10" };
+    outbound.legs[0].constituent_price = "258";
+    outbound.legs[0].history = { ...comparison, previous_price: "250", price_change_amount: "8", price_change_percent: "3.2" };
+    render(<TripSummary outbound={outbound} inbound={inbound} outboundBaseline={option({ id: "out" })} inboundBaseline={option({ id: "in", direction: "RETURN" })} outboundComparisonEnabled inboundComparisonEnabled />);
+    expect(screen.getAllByText("↑ 6.3% since last seen 3d ago").length).toBeGreaterThan(0);
+    expect(screen.getByText("£258")).toBeInTheDocument();
+    expect(screen.getByText("↑ 3.2%")).toBeInTheDocument();
+    expect(screen.getAllByText("↓ 10.0% since last seen 3d ago").length).toBeGreaterThan(0);
+    expect(screen.getByText("Previously")).toBeInTheDocument();
+    expect(screen.getByText("£918")).toBeInTheDocument();
+    expect(screen.getByText(/↑ 5.9%/)).toHaveAccessibleName("Trip price increased by 5.9 percent since last seen");
+  });
+
+  it("omits an exact combined history total when prior runs differ", () => {
+    const outbound = synthetic();
+    const inbound = synthetic("RETURN");
+    const comparison = { history_status: "PREVIOUS_FOUND" as const, previous_price: "400", price_change_amount: "86", price_change_percent: "21.5", previous_observed_at: "2026-08-20T08:00:00Z", elapsed_seconds: 86400, previous_observation_run_id: "out-run" };
+    outbound.history = comparison;
+    inbound.history = { ...comparison, previous_observation_run_id: "return-run" };
+    render(<TripSummary outbound={outbound} inbound={inbound} outboundBaseline={option({ id: "out" })} inboundBaseline={option({ id: "in", direction: "RETURN" })} />);
+    expect(screen.queryByText("Previously")).not.toBeInTheDocument();
+    expect(screen.getAllByText(/since last seen/).length).toBeGreaterThan(0);
+  });
+
   it("keeps baggage hidden until requested and leaves the base headline unchanged", () => {
     const selected = synthetic();
     selected.ancillary_price_low = "11.99"; selected.ancillary_price_high = null;

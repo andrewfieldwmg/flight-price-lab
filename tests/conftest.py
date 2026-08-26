@@ -57,7 +57,8 @@ def clean_persistence_tables() -> None:
         connection.execute(
             text(
                 "TRUNCATE TABLE search_cache, booking_candidates, search_sessions, "
-                "market_observation, flight_observation RESTART IDENTITY"
+                "trip_option_observation, flight_observation, "
+                "search_observation_run, market_observation RESTART IDENTITY CASCADE"
             )
         )
     engine.dispose()

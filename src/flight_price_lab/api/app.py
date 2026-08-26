@@ -53,6 +53,7 @@ from flight_price_lab.storage.database import (
     create_database_engine,
     database_health,
 )
+from flight_price_lab.storage.price_history import PriceHistoryStore
 
 
 def create_app(
@@ -75,6 +76,7 @@ def create_app(
     database_engine = create_database_engine()
     candidate_store = BookingCandidateStore(engine=database_engine)
     search_store = SearchSessionStore(engine=database_engine)
+    price_history_store = PriceHistoryStore(database_engine)
     registry = InMemorySearchRegistry(candidate_store, search_store)
     application.state.registry = registry
     application.state.search_store = search_store
@@ -88,7 +90,12 @@ def create_app(
 
     def new_search_service() -> TripSearchService:
         concurrency = Settings().search_provider_concurrency
-        return TripSearchService(get_provider(), registry, max_concurrency=concurrency)
+        return TripSearchService(
+            get_provider(),
+            registry,
+            max_concurrency=concurrency,
+            price_history_store=price_history_store,
+        )
 
     def get_provider() -> ProviderGateway:
         configured = application.state.provider

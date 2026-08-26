@@ -119,6 +119,9 @@ class TripLegSummary(BaseModel):
     arrival_at: datetime
     airline: str
     flight_number: str
+    constituent_fingerprint: str | None = None
+    constituent_price: Decimal | None = None
+    history: "PriceHistoryComparison | None" = None
 
     @field_validator("departure_at", "arrival_at")
     @classmethod
@@ -140,6 +143,23 @@ class BaggageEstimate(BaseModel):
     price_high: Decimal | None = None
     completeness: PriceCompleteness
     confidence: str
+
+
+class HistoryStatus(StrEnum):
+    FIRST_SEEN = "FIRST_SEEN"
+    PREVIOUS_FOUND = "PREVIOUS_FOUND"
+
+
+class PriceHistoryComparison(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    history_status: HistoryStatus
+    previous_price: Decimal | None = None
+    price_change_amount: Decimal | None = None
+    price_change_percent: Decimal | None = None
+    previous_observed_at: datetime | None = None
+    elapsed_seconds: int | None = None
+    previous_observation_run_id: str | None = None
 
 
 class TripOption(BaseModel):
@@ -175,6 +195,8 @@ class TripOption(BaseModel):
     extra_minutes_vs_nonstop: int | None = None
     ticketing_type: TicketingType
     baggage_confidence: str
+    constituent_fingerprints: list[str] = Field(default_factory=list)
+    history: PriceHistoryComparison | None = None
 
     @field_validator("departure_at", "arrival_at")
     @classmethod

@@ -121,6 +121,8 @@ button { cursor:pointer; }
 .summary-direction-head { display:flex; justify-content:space-between; margin-bottom:4px; }
 .summary-direction-head strong,.summary-totals dt { color:#abc2c1; font-size:9px; text-transform:uppercase; letter-spacing:.08em; }
 .summary-direction-head b { color:#dcfb7b; font-size:13px; }
+.summary-history { color:#d7e7e2; font-size:10px; margin:-1px 0 5px; }
+.summary-total-history { display:grid!important; grid-template-columns:auto auto; gap:2px 12px; font-size:10px; }
 .summary-direction-prices { margin:0 0 6px; display:grid; gap:1px; }
 .summary-direction-prices div { display:grid; grid-template-columns:110px 1fr; }
 .summary-direction-prices dt { color:#abc2c1; font-size:9px; }
@@ -130,6 +132,8 @@ button { cursor:pointer; }
 .summary-leg { line-height:19px; white-space:nowrap; }
 .summary-leg span { color:#8eaaa9; padding:0 3px; }
 .summary-leg small { color:#b8cbc9; font-size:10px; margin-left:4px; }
+.summary-leg > b { color:#dcfb7b; float:right; margin-left:12px; font-size:10px; }
+.summary-leg > b em { color:#d7e7e2; font-style:normal; font-weight:500; margin-left:4px; }
 .summary-transfer { color:#b8cbc9; font-size:10px; padding-left:10px; line-height:17px; }
 .summary-ticketing { display:inline-block; margin-top:3px; padding:2px 5px; background:#284f53; color:#f4c8b6; font-size:9px; text-transform:uppercase; }
 .summary-baggage-enrichment { margin-top:7px; padding-top:5px; border-top:1px dashed #416367; display:grid; gap:2px; font-size:10px; }
@@ -180,6 +184,10 @@ button { cursor:pointer; }
 .type-pill { color:var(--teal); font-weight:800; }
 .saving-cell { color:var(--teal); font-weight:800; }
 .price-cell { font-weight:900; font-size:12px; }
+.history-cell strong,.history-cell small { display:block; }
+.history-cell small { color:var(--muted); font-size:9px; margin-top:1px; }
+.history-cell.history-up strong { color:#a04431; }
+.history-cell.history-down strong { color:#167360; }
 .route-cell { font-weight:700; }
 .time-warning { color:#b84c27; font-weight:800; background:#fff5ef !important; }
 .detail-row td { padding:0; background:#f8faf8; }

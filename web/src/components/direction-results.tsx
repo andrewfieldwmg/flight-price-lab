@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import type { ConnectionProfile, DirectionResults as Results, TripOption } from "@/lib/api/types";
 import { money } from "./price-display";
 import { duration } from "./result-card";
+import { elapsedShort, historyAccessibleLabel, historySignal, historyTooltip } from "@/lib/search/price-history";
 
 export type SortKey = "saving" | "price" | "departure" | "arrival" | "transfer" | "journey" | "extra";
 type ViewMode = "all" | "efficient";
@@ -130,7 +131,7 @@ export function DirectionResults({
     }
   }
 
-  const columnCount = selfTransferEnabled ? 11 : 9;
+  const columnCount = selfTransferEnabled ? 12 : 10;
   return (
     <section className="results-section">
       <div className="results-heading">
@@ -147,6 +148,7 @@ export function DirectionResults({
           <thead><tr>
             <th>Select</th>
             <th><HeaderButton label="Price" sortKey="price" active={sort === "price"} descending={descending} onSort={changeSort} /></th>
+            <th>Change</th>
             {selfTransferEnabled && <th><HeaderButton label="Saving vs nonstop" sortKey="saving" active={sort === "saving"} descending={descending} onSort={changeSort} /></th>}
             <th><HeaderButton label="Depart" sortKey="departure" active={sort === "departure"} descending={descending} onSort={changeSort} /></th>
             <th><HeaderButton label="Arrive" sortKey="arrival" active={sort === "arrival"} descending={descending} onSort={changeSort} /></th>
@@ -178,6 +180,7 @@ function FragmentRow({ option, selected, expanded, onClick, connectionProfile, s
       <tr className={`${selected ? "selected-row" : ""} ${expanded ? "expanded-row" : ""}`} onClick={onClick}>
         <td data-label="Select"><input type="radio" readOnly checked={selected} aria-label={`Select ${option.route.join("-")}`} /> <span className="type-pill">{option.is_nonstop ? "Direct" : "1-stop"}</span></td>
         <td data-label="Price" className="price-cell">{compactPrice(option)}</td>
+        <td data-label="Change" className={`history-cell ${Number(option.history?.price_change_amount ?? 0) > 0 ? "history-up" : Number(option.history?.price_change_amount ?? 0) < 0 ? "history-down" : ""}`} title={historyTooltip(option.history, option.base_price, option.currency)}><strong aria-label={historyAccessibleLabel(option.history)}>{historySignal(option.history)}</strong>{option.history?.history_status === "PREVIOUS_FOUND" && <small>{elapsedShort(option.history.elapsed_seconds)} ago</small>}</td>
         {showComparisons && <td data-label="Saving vs nonstop" className="saving-cell">{option.is_nonstop ? "Reference" : saving > 0 ? `${money(saving, option.currency)} / ${Number(option.saving_vs_nonstop_percent).toFixed(0)}%` : "—"}</td>}
         <td data-label="Depart" className={isEarlyDeparture(option.departure_at) ? "time-warning" : ""}>{localClock(option.departure_at)}</td>
         <td data-label="Arrive" className={isLateArrival(option.arrival_at) ? "time-warning" : ""}>{localClock(option.arrival_at)}</td>

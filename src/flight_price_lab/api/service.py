@@ -54,6 +54,7 @@ from flight_price_lab.storage.database import (
     canonical_search_json,
     canonical_search_key,
 )
+from flight_price_lab.storage.price_history import PriceHistoryStore
 
 
 def _price_completeness(status: AncillaryEstimateStatus) -> PriceCompleteness:
@@ -143,11 +144,13 @@ class TripSearchService:
         *,
         hubs: tuple[str, ...] = INITIAL_CANDIDATE_HUBS,
         max_concurrency: int = 4,
+        price_history_store: PriceHistoryStore | None = None,
     ) -> None:
         self.provider = provider
         self.registry = registry
         self.hubs = prioritize_candidate_hubs(hubs)
         self.max_concurrency = max_concurrency
+        self._price_history_store = price_history_store
         self._semaphore = asyncio.Semaphore(max_concurrency)
         self._carrier_rules = load_carrier_baggage_rules()
         self._provider_tasks: dict[
@@ -163,6 +166,7 @@ class TripSearchService:
         self._provider_queries_total = 0
         self._options_found = 0
         self._progress_lock = asyncio.Lock()
+        self._live_observed_offers: dict[str, FlightOffer] = {}
 
     async def start(self, request: TripSearchRequest) -> str:
         trip_id = await self.create(request)
@@ -268,6 +272,16 @@ class TripSearchService:
             self._directions_remaining = len(direction_tasks)
             await asyncio.gather(*direction_tasks)
             snapshot.diagnostics.last_task_terminal_at = datetime.now(UTC)
+            if self._price_history_store is not None:
+                snapshot = await asyncio.to_thread(
+                    self._price_history_store.capture_and_enrich,
+                    snapshot,
+                    request,
+                    tuple(self._live_observed_offers.values()),
+                    write_observation=(
+                        snapshot.diagnostics.provider_calls_this_invocation > 0
+                    ),
+                )
             snapshot.status = (
                 SearchStatus.PARTIAL_FAILURE
                 if snapshot.errors
@@ -605,6 +619,10 @@ class TripSearchService:
             )
             raise
         if not isinstance(response, ProviderSearchResult):
+            if self._price_history_store is not None:
+                self._live_observed_offers.update(
+                    (offer.fingerprint, offer) for offer in response
+                )
             self._record_terminal_provider_request(
                 planned_id=planned_id,
                 direction=direction,
@@ -639,6 +657,10 @@ class TripSearchService:
                 timing["error_type"] = None
                 snapshot.diagnostics.provider_requests.append(timing)
             snapshot.diagnostics.provider_requests_succeeded += 1
+            if response.provider_calls:
+                self._live_observed_offers.update(
+                    (offer.fingerprint, offer) for offer in response.offers
+                )
             if response.database_operation is not None:
                 snapshot.diagnostics.database_operations.append(
                     response.database_operation
@@ -1060,6 +1082,8 @@ class TripSearchService:
                     arrival_at=leg.arrival,
                     airline=leg.airline,
                     flight_number=leg.flight_number,
+                    constituent_fingerprint=offer.fingerprint,
+                    constituent_price=offer.total_price,
                 )
             ],
             base_price=offer.total_price,
@@ -1097,6 +1121,7 @@ class TripSearchService:
             total_journey_minutes=_minutes(leg.arrival - leg.departure),
             ticketing_type=offer.ticketing_type,
             baggage_confidence=estimate.confidence.value,
+            constituent_fingerprints=[offer.fingerprint],
         )
 
     def _itinerary_option(
@@ -1139,8 +1164,11 @@ class TripSearchService:
                     arrival_at=leg.arrival,
                     airline=leg.airline,
                     flight_number=leg.flight_number,
+                    constituent_fingerprint=offer.fingerprint,
+                    constituent_price=offer.total_price,
                 )
-                for leg in legs
+                for offer in itinerary.components
+                for leg in offer.legs
             ],
             base_price=itinerary.total_price,
             ancillary_price_low=price.ancillary_low,
@@ -1176,6 +1204,7 @@ class TripSearchService:
             ),
             ticketing_type=itinerary.ticketing_type,
             baggage_confidence=price.ancillary_confidence.value,
+            constituent_fingerprints=list(itinerary.constituent_offer_fingerprints),
         )
 
     @staticmethod

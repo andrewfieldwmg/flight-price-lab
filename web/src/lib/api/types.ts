@@ -43,6 +43,19 @@ export interface TripLegSummary {
   arrival_at: string;
   airline: string;
   flight_number: string;
+  constituent_fingerprint?: string | null;
+  constituent_price?: string | null;
+  history?: PriceHistoryComparison | null;
+}
+
+export interface PriceHistoryComparison {
+  history_status: "FIRST_SEEN" | "PREVIOUS_FOUND";
+  previous_price: string | null;
+  price_change_amount: string | null;
+  price_change_percent: string | null;
+  previous_observed_at: string | null;
+  elapsed_seconds: number | null;
+  previous_observation_run_id: string | null;
 }
 
 export interface BaggageEstimate {
@@ -86,6 +99,8 @@ export interface TripOption {
   extra_minutes_vs_nonstop: number | null;
   ticketing_type: "single_ticket" | "separate_tickets" | "unknown";
   baggage_confidence: string;
+  constituent_fingerprints?: string[];
+  history?: PriceHistoryComparison | null;
 }
 
 export type BookingSessionState = "CREATED" | "REPRICING" | "READY" | "VERIFY_ON_AIRLINE" | "UNAVAILABLE" | "PRICE_CHANGED" | "HANDOFF_STARTED" | "AIRLINE_VERIFIED" | "FAILED";

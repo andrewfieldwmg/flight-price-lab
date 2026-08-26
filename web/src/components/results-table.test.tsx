@@ -153,6 +153,45 @@ describe("dense flight results", () => {
     expect(screen.getByText("Stopover MXP · 3h 50m")).toBeInTheDocument();
   });
 
+  it("shows composite change since the most recent comparable observation", () => {
+    const historical = option({
+      id: "history",
+      history: {
+        history_status: "PREVIOUS_FOUND",
+        previous_price: "378",
+        price_change_amount: "24",
+        price_change_percent: "6.35",
+        previous_observed_at: "2026-08-20T08:00:00Z",
+        elapsed_seconds: 3 * 86400,
+        previous_observation_run_id: "run-1",
+      },
+    });
+    const historicalResults = { ...results, baseline: historical, nonstop_options: [historical] };
+    render(<DirectionResults title="Outbound" date="2026-12-18" results={historicalResults} selectedId={null} onSelect={vi.fn()} complete connectionProfile="CONSERVATIVE" selfTransferEnabled={false} />);
+    expect(screen.getByText("↑ 6.3%")).toBeInTheDocument();
+    expect(screen.getByText("3d ago")).toBeInTheDocument();
+    expect(screen.getByTitle(/Was £378.00/)).toBeInTheDocument();
+  });
+
+  it("uses decrease, neutral, and first-seen indicators in the Change column", () => {
+    const comparison = {
+      history_status: "PREVIOUS_FOUND" as const,
+      previous_price: "400",
+      price_change_amount: "-20",
+      price_change_percent: "-5",
+      previous_observed_at: "2026-08-20T08:00:00Z",
+      elapsed_seconds: 86400,
+      previous_observation_run_id: "run-1",
+    };
+    const decreased = option({ id: "decreased", base_price: "380", history: comparison });
+    const unchanged = option({ id: "unchanged", history: { ...comparison, previous_price: "486", price_change_amount: "0", price_change_percent: "0" } });
+    const first = option({ id: "first", history: { ...comparison, history_status: "FIRST_SEEN", previous_price: null, price_change_amount: null, price_change_percent: null } });
+    render(<DirectionResults title="Outbound" date="2026-12-18" results={{ ...results, baseline: first, nonstop_options: [decreased, unchanged, first] }} selectedId={null} onSelect={vi.fn()} complete connectionProfile="CONSERVATIVE" selfTransferEnabled={false} />);
+    expect(screen.getByText("↓ 5.0%")).toHaveAccessibleName("Price decreased by 5.0 percent since last seen");
+    expect(screen.getByText("→ 0.0%")).toHaveAccessibleName("No price change since last seen");
+    expect(screen.getByText("New")).toHaveAccessibleName("New price observation");
+  });
+
   it("flags early departures and late arrivals", () => {
     expect(isEarlyDeparture("2026-12-18T05:59:00+00:00")).toBe(true);
     expect(isEarlyDeparture("2026-12-18T06:00:00+00:00")).toBe(false);

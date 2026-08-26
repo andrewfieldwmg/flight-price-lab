@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 from dotenv import dotenv_values
 from sqlalchemy import (
+    Boolean,
     DateTime,
     Index,
     Integer,
@@ -131,6 +132,65 @@ class FlightObservation(Base):
     price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), nullable=False)
     search_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    observation_run_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    offer_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    carrier: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    arrival_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    total_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    adults: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    children: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    passenger_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
+class SearchObservationRun(Base):
+    __tablename__ = "search_observation_run"
+    __table_args__ = (
+        Index("ix_search_observation_run_search_key_time", "search_key", "observed_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    search_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    search_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    observed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    source: Mapped[str] = mapped_column(String(32), nullable=False)
+    adults: Mapped[int] = mapped_column(Integer, nullable=False)
+    children: Mapped[int] = mapped_column(Integer, nullable=False)
+    passenger_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+
+
+class TripOptionObservation(Base):
+    __tablename__ = "trip_option_observation"
+    __table_args__ = (
+        Index(
+            "ix_trip_option_observation_context_time",
+            "trip_option_fingerprint",
+            "direction",
+            "passenger_count",
+            "currency",
+            "observed_at",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    observation_run_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    trip_option_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    direction: Mapped[str] = mapped_column(String(16), nullable=False)
+    observed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    base_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    adults: Mapped[int] = mapped_column(Integer, nullable=False)
+    children: Mapped[int] = mapped_column(Integer, nullable=False)
+    passenger_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    is_nonstop: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    is_self_transfer: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    constituent_fingerprints_json: Mapped[str] = mapped_column(Text, nullable=False)
 
 
 def normalize_database_url(url: str) -> str:
@@ -146,7 +206,9 @@ def normalize_database_url(url: str) -> str:
 def configured_database_url() -> str:
     configured = os.getenv("DATABASE_URL") or dotenv_values(".env").get("DATABASE_URL")
     if not configured:
-        LOGGER.critical("DATABASE_URL is required; PostgreSQL is the only runtime database")
+        LOGGER.critical(
+            "DATABASE_URL is required; PostgreSQL is the only runtime database"
+        )
         raise RuntimeError("DATABASE_URL is required")
     return normalize_database_url(configured)
 
@@ -279,13 +341,21 @@ class SearchResponseCache:
         travel_date = parameters["date"]
         folder = self.raw_root / created.date().isoformat()
         folder.mkdir(parents=True, exist_ok=True)
-        path = folder / (
+        stem = (
             f"{created.strftime('%Y%m%dT%H%M%S%fZ')}_{origins}_{destinations}_"
-            f"{travel_date}.json"
+            f"{travel_date}"
         )
-        path.write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-        )
+        contents = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
+        collision = 0
+        while True:
+            suffix = "" if collision == 0 else f"_{collision}"
+            path = folder / f"{stem}{suffix}.json"
+            try:
+                with path.open("x", encoding="utf-8", newline="\n") as capture:
+                    capture.write(contents)
+                break
+            except FileExistsError:
+                collision += 1
         request_json = canonical_search_json(parameters)
         entry = SearchCacheEntry(
             cache_key=canonical_search_key(parameters),
@@ -504,6 +574,7 @@ class SearchSessionStore:
     ) -> None:
         now = datetime.now(UTC)
         terminal = snapshot.status.value in {"completed", "partial_failure", "failed"}
+
         def apply(target: Session) -> None:
             entry = target.get(SearchSessionEntry, snapshot.search_id)
             if entry is None:

@@ -44,6 +44,8 @@ def test_initial_migration_creates_current_and_history_schema() -> None:
         "search_sessions",
         "market_observation",
         "flight_observation",
+        "search_observation_run",
+        "trip_option_observation",
         "alembic_version",
     } <= set(inspector.get_table_names())
     assert {item["name"] for item in inspector.get_indexes("market_observation")} == {
@@ -52,6 +54,7 @@ def test_initial_migration_creates_current_and_history_schema() -> None:
     assert {item["name"] for item in inspector.get_indexes("flight_observation")} == {
         "ix_flight_observation_departure",
         "ix_flight_observation_fingerprint_time",
+        "ix_flight_observation_offer_context_time",
     }
 
     observed = datetime(2026, 8, 25, tzinfo=UTC)
