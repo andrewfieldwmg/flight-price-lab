@@ -18,7 +18,8 @@ export function elapsedDetailed(seconds: number | null): string {
 export function historySignal(history: PriceHistoryComparison | null | undefined): string {
   if (!history || history.history_status === "FIRST_SEEN") return "New";
   const percent = Number(history.price_change_percent ?? 0);
-  const arrow = percent > 0 ? "↑" : percent < 0 ? "↓" : "→";
+  if (percent === 0) return "No change";
+  const arrow = percent > 0 ? "↑" : "↓";
   return `${arrow} ${Math.abs(percent).toFixed(1)}%`;
 }
 
@@ -31,13 +32,21 @@ export function historyAccessibleLabel(history: PriceHistoryComparison | null | 
 }
 
 export function percentageChangeSignal(percent: number): string {
-  const arrow = percent > 0 ? "↑" : percent < 0 ? "↓" : "→";
+  if (percent === 0) return "No change";
+  const arrow = percent > 0 ? "↑" : "↓";
   return `${arrow} ${Math.abs(percent).toFixed(1)}%`;
 }
 
 export function sinceLastSeen(history: PriceHistoryComparison | null | undefined): string {
   if (!history || history.history_status === "FIRST_SEEN") return "New · No previous observation";
+  if (Number(history.price_change_percent ?? 0) === 0) return `No change since last seen ${elapsedShort(history.elapsed_seconds)} ago`;
   return `${historySignal(history)} since last seen ${elapsedShort(history.elapsed_seconds)} ago`;
+}
+
+export function directionHistory(history: PriceHistoryComparison | null | undefined): string {
+  if (!history || history.history_status === "FIRST_SEEN") return "New";
+  if (Number(history.price_change_percent ?? 0) === 0) return "No change";
+  return `${historySignal(history)} since last seen`;
 }
 
 export function historyTooltip(history: PriceHistoryComparison | null | undefined, current: string, currency: string): string {

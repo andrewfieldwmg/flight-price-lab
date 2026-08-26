@@ -188,7 +188,7 @@ describe("dense flight results", () => {
     const first = option({ id: "first", history: { ...comparison, history_status: "FIRST_SEEN", previous_price: null, price_change_amount: null, price_change_percent: null } });
     render(<DirectionResults title="Outbound" date="2026-12-18" results={{ ...results, baseline: first, nonstop_options: [decreased, unchanged, first] }} selectedId={null} onSelect={vi.fn()} complete connectionProfile="CONSERVATIVE" selfTransferEnabled={false} />);
     expect(screen.getByText("↓ 5.0%")).toHaveAccessibleName("Price decreased by 5.0 percent since last seen");
-    expect(screen.getByText("→ 0.0%")).toHaveAccessibleName("No price change since last seen");
+    expect(screen.getByText("No change")).toHaveAccessibleName("No price change since last seen");
     expect(screen.getByText("New")).toHaveAccessibleName("New price observation");
   });
 
