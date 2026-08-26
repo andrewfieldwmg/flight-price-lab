@@ -327,6 +327,25 @@ def test_provider_tasks_remain_bounded_concurrent() -> None:
     assert provider.maximum_active == 2
 
 
+def test_provider_progress_counts_routes_and_options() -> None:
+    snapshot, registry, _ = asyncio.run(
+        run_search(SelfTransferPolicy.BOTH, provider=MockProvider())
+    )
+
+    async def progress() -> list[dict[str, object]]:
+        return [
+            event.data
+            async for event in registry.events(snapshot.search_id)
+            if event.event == "progress"
+        ]
+
+    events = asyncio.run(progress())
+    assert events
+    assert events[-1]["completed"] == 6
+    assert events[-1]["total"] == 6
+    assert int(events[-1]["options_found"]) >= 2
+
+
 def test_round_trip_nonstop_provider_calls_start_concurrently() -> None:
     provider = ConcurrentProvider()
     snapshot, _, _ = asyncio.run(

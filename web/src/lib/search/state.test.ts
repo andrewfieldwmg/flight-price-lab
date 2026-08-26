@@ -63,4 +63,13 @@ describe("hub progress", () => {
     expect(state.hubsCompleted).toBe(1);
     expect(state.directionProgress.OUTBOUND).toEqual({ started: 1, completed: 1 });
   });
+
+  it("tracks route checks and progressively found options", () => {
+    const state = searchReducer(initialSearchState, {
+      type: "event",
+      event: "progress",
+      data: { completed: 12, total: 34, options_found: 48 },
+    });
+    expect(state.routeProgress).toEqual({ completed: 12, total: 34, optionsFound: 48 });
+  });
 });

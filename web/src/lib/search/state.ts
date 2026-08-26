@@ -11,6 +11,7 @@ export interface SearchUiState {
   hubsCompleted: number;
   directionProgress: Record<"OUTBOUND" | "RETURN", { started: number; completed: number }>;
   directionCompleted: Record<"OUTBOUND" | "RETURN", boolean>;
+  routeProgress: { completed: number; total: number; optionsFound: number };
   outboundSelectionTouched: boolean;
   returnSelectionTouched: boolean;
 }
@@ -28,6 +29,7 @@ export const initialSearchState: SearchUiState = {
     RETURN: { started: 0, completed: 0 },
   },
   directionCompleted: { OUTBOUND: false, RETURN: false },
+  routeProgress: { completed: 0, total: 0, optionsFound: 0 },
   outboundSelectionTouched: false,
   returnSelectionTouched: false,
 };
@@ -90,6 +92,13 @@ export function searchReducer(
       };
       if (action.event === "direction_completed") directionCompleted[direction] = true;
     }
+    const routeProgress = action.event === "progress"
+      ? {
+          completed: Number(action.data.completed ?? state.routeProgress.completed),
+          total: Number(action.data.total ?? state.routeProgress.total),
+          optionsFound: Number(action.data.options_found ?? state.routeProgress.optionsFound),
+        }
+      : state.routeProgress;
     return {
       ...state,
       hubsStarted: state.hubsStarted + (action.event === "hub_started" ? 1 : 0),
@@ -97,6 +106,7 @@ export function searchReducer(
         state.hubsCompleted + (action.event === "hub_completed" ? 1 : 0),
       directionProgress,
       directionCompleted,
+      routeProgress,
     };
   }
   if (action.type === "disconnect") return { ...state, sseDisconnected: true };

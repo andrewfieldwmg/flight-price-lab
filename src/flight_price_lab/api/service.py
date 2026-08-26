@@ -43,7 +43,10 @@ from flight_price_lab.models import (
 )
 from flight_price_lab.models.carrier_baggage import AncillaryEstimateStatus
 from flight_price_lab.providers.searchapi import SearchAPIError
-from flight_price_lab.routing.airport_groups import INITIAL_CANDIDATE_HUBS
+from flight_price_lab.routing.airport_groups import (
+    INITIAL_CANDIDATE_HUBS,
+    prioritize_candidate_hubs,
+)
 from flight_price_lab.routing.feasibility import BaggageProfile, SelfTransferProfile
 from flight_price_lab.routing.hub_synthesis import synthesize_via_hubs
 from flight_price_lab.routing.planning import RoutePlan
@@ -143,7 +146,8 @@ class TripSearchService:
     ) -> None:
         self.provider = provider
         self.registry = registry
-        self.hubs = hubs
+        self.hubs = prioritize_candidate_hubs(hubs)
+        self.max_concurrency = max_concurrency
         self._semaphore = asyncio.Semaphore(max_concurrency)
         self._carrier_rules = load_carrier_baggage_rules()
         self._provider_tasks: dict[
@@ -155,6 +159,10 @@ class TripSearchService:
         self._checkpoint_lock = asyncio.Lock()
         self._last_checkpoint_clock = 0.0
         self._directions_remaining = 0
+        self._provider_queries_completed = 0
+        self._provider_queries_total = 0
+        self._options_found = 0
+        self._progress_lock = asyncio.Lock()
 
     async def start(self, request: TripSearchRequest) -> str:
         trip_id = await self.create(request)
@@ -207,6 +215,15 @@ class TripSearchService:
         snapshot.status = SearchStatus.RUNNING
         snapshot.diagnostics.search_started_at = datetime.now(UTC)
         self._active_snapshot = snapshot
+        direction_count = 1 + int(request.return_date is not None)
+        transfer_direction_count = sum(
+            self._self_transfer_enabled(request, direction)
+            for direction in (Direction.OUTBOUND, Direction.RETURN)
+            if direction is Direction.OUTBOUND or request.return_date is not None
+        )
+        self._provider_queries_total = direction_count + (
+            2 * len(self.hubs) * transfer_direction_count
+        )
         await self.registry.update(
             snapshot, persist=True, operation="update_running_session"
         )
@@ -439,6 +456,7 @@ class TripSearchService:
             finally:
                 self._active_provider_calls -= 1
         if not isinstance(response, ProviderSearchResult):
+            await self._record_provider_progress(len(response))
             return response
         snapshot = self._active_snapshot
         if snapshot is not None:
@@ -459,7 +477,39 @@ class TripSearchService:
                     response.database_operation
                 )
             await self.registry.update(snapshot)
+        await self._record_provider_progress(len(response.offers))
         return response.offers
+
+    async def _record_provider_progress(self, result_count: int) -> None:
+        """Publish route-query progress without adding persistence writes."""
+
+        snapshot = self._active_snapshot
+        if snapshot is None:
+            return
+        async with self._progress_lock:
+            self._provider_queries_completed += 1
+            await self._event(
+                snapshot.search_id,
+                "progress",
+                completed=self._provider_queries_completed,
+                total=self._provider_queries_total,
+                options_found=self._options_found,
+                provider_result_count=result_count,
+            )
+
+    async def _record_options_found(self, count: int) -> None:
+        snapshot = self._active_snapshot
+        if snapshot is None or count <= 0:
+            return
+        async with self._progress_lock:
+            self._options_found += count
+            await self._event(
+                snapshot.search_id,
+                "progress",
+                completed=self._provider_queries_completed,
+                total=self._provider_queries_total,
+                options_found=self._options_found,
+            )
 
     async def _direction(
         self,
@@ -523,6 +573,7 @@ class TripSearchService:
             await self.registry.register_booking_candidate(
                 snapshot.search_id, option.id, (offers_by_id[option.id],)
             )
+        await self._record_options_found(len(direct_options))
         results.nonstop_options = direct_options
         baseline_offer = min(direct, key=lambda item: item.total_price, default=None)
         if baseline_offer is None:
@@ -711,6 +762,7 @@ class TripSearchService:
                         and option.extra_minutes_vs_nonstop
                         <= request.max_extra_journey_minutes
                     ]
+                await self._record_options_found(len(options))
                 for option in options:
                     await self._event(
                         snapshot.search_id,

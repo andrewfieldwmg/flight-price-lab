@@ -26,6 +26,16 @@ def test_settings_ignores_database_urls_from_shared_environment(monkeypatch) -> 
     )
 
 
+def test_provider_concurrency_defaults_and_can_be_configured(monkeypatch) -> None:
+    monkeypatch.setenv("SEARCHAPI_KEY", "test-secret-key")
+    monkeypatch.delenv("SEARCH_PROVIDER_CONCURRENCY", raising=False)
+
+    assert Settings(_env_file=None).search_provider_concurrency == 4
+
+    monkeypatch.setenv("SEARCH_PROVIDER_CONCURRENCY", "8")
+    assert Settings(_env_file=None).search_provider_concurrency == 8
+
+
 def test_vercel_services_preserve_fastapi_api_paths() -> None:
     config = json.loads(Path("vercel.json").read_text(encoding="utf-8"))
 

@@ -6,6 +6,7 @@ from flight_price_lab.routing.airport_groups import (
     INITIAL_CANDIDATE_HUBS,
     LONDON,
     SARDINIA,
+    prioritize_candidate_hubs,
 )
 from flight_price_lab.routing.availability import (
     RouteAvailabilityIndex,
@@ -29,6 +30,15 @@ def route_plan(*hubs: str) -> RoutePlan:
         children=2,
         currency="GBP",
     )
+
+
+def test_hub_priority_promotes_evidence_without_dropping_coverage() -> None:
+    hubs = ("BGY", "LIN", "FCO", "MXP", "NAP")
+
+    prioritized = prioritize_candidate_hubs(hubs)
+
+    assert prioritized == ("MXP", "LIN", "BGY", "FCO", "NAP")
+    assert set(prioritized) == set(hubs)
 
 
 def offer(

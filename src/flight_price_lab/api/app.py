@@ -86,6 +86,12 @@ def create_app(
         CachedProviderUsage(usage_gateway) if usage_gateway is not None else None
     )
 
+    def new_search_service() -> TripSearchService:
+        concurrency = Settings().search_provider_concurrency
+        return TripSearchService(
+            get_provider(), registry, max_concurrency=concurrency
+        )
+
     def get_provider() -> ProviderGateway:
         configured = application.state.provider
         if configured is None:
@@ -143,7 +149,7 @@ def create_app(
         "/api/search", response_model=SearchStartedResponse, status_code=202
     )
     async def start_search(request: TripSearchRequest) -> SearchStartedResponse:
-        service = TripSearchService(get_provider(), registry)
+        service = new_search_service()
         search_id = await service.start(request)
         return SearchStartedResponse(
             search_id=search_id,
@@ -157,7 +163,7 @@ def create_app(
 
         request_received_at = datetime.now(UTC)
         request_clock = perf_counter()
-        service = TripSearchService(get_provider(), registry)
+        service = new_search_service()
         search_id = await service.create(request)
         session_initialized_at = datetime.now(UTC)
         session_initialization_ms = (perf_counter() - request_clock) * 1000

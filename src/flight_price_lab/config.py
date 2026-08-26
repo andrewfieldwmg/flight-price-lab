@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     )
 
     searchapi_key: SecretStr = Field(alias="SEARCHAPI_KEY", repr=False)
+    search_provider_concurrency: int = Field(
+        default=4, alias="SEARCH_PROVIDER_CONCURRENCY", ge=1, le=8
+    )
 
     @field_validator("searchapi_key")
     @classmethod

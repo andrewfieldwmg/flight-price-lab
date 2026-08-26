@@ -107,11 +107,14 @@ export function SearchExperience() {
   const returnTransfers = state.request?.self_transfer_policy === "RETURN_ONLY" || state.request?.self_transfer_policy === "BOTH";
   const progressText = useMemo(() => {
     if (!state.snapshot?.outbound.baseline) return "Searching direct flights…";
-    if (!isTerminal) return "Searching cheaper one-stop combinations…";
+    if (!isTerminal && state.routeProgress.total > 0) {
+      return `Searching best connections… ${state.routeProgress.completed} / ${state.routeProgress.total} routes checked · ${state.routeProgress.optionsFound} options found`;
+    }
+    if (!isTerminal) return "Searching best connections…";
     return state.snapshot.status === "partial_failure"
       ? "Search complete with some unavailable routes"
       : "Search complete";
-  }, [state.snapshot, isTerminal]);
+  }, [state.snapshot, state.routeProgress, isTerminal]);
 
   useEffect(() => {
     if (refreshProviderUsage) window.dispatchEvent(new Event("provider-usage-refresh"));
