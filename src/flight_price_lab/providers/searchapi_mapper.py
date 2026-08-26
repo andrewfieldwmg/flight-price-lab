@@ -248,6 +248,19 @@ def map_flight_group(
         for key in ("booking_token", "departure_token")
         if key in raw_group
     }
+    provider_search_context = {
+        key: search_parameters[key]
+        for key in (
+            "departure_id",
+            "arrival_id",
+            "outbound_date",
+            "flight_type",
+            "adults",
+            "children",
+            "currency",
+        )
+        if key in search_parameters
+    }
     return FlightOffer(
         legs=legs,
         total_price=price,
@@ -267,6 +280,9 @@ def map_flight_group(
             "total_duration": raw_group.get("total_duration"),
             "layovers": raw_group.get("layovers"),
             "provider_action_metadata": provider_action_metadata,
+            # Private booking-resolution context. It is persisted server-side with
+            # booking candidates but is never serialized into public TripOption.
+            "provider_search_context": provider_search_context,
         },
         ticketing_type=ticketing_type,
     )

@@ -149,6 +149,18 @@ def test_provider_action_tokens_do_not_affect_identity(payload: dict[str, Any]) 
     )
 
 
+def test_mapper_retains_private_provider_search_context(
+    payload: dict[str, Any],
+) -> None:
+    offer = normalize_searchapi_response(payload)[0][0]
+
+    context = offer.raw_metadata["provider_search_context"]
+    assert context["departure_id"] == "LGW"
+    assert context["arrival_id"] == "MXP"
+    assert context["adults"] == "2"
+    assert context["children"] == "2"
+
+
 def _map_modified_group(payload: dict[str, Any], group: dict[str, Any]):
     return map_flight_group(
         group,

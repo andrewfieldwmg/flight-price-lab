@@ -56,6 +56,14 @@ class BookingContextExpiredError(Exception):
     """The public option survived, but its private provider lineage did not."""
 
 
+class BookingResolutionError(Exception):
+    """Safe, classified failure while resolving private provider context."""
+
+    def __init__(self, code: str) -> None:
+        super().__init__(code)
+        self.code = code
+
+
 class PrepareBookingRequest(BaseModel):
     model_config = ConfigDict(frozen=True)
     search_id: str
@@ -88,6 +96,7 @@ class BookingTicketResponse(BaseModel):
     children: int
     exact_flight_verified: bool
     passenger_composition_verified: bool
+    preparation_failure_reason: str | None = None
 
 
 class BookingSessionResponse(BaseModel):
@@ -282,14 +291,16 @@ class SearchAPIBookingResolver:
         }
 
     async def resolve(self, offer: FlightOffer) -> ResolvedHandoff:
-        if not offer.raw_reference:
-            raise ValueError("offer has no originating provider capture")
-        payload = json.loads(Path(offer.raw_reference).read_text(encoding="utf-8"))
-        parameters = payload.get("search_parameters", {})
         action = offer.raw_metadata.get("provider_action_metadata", {})
         token = action.get("booking_token") if isinstance(action, dict) else None
         if not isinstance(token, str) or not token:
-            raise ValueError("offer has no booking token")
+            raise BookingResolutionError("MISSING_BOOKING_TOKEN")
+        parameters = offer.raw_metadata.get("provider_search_context")
+        if not isinstance(parameters, dict) or not parameters:
+            parameters = self._legacy_search_context(offer)
+        required = ("departure_id", "arrival_id", "outbound_date")
+        if any(not parameters.get(field) for field in required):
+            raise BookingResolutionError("BOOKING_CONTEXT_EXPIRED")
         request = BookingOptionsRequest(
             booking_token=token,
             departure_id=parameters["departure_id"],
@@ -300,7 +311,10 @@ class SearchAPIBookingResolver:
             children=parameters.get("children"),
             currency=parameters.get("currency"),
         )
-        response = await asyncio.to_thread(self._client.booking_options, request)
+        try:
+            response = await asyncio.to_thread(self._client.booking_options, request)
+        except Exception as error:
+            raise BookingResolutionError("PROVIDER_BOOKING_LOOKUP_FAILED") from error
         expected = [leg.flight_number for leg in offer.legs]
         for option in response.get("booking_options", []):
             if option.get("flight_numbers") != expected:
@@ -313,7 +327,7 @@ class SearchAPIBookingResolver:
                 carrier, HandoffCapability.UNAVAILABLE
             )
             if capability is HandoffCapability.UNAVAILABLE:
-                raise ValueError("carrier handoff is not yet verified")
+                raise BookingResolutionError("HANDOFF_ADAPTER_FAILED")
             return ResolvedHandoff(
                 current_price=(
                     Decimal(str(option["price"]))
@@ -337,7 +351,23 @@ class SearchAPIBookingResolver:
                 destination=offer.legs[-1].destination,
                 travel_date=offer.legs[0].departure.date().isoformat(),
             )
-        raise ValueError("exact selected flight was not returned")
+        raise BookingResolutionError("PROVIDER_BOOKING_LOOKUP_FAILED")
+
+    @staticmethod
+    def _legacy_search_context(offer: FlightOffer) -> dict[str, object]:
+        """Read legacy local captures only when that instance still owns the file."""
+
+        if not offer.raw_reference:
+            return {}
+        path = Path(offer.raw_reference)
+        if not path.is_file():
+            return {}
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+        parameters = payload.get("search_parameters", {})
+        return parameters if isinstance(parameters, dict) else {}
 
 
 @dataclass
@@ -534,9 +564,38 @@ class BookingPreparationService:
                         price_delta=str(delta),
                     )
                 return _Ticket(response, handoff)
-            except Exception:  # noqa: BLE001 - constituent failure blocks readiness
+            except Exception as error:  # noqa: BLE001 - safe constituent failure
+                reason = (
+                    error.code
+                    if isinstance(error, BookingResolutionError)
+                    else "HANDOFF_ADAPTER_FAILED"
+                )
+                action = offer.raw_metadata.get("provider_action_metadata", {})
+                context = offer.raw_metadata.get("provider_search_context", {})
+                search_log(
+                    "BOOKING_PREPARE_CONSTITUENT_FAILED",
+                    booking_session_id=session.session_id,
+                    candidate_found=True,
+                    provider=offer.provider,
+                    carrier=base.carrier,
+                    flight_number=base.flight_number,
+                    booking_token_present=isinstance(action, dict)
+                    and bool(action.get("booking_token")),
+                    departure_token_present=isinstance(action, dict)
+                    and bool(action.get("departure_token")),
+                    provider_offer_ref_present=bool(offer.provider_offer_id),
+                    raw_provider_metadata_present=bool(offer.raw_metadata),
+                    passenger_search_context_present=isinstance(context, dict)
+                    and bool(context),
+                    failure_reason=reason,
+                )
                 return _Ticket(
-                    base.model_copy(update={"status": BookingSessionState.FAILED})
+                    base.model_copy(
+                        update={
+                            "status": BookingSessionState.FAILED,
+                            "preparation_failure_reason": reason,
+                        }
+                    )
                 )
 
         session.tickets = list(

@@ -13,6 +13,7 @@ from flight_price_lab.api.booking import (
     HandoffCapability,
     PriceChangeStatus,
     ResolvedHandoff,
+    SearchAPIBookingResolver,
     WizzAirHandoffAdapter,
     classify_price_change,
 )
@@ -145,9 +146,43 @@ def route_offer(
         provider_offer_id=f"provider-{flight_number}",
         observed_at=datetime(2026, 8, 25, tzinfo=UTC),
         raw_metadata={
-            "provider_action_metadata": {"booking_token": "opaque-test-token"}
+            "provider_action_metadata": {
+                "booking_token": f"opaque-{flight_number}",
+                "departure_token": "opaque-departure",
+            },
+            "provider_search_context": {
+                "departure_id": origin,
+                "arrival_id": destination,
+                "outbound_date": travel_date.isoformat(),
+                "flight_type": "one_way",
+                "adults": 2,
+                "children": 2,
+                "currency": "GBP",
+            },
         },
     )
+
+
+class BookingOptionsClient:
+    def __init__(self, prices: dict[tuple[str, str], tuple[str, str | None]]) -> None:
+        self.prices = prices
+        self.requests = []
+
+    def booking_options(self, request):
+        self.requests.append(request)
+        flight_number, price = self.prices[(request.departure_id, request.arrival_id)]
+        return {
+            "booking_options": [
+                {
+                    "flight_numbers": [flight_number],
+                    "price": price,
+                    "booking_request": {
+                        "url": "https://www.google.com/travel/clk/f",
+                        "post_data": "opaque=server-only",
+                    },
+                }
+            ]
+        }
 
 
 def prepare_client(prices: dict[str, str | None]) -> tuple[TestClient, object]:
@@ -375,6 +410,75 @@ def test_synthetic_constituent_lineage_survives_registry_recreation() -> None:
         "W4 6997",
     ]
     assert [item.total_price for item in restored] == [Decimal(328), Decimal(158)]
+
+
+def test_private_booking_context_survives_postgres_reload() -> None:
+    store = BookingCandidateStore()
+    original = route_offer("STN", "CAG", date(2026, 12, 18), 19, "FR 2687", "849")
+    store.put("cross-instance", "outbound", (original,))
+
+    restored = store.get("cross-instance", "outbound")
+
+    assert restored is not None
+    persisted = restored[0]
+    assert (
+        persisted.raw_metadata["provider_action_metadata"]
+        == (original.raw_metadata["provider_action_metadata"])
+    )
+    assert (
+        persisted.raw_metadata["provider_search_context"]
+        == (original.raw_metadata["provider_search_context"])
+    )
+    assert persisted.provider_offer_id == original.provider_offer_id
+    assert persisted.raw_reference == original.raw_reference
+
+
+def test_cross_instance_direct_ryanair_round_trip_prepares_both_tickets() -> None:
+    first_registry = InMemorySearchRegistry(BookingCandidateStore())
+    outbound = route_offer("STN", "CAG", date(2026, 12, 18), 19, "FR 2687", "849")
+    inbound = route_offer("CAG", "STN", date(2026, 12, 28), 8, "FR 2686", "788")
+    asyncio.run(
+        first_registry.create(SearchSnapshot(search_id="fr-return", status="completed"))
+    )
+    asyncio.run(
+        first_registry.register_booking_candidate("fr-return", "outbound", (outbound,))
+    )
+    asyncio.run(
+        first_registry.register_booking_candidate("fr-return", "return", (inbound,))
+    )
+    client = BookingOptionsClient(
+        {
+            ("STN", "CAG"): ("FR 2687", "813"),
+            ("CAG", "STN"): ("FR 2686", "757"),
+        }
+    )
+    fresh_app = create_app(
+        booking_resolver=SearchAPIBookingResolver(client),  # type: ignore[arg-type]
+        handoff_launcher=Launcher(),
+    )
+
+    response = TestClient(fresh_app).post(
+        "/api/booking/prepare",
+        json={
+            "search_id": "fr-return",
+            "selected_option_ids": ["outbound", "return"],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [ticket["flight_number"] for ticket in body["tickets"]] == [
+        "FR 2687",
+        "FR 2686",
+    ]
+    assert [ticket["current_price"] for ticket in body["tickets"]] == [
+        "813",
+        "757",
+    ]
+    assert all(
+        ticket["capability"] == "EXACT_FLIGHT_HANDOFF" for ticket in body["tickets"]
+    )
+    assert len(client.requests) == 2
 
 
 def test_real_synthetic_option_id_prepares_two_mixed_tickets() -> None:
