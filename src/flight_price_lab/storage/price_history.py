@@ -6,10 +6,11 @@ import json
 from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
-from sqlalchemy import desc, select
+from sqlalchemy import func, select
 from sqlalchemy.engine import Engine
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from flight_price_lab.api.models import (
     HistoryStatus,
@@ -24,6 +25,25 @@ from flight_price_lab.storage.database import (
     SearchObservationRun,
     TripOptionObservation,
 )
+
+LONDON = ZoneInfo("Europe/London")
+
+
+def _current_local_day_started(observed_at: datetime) -> datetime:
+    """Return midnight starting the observation's London calendar date in UTC."""
+    if observed_at.tzinfo is None:
+        observed_at = observed_at.replace(tzinfo=UTC)
+    local = observed_at.astimezone(LONDON)
+    return local.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(UTC)
+
+
+def _london_day_difference(current_at: datetime, previous_at: datetime) -> int:
+    """Return the calendar-day distance in Europe/London."""
+    if current_at.tzinfo is None:
+        current_at = current_at.replace(tzinfo=UTC)
+    if previous_at.tzinfo is None:
+        previous_at = previous_at.replace(tzinfo=UTC)
+    return (current_at.astimezone(LONDON).date() - previous_at.astimezone(LONDON).date()).days
 
 
 def _comparison(
@@ -48,6 +68,7 @@ def _comparison(
         price_change_percent=percent,
         previous_observed_at=previous_at,
         elapsed_seconds=max(0, int((now - previous_at).total_seconds())),
+        day_difference=_london_day_difference(now, previous_at),
         previous_observation_run_id=previous_run_id,
     )
 
@@ -82,14 +103,17 @@ class PriceHistoryStore:
         options = _all_options(snapshot)
         run_id = uuid4().hex if write_observation else None
         with Session(self.engine) as session:
-            option_history = self._previous_trips(session, options, request)
+            prior_day_cutoff = _current_local_day_started(now)
+            option_history = self._previous_trips(
+                session, options, request, prior_day_cutoff
+            )
             constituent_fingerprints = {
                 fingerprint
                 for option in options
                 for fingerprint in option.constituent_fingerprints
             }
             offer_history = self._previous_offers(
-                session, constituent_fingerprints, request
+                session, constituent_fingerprints, request, prior_day_cutoff
             )
             enriched = {
                 (option.direction.value, option.id): self._enrich_option(
@@ -113,13 +137,27 @@ class PriceHistoryStore:
 
     @staticmethod
     def _previous_trips(
-        session: Session, options: list[TripOption], request: TripSearchRequest
+        session: Session,
+        options: list[TripOption],
+        request: TripSearchRequest,
+        prior_day_cutoff: datetime,
     ) -> dict[tuple[str, str], TripOptionObservation | None]:
         keys = {(option.direction.value, option.id) for option in options}
         if not keys:
             return {}
-        rows = session.scalars(
-            select(TripOptionObservation)
+        ranked = (
+            select(
+                TripOptionObservation.id.label("id"),
+                func.row_number()
+                .over(
+                    partition_by=(
+                        TripOptionObservation.trip_option_fingerprint,
+                        TripOptionObservation.direction,
+                    ),
+                    order_by=TripOptionObservation.observed_at.desc(),
+                )
+                .label("history_rank"),
+            )
             .where(
                 TripOptionObservation.trip_option_fingerprint.in_(
                     {option.id for option in options}
@@ -132,8 +170,15 @@ class PriceHistoryStore:
                 TripOptionObservation.adults == request.adults,
                 TripOptionObservation.children == request.children,
                 TripOptionObservation.currency == request.currency,
+                TripOptionObservation.observed_at < prior_day_cutoff,
             )
-            .order_by(desc(TripOptionObservation.observed_at))
+            .subquery()
+        )
+        ranked_observation = aliased(TripOptionObservation)
+        rows = session.scalars(
+            select(ranked_observation)
+            .join(ranked, ranked_observation.id == ranked.c.id)
+            .where(ranked.c.history_rank == 1)
         ).all()
         latest: dict[tuple[str, str], TripOptionObservation | None] = {
             key: None for key in keys
@@ -146,20 +191,38 @@ class PriceHistoryStore:
 
     @staticmethod
     def _previous_offers(
-        session: Session, fingerprints: set[str], request: TripSearchRequest
+        session: Session,
+        fingerprints: set[str],
+        request: TripSearchRequest,
+        prior_day_cutoff: datetime,
     ) -> dict[str, FlightObservation | None]:
         if not fingerprints:
             return {}
-        rows = session.scalars(
-            select(FlightObservation)
+        ranked = (
+            select(
+                FlightObservation.id.label("id"),
+                func.row_number()
+                .over(
+                    partition_by=FlightObservation.offer_fingerprint,
+                    order_by=FlightObservation.observed_at.desc(),
+                )
+                .label("history_rank"),
+            )
             .where(
                 FlightObservation.offer_fingerprint.in_(fingerprints),
                 FlightObservation.passenger_count == request.adults + request.children,
                 FlightObservation.adults == request.adults,
                 FlightObservation.children == request.children,
                 FlightObservation.currency == request.currency,
+                FlightObservation.observed_at < prior_day_cutoff,
             )
-            .order_by(desc(FlightObservation.observed_at))
+            .subquery()
+        )
+        ranked_observation = aliased(FlightObservation)
+        rows = session.scalars(
+            select(ranked_observation)
+            .join(ranked, ranked_observation.id == ranked.c.id)
+            .where(ranked.c.history_rank == 1)
         ).all()
         latest: dict[str, FlightObservation | None] = {
             fingerprint: None for fingerprint in fingerprints

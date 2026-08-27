@@ -47,6 +47,12 @@ describe("observation history language", () => {
     expect(historySignal(first)).toBe("New");
   });
 
+  it("uses the server's London calendar-day difference across devices", () => {
+    expect(elapsedCompactDay(3600, "2026-08-27T09:50:00Z", new Date("2026-08-27T12:50:00Z"), 1)).toBe("1d ago");
+    expect(elapsedSummaryDay(3600, "2026-08-27T09:50:00Z", new Date("2026-08-27T12:50:00Z"), 1)).toBe("since yesterday");
+    expect(elapsedSummaryDay(3600, "2026-08-27T09:50:00Z", new Date("2026-08-27T12:50:00Z"), 3)).toBe("since 3d ago");
+  });
+
   it("formats observed elapsed intervals", () => {
     expect(elapsedShort(18 * 3600)).toBe("18h");
     expect(elapsedShort(15 * 86400)).toBe("2w");

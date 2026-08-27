@@ -23,7 +23,7 @@ function summaryDirectionHistory(history: PriceHistoryComparison | null | undefi
   const signal = summaryChangeSignal(history);
   const state = priceHistoryState(history);
   if (state === "CHANGED" || state === "UNCHANGED") {
-    return `${signal} ${elapsedSummaryDay(history?.elapsed_seconds ?? null, history?.previous_observed_at)}`.trim();
+    return `${signal} ${elapsedSummaryDay(history?.elapsed_seconds ?? null, history?.previous_observed_at, undefined, history?.day_difference)}`.trim();
   }
   return signal;
 }
@@ -136,8 +136,8 @@ export function TripSummary({ outbound, inbound, outboundBaseline, inboundBaseli
         : tripHistoryPercent === null
           ? "History unavailable"
     : tripHistoryPercent === 0
-      ? `No change ${elapsedSummaryDay(tripHistoryElapsed, outboundHistory?.previous_observed_at)}`
-      : `${tripHistoryPercent > 0 ? "↑" : "↓"} ${Math.abs(tripHistoryPercent).toFixed(1)}% ${elapsedSummaryDay(tripHistoryElapsed, outboundHistory?.previous_observed_at)}`;
+      ? `No change ${elapsedSummaryDay(tripHistoryElapsed, outboundHistory?.previous_observed_at, undefined, outboundHistory?.day_difference)}`
+      : `${tripHistoryPercent > 0 ? "↑" : "↓"} ${Math.abs(tripHistoryPercent).toFixed(1)}% ${elapsedSummaryDay(tripHistoryElapsed, outboundHistory?.previous_observed_at, undefined, outboundHistory?.day_difference)}`;
   return <>
     {compactVisible && <aside className="compact-trip-summary" aria-label="Compact selected trip summary">
       <div><span>Trip total</span><strong>{money(summary.baseAlternativePrice, currency)}{tripHistoryCompact && ` · ${tripHistoryCompact}`}</strong></div>

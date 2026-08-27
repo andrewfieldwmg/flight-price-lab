@@ -159,6 +159,7 @@ class PriceHistoryComparison(BaseModel):
     price_change_percent: Decimal | None = None
     previous_observed_at: datetime | None = None
     elapsed_seconds: int | None = None
+    day_difference: int | None = None
     previous_observation_run_id: str | None = None
 
 

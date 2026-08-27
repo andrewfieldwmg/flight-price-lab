@@ -31,14 +31,14 @@ export function londonCalendarDayCount(previousObservedAt: string | null | undef
   return Math.max(0, ordinal(now) - ordinal(new Date(previousObservedAt)));
 }
 
-export function elapsedCompactDay(seconds: number | null, previousObservedAt?: string | null, now = new Date()): string {
-  const days = previousObservedAt ? londonCalendarDayCount(previousObservedAt, now) : elapsedDayCount(seconds);
+export function elapsedCompactDay(seconds: number | null, previousObservedAt?: string | null, now = new Date(), dayDifference?: number | null): string {
+  const days = dayDifference ?? (previousObservedAt ? londonCalendarDayCount(previousObservedAt, now) : elapsedDayCount(seconds));
   if (days === null) return "";
   return days === 0 ? "today" : `${days}d ago`;
 }
 
-export function elapsedSummaryDay(seconds: number | null, previousObservedAt?: string | null, now = new Date()): string {
-  const days = previousObservedAt ? londonCalendarDayCount(previousObservedAt, now) : elapsedDayCount(seconds);
+export function elapsedSummaryDay(seconds: number | null, previousObservedAt?: string | null, now = new Date(), dayDifference?: number | null): string {
+  const days = dayDifference ?? (previousObservedAt ? londonCalendarDayCount(previousObservedAt, now) : elapsedDayCount(seconds));
   if (days === null) return "";
   if (days === 0) return "today";
   if (days === 1) return "since yesterday";

@@ -55,6 +55,7 @@ export interface PriceHistoryComparison {
   price_change_percent: string | null;
   previous_observed_at: string | null;
   elapsed_seconds: number | null;
+  day_difference?: number | null;
   previous_observation_run_id: string | null;
 }
 

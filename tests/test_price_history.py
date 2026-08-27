@@ -221,6 +221,103 @@ def test_cached_replay_writes_no_observation_and_refresh_compares_composite() ->
         )
 
 
+def test_same_day_observations_never_replace_previous_day_baseline() -> None:
+    engine = create_database_engine()
+    store = PriceHistoryStore(engine)
+    departure = datetime(2026, 12, 18, 10, tzinfo=UTC)
+
+    def priced(value: str) -> tuple[FlightOffer, TripOption]:
+        selected = offer("FR 2687", "STN", "CAG", departure, value)
+        return selected, option(Direction.OUTBOUND, (selected,), value)
+
+    old_offer, old_option = priced("623")
+    morning_offer, morning_option = priced("549")
+    noon_offer, noon_option = priced("549")
+    store.capture_and_enrich(
+        snapshot("aug-26", old_option),
+        request(),
+        (old_offer,),
+        write_observation=True,
+        observed_at=datetime(2026, 8, 26, 14, 41, tzinfo=UTC),
+    )
+    store.capture_and_enrich(
+        snapshot("aug-27-am", morning_option),
+        request(),
+        (morning_offer,),
+        write_observation=True,
+        observed_at=datetime(2026, 8, 27, 9, 50, tzinfo=UTC),
+    )
+    current = store.capture_and_enrich(
+        snapshot("aug-27-noon", noon_option),
+        request(),
+        (noon_offer,),
+        write_observation=True,
+        observed_at=datetime(2026, 8, 27, 12, 30, tzinfo=UTC),
+    )
+    replay = store.capture_and_enrich(
+        snapshot("fresh-session", noon_option),
+        request(),
+        (),
+        write_observation=False,
+        observed_at=datetime(2026, 8, 27, 12, 50, tzinfo=UTC),
+    )
+
+    for result in (current, replay):
+        history = result.outbound.baseline.history
+        assert result.outbound.baseline.base_price == Decimal(549)
+        assert history.previous_price == Decimal(623)
+        assert history.price_change_amount == Decimal(-74)
+        assert history.price_change_percent == Decimal("-11.88")
+        assert history.day_difference == 1
+        assert result.outbound.baseline.legs[0].history.previous_price == Decimal(623)
+    with Session(engine) as session:
+        assert session.scalar(select(func.count()).select_from(SearchObservationRun)) == 3
+
+
+def test_prior_day_uses_london_date_and_skips_missing_dates() -> None:
+    engine = create_database_engine()
+    store = PriceHistoryStore(engine)
+    departure = datetime(2026, 12, 18, 10, tzinfo=UTC)
+    old_offer = offer("FR 2687", "STN", "CAG", departure, "600")
+    old_option = option(Direction.OUTBOUND, (old_offer,), "600")
+    store.capture_and_enrich(
+        snapshot("aug-24", old_option), request(), (old_offer,),
+        write_observation=True, observed_at=datetime(2026, 8, 24, 23, 30, tzinfo=UTC),
+    )
+    current_offer = old_offer.model_copy(update={"total_price": Decimal(549)})
+    current_option = option(Direction.OUTBOUND, (current_offer,), "549")
+    result = store.capture_and_enrich(
+        snapshot("aug-27", current_option), request(), (current_offer,),
+        write_observation=True, observed_at=datetime(2026, 8, 27, 0, 30, tzinfo=UTC),
+    )
+
+    history = result.outbound.baseline.history
+    assert history.previous_price == Decimal(600)
+    # Both UTC instants are after midnight on 25 and 27 August in London.
+    assert history.day_difference == 2
+
+
+def test_same_london_day_only_is_first_seen_across_utc_date_boundary() -> None:
+    engine = create_database_engine()
+    store = PriceHistoryStore(engine)
+    departure = datetime(2026, 12, 18, 10, tzinfo=UTC)
+    old_offer = offer("FR 2687", "STN", "CAG", departure, "600")
+    old_option = option(Direction.OUTBOUND, (old_offer,), "600")
+    store.capture_and_enrich(
+        snapshot("before-midnight-utc", old_option), request(), (old_offer,),
+        write_observation=True, observed_at=datetime(2026, 8, 26, 23, 30, tzinfo=UTC),
+    )
+    current_offer = old_offer.model_copy(update={"total_price": Decimal(549)})
+    current_option = option(Direction.OUTBOUND, (current_offer,), "549")
+    result = store.capture_and_enrich(
+        snapshot("after-midnight-utc", current_option), request(), (current_offer,),
+        write_observation=True, observed_at=datetime(2026, 8, 27, 0, 30, tzinfo=UTC),
+    )
+
+    assert result.outbound.baseline.history.history_status is HistoryStatus.FIRST_SEEN
+    assert result.outbound.baseline.legs[0].history.history_status is HistoryStatus.FIRST_SEEN
+
+
 def test_cached_history_is_resolved_with_two_batched_queries() -> None:
     engine = create_database_engine()
     store = PriceHistoryStore(engine)
