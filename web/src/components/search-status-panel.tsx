@@ -40,7 +40,7 @@ export function SearchStatusPanel({ snapshot, cachedMinutes, directionProgress, 
   const calls = diagnostics.provider_calls_this_invocation;
   const avoided = diagnostics.provider_calls_avoided_this_invocation;
   const backendCachedMinutes = diagnostics.backend_cache_age_seconds == null ? null : Math.floor(diagnostics.backend_cache_age_seconds / 60);
-  const cachedLabel = cachedMinutes !== null ? `Cached · ${cacheAge(cachedMinutes)}` : source === "Backend cache" ? `Cached${backendCachedMinutes === null ? "" : ` · ${cacheAge(backendCachedMinutes)}`}` : null;
+  const cachedLabel = cachedMinutes !== null ? `Cached · ${cacheAge(cachedMinutes)} · refreshes after 04:00` : source === "Backend cache" ? `Cached${backendCachedMinutes === null ? "" : ` · ${cacheAge(backendCachedMinutes)}`} · refreshes after 04:00` : "Fresh today";
   const collapsed = source !== "Live"
     ? [status, cachedLabel, providerCallsLabel(calls), avoidedCallsLabel(avoided)].filter(Boolean).join(" · ")
     : [status, providerCallsLabel(calls), partial ? `${failed} failed` : `${failed} failures`].join(" · ");

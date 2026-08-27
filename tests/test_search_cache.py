@@ -139,7 +139,7 @@ def test_safe_existing_capture_can_seed_cache(tmp_path: Path) -> None:
     assert len(cache.entries()) == 1
 
 
-def test_default_cache_ttl_is_twenty_four_hours(tmp_path: Path) -> None:
+def test_default_cache_expires_at_next_london_0400(tmp_path: Path) -> None:
     cache = SearchResponseCache(
         postgres_test_url(),
         raw_root=tmp_path / "raw",
@@ -154,13 +154,31 @@ def test_default_cache_ttl_is_twenty_four_hours(tmp_path: Path) -> None:
         "flight_type": "one_way",
         "stops": "nonstop",
     }
-    created = datetime(2026, 8, 24, 12, tzinfo=UTC)
+    created = datetime(2026, 8, 26, 14, tzinfo=UTC)  # Wed 15:00 BST
     cache.put(parameters, fixture_payload(), result_count=1, now=created)
 
     assert (
-        cache.get(parameters, now=created + timedelta(hours=23, minutes=59)) is not None
+        cache.get(parameters, now=datetime(2026, 8, 27, 2, 59, 59, tzinfo=UTC))
+        is not None
     )
-    assert cache.get(parameters, now=created + timedelta(hours=24)) is None
+    assert cache.get(parameters, now=datetime(2026, 8, 27, 3, tzinfo=UTC)) is None
+
+
+def test_london_cutoff_handles_before_after_and_gmt_bst(tmp_path: Path) -> None:
+    from flight_price_lab.storage.database import daily_cache_cutoff
+
+    assert daily_cache_cutoff(datetime(2026, 8, 27, 1, tzinfo=UTC)) == datetime(
+        2026, 8, 27, 3, tzinfo=UTC
+    )
+    assert daily_cache_cutoff(datetime(2026, 8, 27, 4, tzinfo=UTC)) == datetime(
+        2026, 8, 28, 3, tzinfo=UTC
+    )
+    assert daily_cache_cutoff(datetime(2026, 10, 24, 12, tzinfo=UTC)) == datetime(
+        2026, 10, 25, 4, tzinfo=UTC
+    )
+    assert daily_cache_cutoff(datetime(2026, 10, 25, 5, tzinfo=UTC)) == datetime(
+        2026, 10, 26, 4, tzinfo=UTC
+    )
 
 
 def trip_request(**updates: object) -> TripSearchRequest:

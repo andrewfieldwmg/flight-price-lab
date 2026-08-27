@@ -65,4 +65,12 @@ describe("observation history language", () => {
     expect(compact).not.toMatch(/[hm]/);
     expect(summary).not.toMatch(/\d+[hm]/);
   });
+
+  it("uses London calendar dates rather than elapsed 24-hour periods", () => {
+    const now = new Date("2026-08-27T08:00:00Z");
+    expect(elapsedCompactDay(15 * 3600, "2026-08-26T17:00:00Z", now)).toBe("1d ago");
+    expect(elapsedSummaryDay(15 * 3600, "2026-08-26T17:00:00Z", now)).toBe("since yesterday");
+    expect(elapsedSummaryDay(3600, "2026-08-27T07:00:00Z", now)).toBe("today");
+    expect(elapsedCompactDay(30 * 3600, "2026-08-25T17:00:00Z", now)).toBe("2d ago");
+  });
 });

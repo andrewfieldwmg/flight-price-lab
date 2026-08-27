@@ -3,7 +3,7 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from hashlib import sha256
 
-from sqlalchemy import func, select
+from sqlalchemy import event, func, select
 from sqlalchemy.orm import Session
 
 from flight_price_lab.api.models import (
@@ -218,6 +218,52 @@ def test_cached_replay_writes_no_observation_and_refresh_compares_composite() ->
     with Session(engine) as session:
         assert (
             session.scalar(select(func.count()).select_from(SearchObservationRun)) == 2
+        )
+
+
+def test_cached_history_is_resolved_with_two_batched_queries() -> None:
+    engine = create_database_engine()
+    store = PriceHistoryStore(engine)
+    departure = datetime(2026, 12, 18, 10, tzinfo=UTC)
+    offers = tuple(
+        offer(
+            f"U2 {8300 + index}",
+            "LGW",
+            "MXP",
+            departure + timedelta(hours=index),
+            str(200 + index),
+        )
+        for index in range(6)
+    )
+    options = [
+        option(Direction.OUTBOUND, (item,), str(200 + index))
+        for index, item in enumerate(offers)
+    ]
+    first = snapshot("batch-live", options[0])
+    first.outbound.nonstop_options = options
+    store.capture_and_enrich(first, request(), offers, write_observation=True)
+
+    statements: list[str] = []
+
+    def count_history_selects(_conn, _cursor, statement, _parameters, _context, _many):
+        lowered = statement.lower()
+        if statement.lstrip().lower().startswith("select") and (
+            "trip_option_observation" in lowered or "flight_observation" in lowered
+        ):
+            statements.append(statement)
+
+    event.listen(engine, "before_cursor_execute", count_history_selects)
+    try:
+        replay = snapshot("batch-cached", options[0])
+        replay.outbound.nonstop_options = options
+        store.capture_and_enrich(replay, request(), (), write_observation=False)
+    finally:
+        event.remove(engine, "before_cursor_execute", count_history_selects)
+
+    assert len(statements) == 2
+    with Session(engine) as session:
+        assert (
+            session.scalar(select(func.count()).select_from(SearchObservationRun)) == 1
         )
 
 

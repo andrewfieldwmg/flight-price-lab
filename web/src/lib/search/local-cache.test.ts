@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { option } from "@/test/fixtures";
 import type { SearchSnapshot, TripSearchRequest } from "@/lib/api/types";
-import { currentInvocationFromLocalCache, loadLocalSearch, saveLocalSearch } from "./local-cache";
+import { currentInvocationFromLocalCache, loadLocalSearch, nextLondonCacheCutoff, saveLocalSearch } from "./local-cache";
 
 const request: TripSearchRequest = {
   origins: ["LGW"], destinations: ["CAG"], outbound_date: "2026-12-18", return_date: null,
@@ -20,11 +20,16 @@ const results: SearchSnapshot = {
 describe("completed search localStorage cache", () => {
   beforeEach(() => window.localStorage.clear());
 
-  it("expires after twenty-four hours", () => {
-    const saved = new Date("2026-08-24T12:00:00Z");
+  it("expires at the next 04:00 Europe/London cutoff", () => {
+    const saved = new Date("2026-08-26T14:00:00Z");
     saveLocalSearch("key-1", request, results, saved);
-    expect(loadLocalSearch("key-1", new Date("2026-08-25T11:59:59Z"))).not.toBeNull();
-    expect(loadLocalSearch("key-1", new Date("2026-08-25T12:00:00Z"))).toBeNull();
+    expect(loadLocalSearch("key-1", new Date("2026-08-27T02:59:59Z"))).not.toBeNull();
+    expect(loadLocalSearch("key-1", new Date("2026-08-27T03:00:00Z"))).toBeNull();
+  });
+
+  it("resolves GMT and BST cutoffs without a fixed offset", () => {
+    expect(nextLondonCacheCutoff(new Date("2026-08-27T01:00:00Z")).toISOString()).toBe("2026-08-27T03:00:00.000Z");
+    expect(nextLondonCacheCutoff(new Date("2026-10-25T05:00:00Z")).toISOString()).toBe("2026-10-26T04:00:00.000Z");
   });
 
   it("restores the completed table snapshot and selection source", () => {

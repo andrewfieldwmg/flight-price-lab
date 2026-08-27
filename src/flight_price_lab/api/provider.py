@@ -26,6 +26,7 @@ from flight_price_lab.storage.database import (
     SearchResponseCache,
     canonical_search_json,
     canonical_search_key,
+    daily_cache_cutoff,
 )
 
 
@@ -59,7 +60,7 @@ class _VolatileResponseCache:
         self.entries[canonical_search_key(parameters)] = (
             cached,
             created,
-            created + self.ttl,
+            daily_cache_cutoff(created),
         )
         return cached
 

@@ -1,7 +1,24 @@
 import type { SearchSnapshot, TripSearchRequest } from "@/lib/api/types";
 
-export const SEARCH_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const PREFIX = "flight-price-lab:";
+const LONDON_TIME_ZONE = "Europe/London";
+
+function londonParts(value: Date) {
+  const parts = new Intl.DateTimeFormat("en-GB", { timeZone: LONDON_TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23" }).formatToParts(value);
+  return Object.fromEntries(parts.map(({ type, value: part }) => [type, Number(part)]));
+}
+
+export function nextLondonCacheCutoff(now: Date): Date {
+  const local = londonParts(now);
+  const target = new Date(Date.UTC(local.year, local.month - 1, local.day + (local.hour >= 4 ? 1 : 0), 4));
+  for (let delta = -2; delta <= 2; delta += 1) {
+    const candidate = new Date(target.getTime() + delta * 3_600_000);
+    const parts = londonParts(candidate);
+    const wanted = londonParts(target);
+    if (parts.year === wanted.year && parts.month === wanted.month && parts.day === wanted.day && parts.hour === 4) return candidate;
+  }
+  throw new Error("Unable to resolve Europe/London cache cutoff");
+}
 
 function devLog(event: string, fields: Record<string, unknown>) {
   if (process.env.NODE_ENV === "development" || process.env.NEXT_PUBLIC_DIAGNOSTICS === "true") {
@@ -42,7 +59,7 @@ export function saveLocalSearch(
     trip_id: results.trip_id || results.search_id,
     search_key: searchKey,
     saved_at: now.toISOString(),
-    expires_at: new Date(now.getTime() + SEARCH_CACHE_TTL_MS).toISOString(),
+    expires_at: nextLondonCacheCutoff(now).toISOString(),
     request: { ...request, refresh_prices: false },
     results,
     ui_state: uiState,

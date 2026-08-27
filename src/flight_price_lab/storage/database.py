@@ -13,6 +13,7 @@ from hashlib import sha256
 from pathlib import Path
 from time import perf_counter
 from typing import TYPE_CHECKING, Any
+from zoneinfo import ZoneInfo
 
 from dotenv import dotenv_values
 from sqlalchemy import (
@@ -220,7 +221,7 @@ class CalendarPriceObservation(Base):
 
 
 class CalendarPriceStore:
-    """Immutable direct-fare observations with a 24-hour freshness window."""
+    """Immutable direct-fare observations fresh until the daily London cutoff."""
 
     def __init__(
         self,
@@ -276,7 +277,8 @@ class CalendarPriceStore:
                 .where(
                     CalendarPriceObservation.market_key == key,
                     CalendarPriceObservation.travel_date == travel_date,
-                    CalendarPriceObservation.observed_at > current - self.ttl,
+                    CalendarPriceObservation.observed_at
+                    >= current_cache_period_started(current),
                 )
                 .order_by(CalendarPriceObservation.observed_at.desc())
                 .limit(1)
@@ -311,7 +313,8 @@ class CalendarPriceStore:
                 .where(
                     CalendarPriceObservation.market_key == key,
                     CalendarPriceObservation.travel_date.in_(travel_dates),
-                    CalendarPriceObservation.observed_at > current - self.ttl,
+                    CalendarPriceObservation.observed_at
+                    >= current_cache_period_started(current),
                 )
                 .order_by(CalendarPriceObservation.observed_at.desc())
             ).all()
@@ -771,7 +774,7 @@ class SearchResponseCache:
             raw_response_path=str(path.resolve()),
             response_json=contents,
             created_at=created,
-            expires_at=created + self.ttl,
+            expires_at=daily_cache_cutoff(created),
             result_count=result_count,
         )
         acquire_clock = perf_counter()
@@ -853,7 +856,7 @@ class SearchResponseCache:
             raw_response_path=str(capture.resolve()),
             response_json=json.dumps(payload, ensure_ascii=False),
             created_at=created,
-            expires_at=created + self.ttl,
+            expires_at=daily_cache_cutoff(created),
             result_count=result_count,
         )
         with Session(self.engine) as session:
@@ -1011,3 +1014,28 @@ class SearchSessionStore:
                 return None
             value = entry.snapshot_json
         return SearchSnapshot.model_validate_json(value)
+
+
+LONDON = ZoneInfo("Europe/London")
+
+
+def daily_cache_cutoff(moment: datetime) -> datetime:
+    """Return the next 04:00 Europe/London cutoff as an aware UTC datetime."""
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=UTC)
+    local = moment.astimezone(LONDON)
+    cutoff = local.replace(hour=4, minute=0, second=0, microsecond=0)
+    if local >= cutoff:
+        cutoff += timedelta(days=1)
+    return cutoff.astimezone(UTC)
+
+
+def current_cache_period_started(moment: datetime) -> datetime:
+    """Return the most recent 04:00 Europe/London cutoff in UTC."""
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=UTC)
+    local = moment.astimezone(LONDON)
+    cutoff = local.replace(hour=4, minute=0, second=0, microsecond=0)
+    if local < cutoff:
+        cutoff -= timedelta(days=1)
+    return cutoff.astimezone(UTC)

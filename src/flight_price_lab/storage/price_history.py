@@ -82,21 +82,15 @@ class PriceHistoryStore:
         options = _all_options(snapshot)
         run_id = uuid4().hex if write_observation else None
         with Session(self.engine) as session:
-            option_history = {
-                (option.direction.value, option.id): self._previous_trip(
-                    session, option, request
-                )
-                for option in options
-            }
+            option_history = self._previous_trips(session, options, request)
             constituent_fingerprints = {
                 fingerprint
                 for option in options
                 for fingerprint in option.constituent_fingerprints
             }
-            offer_history = {
-                fingerprint: self._previous_offer(session, fingerprint, request)
-                for fingerprint in constituent_fingerprints
-            }
+            offer_history = self._previous_offers(
+                session, constituent_fingerprints, request
+            )
             enriched = {
                 (option.direction.value, option.id): self._enrich_option(
                     option,
@@ -118,14 +112,21 @@ class PriceHistoryStore:
         return snapshot
 
     @staticmethod
-    def _previous_trip(
-        session: Session, option: TripOption, request: TripSearchRequest
-    ) -> TripOptionObservation | None:
-        return session.scalar(
+    def _previous_trips(
+        session: Session, options: list[TripOption], request: TripSearchRequest
+    ) -> dict[tuple[str, str], TripOptionObservation | None]:
+        keys = {(option.direction.value, option.id) for option in options}
+        if not keys:
+            return {}
+        rows = session.scalars(
             select(TripOptionObservation)
             .where(
-                TripOptionObservation.trip_option_fingerprint == option.id,
-                TripOptionObservation.direction == option.direction.value,
+                TripOptionObservation.trip_option_fingerprint.in_(
+                    {option.id for option in options}
+                ),
+                TripOptionObservation.direction.in_(
+                    {option.direction.value for option in options}
+                ),
                 TripOptionObservation.passenger_count
                 == request.adults + request.children,
                 TripOptionObservation.adults == request.adults,
@@ -133,25 +134,41 @@ class PriceHistoryStore:
                 TripOptionObservation.currency == request.currency,
             )
             .order_by(desc(TripOptionObservation.observed_at))
-            .limit(1)
-        )
+        ).all()
+        latest: dict[tuple[str, str], TripOptionObservation | None] = {
+            key: None for key in keys
+        }
+        for row in rows:
+            key = (row.direction, row.trip_option_fingerprint)
+            if key in latest and latest[key] is None:
+                latest[key] = row
+        return latest
 
     @staticmethod
-    def _previous_offer(
-        session: Session, fingerprint: str, request: TripSearchRequest
-    ) -> FlightObservation | None:
-        return session.scalar(
+    def _previous_offers(
+        session: Session, fingerprints: set[str], request: TripSearchRequest
+    ) -> dict[str, FlightObservation | None]:
+        if not fingerprints:
+            return {}
+        rows = session.scalars(
             select(FlightObservation)
             .where(
-                FlightObservation.offer_fingerprint == fingerprint,
+                FlightObservation.offer_fingerprint.in_(fingerprints),
                 FlightObservation.passenger_count == request.adults + request.children,
                 FlightObservation.adults == request.adults,
                 FlightObservation.children == request.children,
                 FlightObservation.currency == request.currency,
             )
             .order_by(desc(FlightObservation.observed_at))
-            .limit(1)
-        )
+        ).all()
+        latest: dict[str, FlightObservation | None] = {
+            fingerprint: None for fingerprint in fingerprints
+        }
+        for row in rows:
+            fingerprint = row.offer_fingerprint
+            if fingerprint is not None and latest[fingerprint] is None:
+                latest[fingerprint] = row
+        return latest
 
     @staticmethod
     def _enrich_option(

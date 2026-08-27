@@ -21,14 +21,24 @@ export function elapsedDayCount(seconds: number | null): number | null {
   return Math.max(0, Math.floor(seconds / 86400));
 }
 
-export function elapsedCompactDay(seconds: number | null): string {
-  const days = elapsedDayCount(seconds);
+export function londonCalendarDayCount(previousObservedAt: string | null | undefined, now = new Date()): number | null {
+  if (!previousObservedAt) return null;
+  const formatter = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit" });
+  const ordinal = (value: Date) => {
+    const parts = Object.fromEntries(formatter.formatToParts(value).map(({ type, value: part }) => [type, Number(part)]));
+    return Date.UTC(parts.year, parts.month - 1, parts.day) / 86_400_000;
+  };
+  return Math.max(0, ordinal(now) - ordinal(new Date(previousObservedAt)));
+}
+
+export function elapsedCompactDay(seconds: number | null, previousObservedAt?: string | null, now = new Date()): string {
+  const days = previousObservedAt ? londonCalendarDayCount(previousObservedAt, now) : elapsedDayCount(seconds);
   if (days === null) return "";
   return days === 0 ? "today" : `${days}d ago`;
 }
 
-export function elapsedSummaryDay(seconds: number | null): string {
-  const days = elapsedDayCount(seconds);
+export function elapsedSummaryDay(seconds: number | null, previousObservedAt?: string | null, now = new Date()): string {
+  const days = previousObservedAt ? londonCalendarDayCount(previousObservedAt, now) : elapsedDayCount(seconds);
   if (days === null) return "";
   if (days === 0) return "today";
   if (days === 1) return "since yesterday";
