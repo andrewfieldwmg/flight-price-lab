@@ -8,16 +8,25 @@ function londonParts(value: Date) {
   return Object.fromEntries(parts.map(({ type, value: part }) => [type, Number(part)]));
 }
 
-export function nextLondonCacheCutoff(now: Date): Date {
-  const local = londonParts(now);
-  const target = new Date(Date.UTC(local.year, local.month - 1, local.day + (local.hour >= 4 ? 1 : 0), 4));
+function londonBoundary(local: Record<string, number>, dayOffset: number): Date {
+  const target = new Date(Date.UTC(local.year, local.month - 1, local.day + dayOffset, 4));
+  const wanted = londonParts(target);
   for (let delta = -2; delta <= 2; delta += 1) {
     const candidate = new Date(target.getTime() + delta * 3_600_000);
     const parts = londonParts(candidate);
-    const wanted = londonParts(target);
     if (parts.year === wanted.year && parts.month === wanted.month && parts.day === wanted.day && parts.hour === 4) return candidate;
   }
-  throw new Error("Unable to resolve Europe/London cache cutoff");
+  throw new Error("Unable to resolve Europe/London cache boundary");
+}
+
+export function currentCacheEpoch(now: Date): Date {
+  const local = londonParts(now);
+  return londonBoundary(local, local.hour < 4 ? -1 : 0);
+}
+
+export function nextLondonCacheCutoff(now: Date): Date {
+  const local = londonParts(now);
+  return londonBoundary(local, local.hour < 4 ? 0 : 1);
 }
 
 function devLog(event: string, fields: Record<string, unknown>) {
@@ -96,7 +105,8 @@ export function loadLocalSearch(
   }
   try {
     const value = JSON.parse(raw) as LocalSearchSnapshot;
-    if (value.search_key !== searchKey || Date.parse(value.expires_at) <= now.getTime()) {
+    const cachedAt = Date.parse(value.saved_at);
+    if (value.search_key !== searchKey || !Number.isFinite(cachedAt) || cachedAt < currentCacheEpoch(now).getTime()) {
       window.localStorage.removeItem(`${PREFIX}${searchKey}`);
       devLog("FRONTEND_LOCAL_CACHE_MISS", { search_key: searchKey, search_key_short: searchKey.slice(0, 12), reason: "expired_or_mismatched" });
       return null;

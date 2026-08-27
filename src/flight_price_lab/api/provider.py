@@ -26,6 +26,7 @@ from flight_price_lab.storage.database import (
     SearchResponseCache,
     canonical_search_json,
     canonical_search_key,
+    current_cache_epoch,
     daily_cache_cutoff,
 )
 
@@ -44,7 +45,7 @@ class _VolatileResponseCache:
         cached, created, expires = entry
         now = datetime.now(UTC)
         age = (now - created).total_seconds()
-        if expires <= now:
+        if created < current_cache_epoch(now):
             return CacheLookup("expired", None, created, expires, age)
         return CacheLookup("hit", cached, created, expires, age)
 

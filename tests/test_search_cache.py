@@ -6,11 +6,13 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import pytest
+from sqlalchemy.orm import Session
 
 from flight_price_lab.api.models import TripSearchRequest
 from flight_price_lab.api.provider import SearchAPIProviderGateway
 from flight_price_lab.api.service import trip_search_key
 from flight_price_lab.storage.database import (
+    SearchCacheEntry,
     SearchResponseCache,
     canonical_search_key,
 )
@@ -165,7 +167,10 @@ def test_default_cache_expires_at_next_london_0400(tmp_path: Path) -> None:
 
 
 def test_london_cutoff_handles_before_after_and_gmt_bst(tmp_path: Path) -> None:
-    from flight_price_lab.storage.database import daily_cache_cutoff
+    from flight_price_lab.storage.database import (
+        current_cache_epoch,
+        daily_cache_cutoff,
+    )
 
     assert daily_cache_cutoff(datetime(2026, 8, 27, 1, tzinfo=UTC)) == datetime(
         2026, 8, 27, 3, tzinfo=UTC
@@ -179,6 +184,42 @@ def test_london_cutoff_handles_before_after_and_gmt_bst(tmp_path: Path) -> None:
     assert daily_cache_cutoff(datetime(2026, 10, 25, 5, tzinfo=UTC)) == datetime(
         2026, 10, 26, 4, tzinfo=UTC
     )
+    assert current_cache_epoch(
+        datetime(2026, 8, 27, 2, 59, 59, tzinfo=UTC)
+    ) == datetime(2026, 8, 26, 3, tzinfo=UTC)
+    assert current_cache_epoch(datetime(2026, 8, 27, 3, tzinfo=UTC)) == datetime(
+        2026, 8, 27, 3, tzinfo=UTC
+    )
+
+
+def test_backend_rejects_legacy_rolling_expiry_after_current_epoch(
+    tmp_path: Path,
+) -> None:
+    cache = SearchResponseCache(postgres_test_url(), raw_root=tmp_path / "raw")
+    parameters = {
+        "origins": ["LGW"],
+        "destinations": ["CAG"],
+        "date": "2026-12-18",
+        "adults": 2,
+        "children": 2,
+        "currency": "GBP",
+        "flight_type": "one_way",
+        "stops": "nonstop",
+    }
+    created = datetime(2026, 8, 26, 14, 30, tzinfo=UTC)
+    cache.put(parameters, fixture_payload(), result_count=1, now=created)
+    with Session(cache.engine) as session:
+        entry = session.get(SearchCacheEntry, canonical_search_key(parameters))
+        assert entry is not None
+        entry.expires_at = created + timedelta(hours=24)
+        session.commit()
+
+    assert (
+        cache.get(parameters, now=datetime(2026, 8, 27, 2, 59, 59, tzinfo=UTC))
+        is not None
+    )
+    assert cache.get(parameters, now=datetime(2026, 8, 27, 3, tzinfo=UTC)) is None
+    assert cache.get(parameters, now=datetime(2026, 8, 27, 8, 31, tzinfo=UTC)) is None
 
 
 def trip_request(**updates: object) -> TripSearchRequest:

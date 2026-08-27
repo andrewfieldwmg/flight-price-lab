@@ -23,20 +23,20 @@ function snapshot(updates: Partial<SearchSnapshot["diagnostics"]> = {}, status: 
 describe("search status panel", () => {
   it("summarizes a local-cache search without implementation counters", () => {
     render(<SearchStatusPanel snapshot={snapshot({ local_cache_hit: true, provider_calls_this_invocation: 0, provider_calls_avoided_this_invocation: 17 })} cachedMinutes={25} directionProgress={progress} />);
-    expect(screen.getByText("Search complete · Cached · 25m ago · 0 provider calls · 17 calls avoided")).toBeInTheDocument();
+    expect(screen.getByText("Search complete · Cached · 25m ago · refreshes after 04:00 · 0 provider calls · 17 calls avoided")).toBeInTheDocument();
     expect(screen.queryByText(/local cache hits|backend cache hits|cache misses/i)).not.toBeInTheDocument();
   });
 
   it("summarizes a backend-cache search", () => {
     render(<SearchStatusPanel snapshot={snapshot({ backend_cache_hits: 1, provider_calls_this_invocation: 0, provider_calls_avoided_this_invocation: 1 })} cachedMinutes={null} directionProgress={progress} />);
-    expect(screen.getByText("Search complete · Cached · 0 provider calls · 1 call avoided")).toBeInTheDocument();
+    expect(screen.getByText("Search complete · Cached · refreshes after 04:00 · 0 provider calls · 1 call avoided")).toBeInTheDocument();
   });
 
   it("summarizes live and partial searches", () => {
     const { rerender } = render(<SearchStatusPanel snapshot={snapshot()} cachedMinutes={null} directionProgress={progress} />);
-    expect(screen.getByText("Search complete · 17 provider calls · 0 failures")).toBeInTheDocument();
+    expect(screen.getByText("Search complete · Fresh today · 17 provider calls · 0 failures")).toBeInTheDocument();
     rerender(<SearchStatusPanel snapshot={snapshot({ provider_calls_this_invocation: 15 }, "partial_failure", 2)} cachedMinutes={null} directionProgress={progress} />);
-    expect(screen.getByText("Search complete · 15 provider calls · 2 failed")).toBeInTheDocument();
+    expect(screen.getByText("Search complete · Fresh today · 15 provider calls · 2 failed")).toBeInTheDocument();
   });
 
   it("expands and collapses details with consolidated fields", () => {

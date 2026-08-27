@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { option } from "@/test/fixtures";
 import type { SearchSnapshot, TripSearchRequest } from "@/lib/api/types";
-import { currentInvocationFromLocalCache, loadLocalSearch, nextLondonCacheCutoff, saveLocalSearch } from "./local-cache";
+import { currentCacheEpoch, currentInvocationFromLocalCache, loadLocalSearch, nextLondonCacheCutoff, saveLocalSearch } from "./local-cache";
 
 const request: TripSearchRequest = {
   origins: ["LGW"], destinations: ["CAG"], outbound_date: "2026-12-18", return_date: null,
@@ -27,8 +27,24 @@ describe("completed search localStorage cache", () => {
     expect(loadLocalSearch("key-1", new Date("2026-08-27T03:00:00Z"))).toBeNull();
   });
 
+  it("rejects a legacy rolling-TTL snapshot at 09:31 after the epoch changed", () => {
+    const saved = new Date("2026-08-26T14:30:00Z");
+    const value = saveLocalSearch("key-1", request, results, saved);
+    window.localStorage.setItem("flight-price-lab:key-1", JSON.stringify({ ...value, expires_at: "2026-08-27T14:30:00Z" }));
+    expect(loadLocalSearch("key-1", new Date("2026-08-27T08:31:00Z"))).toBeNull();
+    expect(window.localStorage.getItem("flight-price-lab:key-1")).toBeNull();
+  });
+
+  it("keeps a 04:01 snapshot throughout its London cache day", () => {
+    saveLocalSearch("key-1", request, results, new Date("2026-08-27T03:01:00Z"));
+    expect(loadLocalSearch("key-1", new Date("2026-08-28T02:59:59Z"))).not.toBeNull();
+  });
+
   it("resolves GMT and BST cutoffs without a fixed offset", () => {
+    expect(currentCacheEpoch(new Date("2026-08-27T02:59:59Z")).toISOString()).toBe("2026-08-26T03:00:00.000Z");
+    expect(currentCacheEpoch(new Date("2026-08-27T03:00:00Z")).toISOString()).toBe("2026-08-27T03:00:00.000Z");
     expect(nextLondonCacheCutoff(new Date("2026-08-27T01:00:00Z")).toISOString()).toBe("2026-08-27T03:00:00.000Z");
+    expect(currentCacheEpoch(new Date("2026-01-15T09:31:00Z")).toISOString()).toBe("2026-01-15T04:00:00.000Z");
     expect(nextLondonCacheCutoff(new Date("2026-10-25T05:00:00Z")).toISOString()).toBe("2026-10-26T04:00:00.000Z");
   });
 

@@ -43,7 +43,7 @@ export function SearchStatusPanel({ snapshot, cachedMinutes, directionProgress, 
   const cachedLabel = cachedMinutes !== null ? `Cached · ${cacheAge(cachedMinutes)} · refreshes after 04:00` : source === "Backend cache" ? `Cached${backendCachedMinutes === null ? "" : ` · ${cacheAge(backendCachedMinutes)}`} · refreshes after 04:00` : "Fresh today";
   const collapsed = source !== "Live"
     ? [status, cachedLabel, providerCallsLabel(calls), avoidedCallsLabel(avoided)].filter(Boolean).join(" · ")
-    : [status, providerCallsLabel(calls), partial ? `${failed} failed` : `${failed} failures`].join(" · ");
+    : [status, "Fresh today", providerCallsLabel(calls), partial ? `${failed} failed` : `${failed} failures`].join(" · ");
   const technical = process.env.NODE_ENV === "development" || process.env.NEXT_PUBLIC_DIAGNOSTICS === "true";
   return <section className="search-status-panel" aria-label="Search status">
     <div className="search-status-row" role="status"><span>{collapsed}</span><button type="button" aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}>Details {expanded ? "▴" : "▾"}</button></div>

@@ -37,6 +37,29 @@ if TYPE_CHECKING:
     from flight_price_lab.models.flight import FlightOffer
 
 LOGGER = logging.getLogger("flight_price_lab.database")
+LONDON = ZoneInfo("Europe/London")
+
+
+def current_cache_epoch(moment: datetime) -> datetime:
+    """Return the most recent 04:00 Europe/London epoch boundary in UTC."""
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=UTC)
+    local = moment.astimezone(LONDON)
+    epoch = local.replace(hour=4, minute=0, second=0, microsecond=0)
+    if local < epoch:
+        epoch -= timedelta(days=1)
+    return epoch.astimezone(UTC)
+
+
+def daily_cache_cutoff(moment: datetime) -> datetime:
+    """Return the beginning of the next daily London cache epoch."""
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=UTC)
+    local = moment.astimezone(LONDON)
+    cutoff = local.replace(hour=4, minute=0, second=0, microsecond=0)
+    if local >= cutoff:
+        cutoff += timedelta(days=1)
+    return cutoff.astimezone(UTC)
 
 
 class Base(DeclarativeBase):
@@ -278,7 +301,7 @@ class CalendarPriceStore:
                     CalendarPriceObservation.market_key == key,
                     CalendarPriceObservation.travel_date == travel_date,
                     CalendarPriceObservation.observed_at
-                    >= current_cache_period_started(current),
+                    >= current_cache_epoch(current),
                 )
                 .order_by(CalendarPriceObservation.observed_at.desc())
                 .limit(1)
@@ -314,7 +337,7 @@ class CalendarPriceStore:
                     CalendarPriceObservation.market_key == key,
                     CalendarPriceObservation.travel_date.in_(travel_dates),
                     CalendarPriceObservation.observed_at
-                    >= current_cache_period_started(current),
+                    >= current_cache_epoch(current),
                 )
                 .order_by(CalendarPriceObservation.observed_at.desc())
             ).all()
@@ -430,7 +453,7 @@ class CalendarPriceStore:
                 select(SearchSessionEntry)
                 .where(
                     SearchSessionEntry.status.in_(("completed", "partial_failure")),
-                    SearchSessionEntry.updated_at > current - self.ttl,
+                    SearchSessionEntry.updated_at >= current_cache_epoch(current),
                 )
                 .order_by(SearchSessionEntry.updated_at.desc())
             )
@@ -548,7 +571,7 @@ class CalendarPriceStore:
                 select(SearchSessionEntry)
                 .where(
                     SearchSessionEntry.status.in_(("completed", "partial_failure")),
-                    SearchSessionEntry.updated_at > current - self.ttl,
+                    SearchSessionEntry.updated_at >= current_cache_epoch(current),
                 )
                 .order_by(SearchSessionEntry.updated_at.desc())
             )
@@ -712,7 +735,7 @@ class SearchResponseCache:
             if expires_at.tzinfo is None:
                 expires_at = expires_at.replace(tzinfo=UTC)
             age_seconds = (current - created_at).total_seconds()
-            if expires_at <= current:
+            if created_at < current_cache_epoch(current):
                 return CacheLookup("expired", None, created_at, expires_at, age_seconds)
             path = Path(entry.raw_response_path)
             if entry.response_json:
@@ -1005,37 +1028,19 @@ class SearchSessionStore:
         with Session(self.engine) as owned_session:
             apply(owned_session)
 
-    def get(self, search_id: str) -> Any | None:
+    def get(self, search_id: str, *, now: datetime | None = None) -> Any | None:
         from flight_price_lab.api.models import SearchSnapshot
 
         with Session(self.engine) as session:
             entry = session.get(SearchSessionEntry, search_id)
             if entry is None:
                 return None
+            current = now or datetime.now(UTC)
+            cached_at = entry.completed_at or entry.updated_at
+            if entry.status in {"completed", "partial_failure", "failed"}:
+                if cached_at.tzinfo is None:
+                    cached_at = cached_at.replace(tzinfo=UTC)
+                if cached_at < current_cache_epoch(current):
+                    return None
             value = entry.snapshot_json
         return SearchSnapshot.model_validate_json(value)
-
-
-LONDON = ZoneInfo("Europe/London")
-
-
-def daily_cache_cutoff(moment: datetime) -> datetime:
-    """Return the next 04:00 Europe/London cutoff as an aware UTC datetime."""
-    if moment.tzinfo is None:
-        moment = moment.replace(tzinfo=UTC)
-    local = moment.astimezone(LONDON)
-    cutoff = local.replace(hour=4, minute=0, second=0, microsecond=0)
-    if local >= cutoff:
-        cutoff += timedelta(days=1)
-    return cutoff.astimezone(UTC)
-
-
-def current_cache_period_started(moment: datetime) -> datetime:
-    """Return the most recent 04:00 Europe/London cutoff in UTC."""
-    if moment.tzinfo is None:
-        moment = moment.replace(tzinfo=UTC)
-    local = moment.astimezone(LONDON)
-    cutoff = local.replace(hour=4, minute=0, second=0, microsecond=0)
-    if local < cutoff:
-        cutoff -= timedelta(days=1)
-    return cutoff.astimezone(UTC)
