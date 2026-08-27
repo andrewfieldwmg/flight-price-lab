@@ -209,8 +209,8 @@ describe("dense flight results", () => {
     expect(screen.getByText("↓ 5.0%")).toHaveAccessibleName("Price decreased by 5.0 percent since last seen");
     expect(screen.getByText("— (0%)")).toHaveAccessibleName("No price change since last seen");
     expect(screen.getByText("New")).toHaveAccessibleName("First price observation");
-    expect(screen.getByText("· was £400")).toBeInTheDocument();
-    expect(screen.getByText("· was £486")).toBeInTheDocument();
+    expect(screen.getByText("was £400")).toHaveClass("history-was");
+    expect(screen.getByText("was £486")).toHaveClass("history-was");
     expect(screen.getByText("New").closest("td")).not.toHaveTextContent("was");
     expect(screen.getAllByText("today")).toHaveLength(2);
     expect(screen.queryByText(/\d+[hm] ago/)).not.toBeInTheDocument();
@@ -220,7 +220,8 @@ describe("dense flight results", () => {
     const selected = option({ id: "baseline-proof", base_price: "784", history: { history_status: "PREVIOUS_FOUND", previous_price: "849", price_change_amount: "-65", price_change_percent: "-7.66", previous_observed_at: "2026-08-26T14:41:00Z", elapsed_seconds: 86400, day_difference: 1, previous_observation_run_id: "run" } });
     render(<DirectionResults title="Outbound" date="2026-12-18" results={{ ...results, baseline: selected, nonstop_options: [selected] }} selectedId={null} onSelect={vi.fn()} complete connectionProfile="CONSERVATIVE" selfTransferEnabled={false} />);
     expect(screen.getByText("↓ 7.7%")).toBeInTheDocument();
-    expect(screen.getByText("· was £849")).toBeInTheDocument();
+    expect(screen.getByText("was £849")).toHaveClass("history-was");
+    expect(screen.getByText("was £849").tagName).toBe("SPAN");
     expect(screen.getByText("1d ago")).toBeInTheDocument();
   });
 

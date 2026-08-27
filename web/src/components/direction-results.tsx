@@ -192,6 +192,6 @@ function HistoryCell({ option }: { option: TripOption }) {
   return <td data-label="Change" className={`history-cell ${Number(option.history?.price_change_amount ?? 0) > 0 ? "history-up" : Number(option.history?.price_change_amount ?? 0) < 0 ? "history-down" : ""}`} title={historyTooltip(option.history, option.base_price, option.currency)}>
     {state === "LOADING"
       ? <span className="loading-spinner history-loading-spinner" role="status" aria-label="Loading price history" />
-      : <><strong><span aria-label={historyAccessibleLabel(option.history)}>{historySignal(option.history)}</span>{option.history?.history_status === "PREVIOUS_FOUND" && option.history.previous_price !== null && <em>· was {money(option.history.previous_price, option.currency)}</em>}</strong>{option.history?.history_status === "PREVIOUS_FOUND" && <small>{elapsedCompactDay(option.history.elapsed_seconds, option.history.previous_observed_at, undefined, option.history.day_difference)}</small>}</>}
+      : <><strong><span aria-label={historyAccessibleLabel(option.history)}>{historySignal(option.history)}</span>{option.history?.history_status === "PREVIOUS_FOUND" && option.history.previous_price !== null && <span className="history-was">was {money(option.history.previous_price, option.currency)}</span>}</strong>{option.history?.history_status === "PREVIOUS_FOUND" && <small>{elapsedCompactDay(option.history.elapsed_seconds, option.history.previous_observed_at, undefined, option.history.day_difference)}</small>}</>}
   </td>;
 }

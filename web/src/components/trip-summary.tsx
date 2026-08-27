@@ -168,8 +168,8 @@ export function TripSummary({ outbound, inbound, outboundBaseline, inboundBaseli
         : tripHistoryPercent === null
           ? "History unavailable"
     : tripHistoryPercent === 0
-      ? `No change ${elapsedSummaryDay(tripHistoryElapsed, combinedPriorPoint?.observed_at ?? outboundHistory?.previous_observed_at, currentTripPoint ? new Date(currentTripPoint.observed_at) : undefined, combinedDayDifference ?? outboundHistory?.day_difference)} · was ${money(previousTripTotal ?? 0, currency)}`
-      : `${tripHistoryPercent > 0 ? "↑" : "↓"} ${Math.abs(tripHistoryPercent).toFixed(1)}% ${elapsedSummaryDay(tripHistoryElapsed, combinedPriorPoint?.observed_at ?? outboundHistory?.previous_observed_at, currentTripPoint ? new Date(currentTripPoint.observed_at) : undefined, combinedDayDifference ?? outboundHistory?.day_difference)} · was ${money(previousTripTotal ?? 0, currency)}`;
+      ? `No change ${elapsedSummaryDay(tripHistoryElapsed, combinedPriorPoint?.observed_at ?? outboundHistory?.previous_observed_at, currentTripPoint ? new Date(currentTripPoint.observed_at) : undefined, combinedDayDifference ?? outboundHistory?.day_difference)}`
+      : `${tripHistoryPercent > 0 ? "↑" : "↓"} ${Math.abs(tripHistoryPercent).toFixed(1)}% ${elapsedSummaryDay(tripHistoryElapsed, combinedPriorPoint?.observed_at ?? outboundHistory?.previous_observed_at, currentTripPoint ? new Date(currentTripPoint.observed_at) : undefined, combinedDayDifference ?? outboundHistory?.day_difference)}`;
   return <>
     {compactVisible && <aside className="compact-trip-summary" aria-label="Compact selected trip summary">
       <div><span>Trip total</span><strong>{money(summary.baseAlternativePrice, currency)}{tripHistoryCompact && ` · ${tripHistoryCompact}`}</strong></div>
@@ -180,14 +180,13 @@ export function TripSummary({ outbound, inbound, outboundBaseline, inboundBaseli
     <section ref={fullSummary} className="summary-strip" aria-label="Selected trip summary">
       <div className="summary-primary">
         <div className="summary-top-row" data-testid="summary-top-row">
-          <div className="summary-total-block"><span>Trip total</span><div className="trip-total-price-row"><strong>{money(summary.baseAlternativePrice, currency)}</strong>{tripTotalSeries.length >= 2 && <PriceSparkline points={tripTotalSeries} currency={currency} className="trip-total-sparkline" />}</div>{tripHistoryDetailed && <small aria-label={tripHistoryState === "FIRST_SEEN" ? "First price observation" : tripHistoryState === "ERROR" ? "Price history unavailable" : tripHistoryChange !== null && tripHistoryChange > 0 ? `Trip price increased by ${Math.abs(tripHistoryPercent ?? 0).toFixed(1)} percent since last seen` : tripHistoryChange !== null && tripHistoryChange < 0 ? `Trip price decreased by ${Math.abs(tripHistoryPercent ?? 0).toFixed(1)} percent since last seen` : "No trip price change since last seen"}>{tripHistoryDetailed}</small>}</div>
-          <BookingPreparation searchId={searchId} optionIds={[outbound?.id, inbound?.id].filter((id): id is string => Boolean(id))} />
+          <div className="summary-total-block"><span>Trip total</span><div className="trip-total-price-row"><strong>{money(summary.baseAlternativePrice, currency)}</strong>{tripTotalSeries.length >= 2 && <PriceSparkline points={tripTotalSeries} currency={currency} className="trip-total-sparkline" />}</div>{tripHistoryDetailed && <small aria-label={tripHistoryState === "FIRST_SEEN" ? "First price observation" : tripHistoryState === "ERROR" ? "Price history unavailable" : tripHistoryChange !== null && tripHistoryChange > 0 ? `Trip price increased by ${Math.abs(tripHistoryPercent ?? 0).toFixed(1)} percent since last seen` : tripHistoryChange !== null && tripHistoryChange < 0 ? `Trip price decreased by ${Math.abs(tripHistoryPercent ?? 0).toFixed(1)} percent since last seen` : "No trip price change since last seen"}>{tripHistoryDetailed}</small>}{previousTripTotal !== null && <span className="summary-previous-price">was {money(previousTripTotal, currency)}</span>}</div>
+          <div className="summary-header-actions"><BookingPreparation searchId={searchId} optionIds={[outbound?.id, inbound?.id].filter((id): id is string => Boolean(id))} /><label><input type="checkbox" checked={showBaggage} onChange={(event) => setShowBaggage(event.target.checked)} /> Show estimated baggage costs</label></div>
         </div>
-        <div className="summary-metrics">
+        {comparisonEnabled && <div className="summary-metrics">
           {comparisonEnabled && <div><span>Save</span><strong>{money(saving, currency)} / {percentage.toFixed(0)}%</strong></div>}
           {comparisonEnabled && <div><span>Extra travel</span><strong>+{duration(summary.extraMinutes)}</strong></div>}
-          <label><input type="checkbox" checked={showBaggage} onChange={(event) => setShowBaggage(event.target.checked)} /> Show estimated baggage costs</label>
-        </div>
+        </div>}
       </div>
       <div className="summary-itineraries">
         {outbound && <DirectionSummary label="Outbound" option={outbound} showBaggage={showBaggage} date={resolvedOutboundDate} />}

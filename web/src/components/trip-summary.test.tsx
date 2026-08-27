@@ -52,7 +52,8 @@ describe("selected trip summary", () => {
     expect(screen.getByText("↑ 3.2% since 3d ago")).toBeInTheDocument();
     expect(screen.getByText("New", { selector: ".summary-leg em" })).toBeInTheDocument();
     expect(screen.getByText("↓ 10.0% since 3d ago")).toBeInTheDocument();
-    expect(screen.getByText("↑ 5.9% since 3d ago · was £918")).toHaveAccessibleName("Trip price increased by 5.9 percent since last seen");
+    expect(screen.getByText("↑ 5.9% since 3d ago")).toHaveAccessibleName("Trip price increased by 5.9 percent since last seen");
+    expect(screen.getByText("was £918")).toHaveClass("summary-previous-price");
   });
 
   it("keeps the legacy summary fallback separate from table loading presentation", () => {
@@ -96,10 +97,13 @@ describe("selected trip summary", () => {
     ] };
     render(<TripSummary outbound={outbound} inbound={inbound} outboundBaseline={outbound} inboundBaseline={inbound} />);
     expect(screen.getByText("£1,519")).toBeInTheDocument();
-    expect(screen.getByText("↓ 7.2% since yesterday · was £1,637")).toBeInTheDocument();
+    expect(screen.getByText("↓ 7.2% since yesterday")).toBeInTheDocument();
+    expect(screen.getByText("was £1,637")).toHaveClass("summary-previous-price");
     const sparkline = screen.getByRole("img", { name: /£1,637.*£1,519/ });
     expect(sparkline).toHaveClass("trip-total-sparkline");
     expect(sparkline.closest(".trip-total-price-row")).toBeInTheDocument();
+    expect(screen.getByText("£1,519").closest(".trip-total-price-row")).toContainElement(sparkline);
+    expect(screen.getByLabelText("Show estimated baggage costs").closest(".summary-header-actions")).toBeInTheDocument();
     expect(sparkline).not.toHaveAccessibleName(/999/);
     expect(screen.getByText("↓ 7.7% since yesterday")).toBeInTheDocument();
     expect(screen.getByText("↓ 6.7% since yesterday")).toBeInTheDocument();
@@ -111,8 +115,8 @@ describe("selected trip summary", () => {
     selected.legs[0].constituent_price = "849";
     selected.legs[0].history = unchanged;
     render(<TripSummary outbound={selected} inbound={null} outboundBaseline={selected} inboundBaseline={null} />);
-    expect(screen.getByText("No change today")).toBeInTheDocument();
-    expect(screen.getByText("No change today · was £849")).toBeInTheDocument();
+    expect(screen.getAllByText("No change today")).toHaveLength(2);
+    expect(screen.getByText("was £849")).toHaveClass("summary-previous-price");
     expect(screen.queryByText(/Previously/)).not.toBeInTheDocument();
     expect(screen.getAllByText("£849")).toHaveLength(2);
     expect(screen.queryByText("No change", { selector: ".summary-leg em" })).not.toBeInTheDocument();
@@ -122,8 +126,8 @@ describe("selected trip summary", () => {
     const increased = { history_status: "PREVIOUS_FOUND" as const, previous_price: "800", price_change_amount: "49", price_change_percent: "6.125", previous_observed_at: "2026-08-20T08:00:00Z", elapsed_seconds: 24 * 3600, day_difference: 1, previous_observation_run_id: "run-1" };
     const selected = option({ id: "increased", base_price: "849", history: increased });
     render(<TripSummary outbound={selected} inbound={null} outboundBaseline={selected} inboundBaseline={null} />);
-    expect(screen.getByText("↑ 6.1% since yesterday")).toBeInTheDocument();
-    expect(screen.getByText("↑ 6.1% since yesterday · was £800")).toBeInTheDocument();
+    expect(screen.getAllByText("↑ 6.1% since yesterday")).toHaveLength(2);
+    expect(screen.getByText("was £800")).toHaveClass("summary-previous-price");
     expect(screen.queryByText(/\d+[hm] ago/)).not.toBeInTheDocument();
   });
 
