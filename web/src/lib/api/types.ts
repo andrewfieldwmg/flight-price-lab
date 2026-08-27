@@ -69,6 +69,7 @@ export interface PriceHistoryComparison {
   price_slope_per_day?: string | null;
   direction_consistency?: string | null;
   daily_series?: Array<{ date: string; price: string }>;
+  visual_series?: Array<{ observed_at: string; price: string }>;
 }
 
 export interface BaggageEstimate {

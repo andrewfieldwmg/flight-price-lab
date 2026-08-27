@@ -5,19 +5,20 @@ from __future__ import annotations
 import json
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from itertools import pairwise
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import Date, cast, func, select
+from sqlalchemy import select
 from sqlalchemy.engine import Engine
-from sqlalchemy.orm import Session, aliased
+from sqlalchemy.orm import Session
 
 from flight_price_lab.api.models import (
     DailyPricePoint,
     HistoryStatus,
+    ObservedPricePoint,
     PriceHistoryComparison,
     SearchSnapshot,
     TrendStatus,
@@ -46,12 +47,10 @@ class TrendThresholds:
 TREND_THRESHOLDS = TrendThresholds()
 
 
-def _current_local_day_started(observed_at: datetime) -> datetime:
-    """Return midnight starting the observation's London calendar date in UTC."""
-    if observed_at.tzinfo is None:
-        observed_at = observed_at.replace(tzinfo=UTC)
-    local = observed_at.astimezone(LONDON)
-    return local.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(UTC)
+@dataclass
+class HydratedHistory:
+    canonical: list[TripOptionObservation | FlightObservation]
+    visual: list[ObservedPricePoint]
 
 
 def _london_day_difference(current_at: datetime, previous_at: datetime) -> int:
@@ -67,6 +66,10 @@ def _as_london_date(value: datetime) -> date:
     if value.tzinfo is None:
         value = value.replace(tzinfo=UTC)
     return value.astimezone(LONDON).date()
+
+
+def _as_aware_utc(value: datetime) -> datetime:
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
 
 def _series_with_current(
@@ -85,6 +88,32 @@ def _series_with_current(
     return points[-TREND_THRESHOLDS.max_series_days :]
 
 
+def _visual_series_with_current(
+    history: list[ObservedPricePoint],
+    current_at: datetime,
+    current_price: Decimal,
+) -> list[ObservedPricePoint]:
+    points = [*history]
+    current = ObservedPricePoint(observed_at=current_at, price=current_price)
+    if not points or points[-1] != current:
+        points.append(current)
+    points.sort(key=lambda point: point.observed_at)
+    if len(points) <= 12:
+        return points
+    interior = points[1:-1]
+    selected: list[ObservedPricePoint] = [points[0]]
+    for bucket_index in range(5):
+        start = bucket_index * len(interior) // 5
+        end = (bucket_index + 1) * len(interior) // 5
+        bucket = interior[start:end]
+        if not bucket:
+            continue
+        extrema = {min(bucket, key=lambda point: point.price), max(bucket, key=lambda point: point.price)}
+        selected.extend(sorted(extrema, key=lambda point: point.observed_at))
+    selected.append(points[-1])
+    return selected[:11] + [points[-1]] if len(selected) > 12 else selected
+
+
 def _comparison(
     current_price: Decimal,
     previous_price: Decimal | None,
@@ -92,8 +121,10 @@ def _comparison(
     previous_run_id: str | None,
     now: datetime,
     series: list[DailyPricePoint],
+    visual_series: list[ObservedPricePoint],
 ) -> PriceHistoryComparison:
     trend = _trend_fields(series)
+    trend["visual_series"] = visual_series
     if previous_price is None or previous_at is None:
         return PriceHistoryComparison(
             history_status=HistoryStatus.FIRST_SEEN, **trend
@@ -202,9 +233,8 @@ class PriceHistoryStore:
         options = _all_options(snapshot)
         run_id = uuid4().hex if write_observation else None
         with Session(self.engine) as session:
-            prior_day_cutoff = _current_local_day_started(now)
             option_history = self._trip_history_series(
-                session, options, request, prior_day_cutoff
+                session, options, request, now
             )
             constituent_fingerprints = {
                 fingerprint
@@ -212,7 +242,7 @@ class PriceHistoryStore:
                 for fingerprint in option.constituent_fingerprints
             }
             offer_history = self._offer_history_series(
-                session, constituent_fingerprints, request, prior_day_cutoff
+                session, constituent_fingerprints, request, now
             )
             enriched = {
                 (option.direction.value, option.id): self._enrich_option(
@@ -239,28 +269,13 @@ class PriceHistoryStore:
         session: Session,
         options: list[TripOption],
         request: TripSearchRequest,
-        prior_day_cutoff: datetime,
-    ) -> dict[tuple[str, str], list[TripOptionObservation]]:
+        current_at: datetime,
+    ) -> dict[tuple[str, str], HydratedHistory]:
         keys = {(option.direction.value, option.id) for option in options}
         if not keys:
             return {}
-        local_date = cast(
-            func.timezone("Europe/London", TripOptionObservation.observed_at), Date
-        )
-        ranked = (
-            select(
-                TripOptionObservation.id.label("id"),
-                func.row_number()
-                .over(
-                    partition_by=(
-                        TripOptionObservation.trip_option_fingerprint,
-                        TripOptionObservation.direction,
-                        local_date,
-                    ),
-                    order_by=TripOptionObservation.observed_at.desc(),
-                )
-                .label("history_rank"),
-            )
+        rows = session.scalars(
+            select(TripOptionObservation)
             .where(
                 TripOptionObservation.trip_option_fingerprint.in_(
                     {option.id for option in options}
@@ -273,49 +288,35 @@ class PriceHistoryStore:
                 TripOptionObservation.adults == request.adults,
                 TripOptionObservation.children == request.children,
                 TripOptionObservation.currency == request.currency,
-                TripOptionObservation.observed_at < prior_day_cutoff,
+                TripOptionObservation.observed_at <= current_at,
             )
-            .subquery()
-        )
-        if session.bind is not None and session.bind.dialect.name == "postgresql":
-            ranked_observation = aliased(TripOptionObservation)
-            rows = session.scalars(
-                select(ranked_observation)
-                .join(ranked, ranked_observation.id == ranked.c.id)
-                .where(ranked.c.history_rank == 1)
-                .order_by(ranked_observation.observed_at.desc())
-            ).all()
-        else:
-            rows = session.scalars(
-                select(TripOptionObservation)
-                .where(
-                    TripOptionObservation.trip_option_fingerprint.in_(
-                        {option.id for option in options}
-                    ),
-                    TripOptionObservation.direction.in_(
-                        {option.direction.value for option in options}
-                    ),
-                    TripOptionObservation.passenger_count
-                    == request.adults + request.children,
-                    TripOptionObservation.adults == request.adults,
-                    TripOptionObservation.children == request.children,
-                    TripOptionObservation.currency == request.currency,
-                    TripOptionObservation.observed_at < prior_day_cutoff,
-                )
-                .order_by(TripOptionObservation.observed_at.desc())
-            ).all()
-        latest: dict[tuple[str, str], list[TripOptionObservation]] = {
-            key: [] for key in keys
+            .order_by(TripOptionObservation.observed_at.desc())
+        ).all()
+        latest: dict[tuple[str, str], HydratedHistory] = {
+            key: HydratedHistory(canonical=[], visual=[]) for key in keys
         }
         seen: dict[tuple[str, str], set[date]] = {key: set() for key in keys}
+        current_day = _as_london_date(current_at)
+        visual_start = current_day - timedelta(days=6)
         for row in rows:
             key = (row.direction, row.trip_option_fingerprint)
             local_day = _as_london_date(row.observed_at)
-            if key in latest and local_day not in seen[key]:
-                latest[key].append(row)
+            if key not in latest:
+                continue
+            if visual_start <= local_day <= current_day:
+                latest[key].visual.append(
+                    ObservedPricePoint(
+                        observed_at=_as_aware_utc(row.observed_at), price=row.base_price
+                    )
+                )
+            if local_day < current_day and local_day not in seen[key]:
+                latest[key].canonical.append(row)
                 seen[key].add(local_day)
-        for key in latest:
-            latest[key] = latest[key][: TREND_THRESHOLDS.max_series_days - 1]
+        for value in latest.values():
+            value.canonical = value.canonical[
+                : TREND_THRESHOLDS.max_series_days - 1
+            ]
+            value.visual.reverse()
         return latest
 
     @staticmethod
@@ -323,79 +324,59 @@ class PriceHistoryStore:
         session: Session,
         fingerprints: set[str],
         request: TripSearchRequest,
-        prior_day_cutoff: datetime,
-    ) -> dict[str, list[FlightObservation]]:
+        current_at: datetime,
+    ) -> dict[str, HydratedHistory]:
         if not fingerprints:
             return {}
-        local_date = cast(
-            func.timezone("Europe/London", FlightObservation.observed_at), Date
-        )
-        ranked = (
-            select(
-                FlightObservation.id.label("id"),
-                func.row_number()
-                .over(
-                    partition_by=(FlightObservation.offer_fingerprint, local_date),
-                    order_by=FlightObservation.observed_at.desc(),
-                )
-                .label("history_rank"),
-            )
+        rows = session.scalars(
+            select(FlightObservation)
             .where(
                 FlightObservation.offer_fingerprint.in_(fingerprints),
                 FlightObservation.passenger_count == request.adults + request.children,
                 FlightObservation.adults == request.adults,
                 FlightObservation.children == request.children,
                 FlightObservation.currency == request.currency,
-                FlightObservation.observed_at < prior_day_cutoff,
+                FlightObservation.observed_at <= current_at,
             )
-            .subquery()
-        )
-        if session.bind is not None and session.bind.dialect.name == "postgresql":
-            ranked_observation = aliased(FlightObservation)
-            rows = session.scalars(
-                select(ranked_observation)
-                .join(ranked, ranked_observation.id == ranked.c.id)
-                .where(ranked.c.history_rank == 1)
-                .order_by(ranked_observation.observed_at.desc())
-            ).all()
-        else:
-            rows = session.scalars(
-                select(FlightObservation)
-                .where(
-                    FlightObservation.offer_fingerprint.in_(fingerprints),
-                    FlightObservation.passenger_count == request.adults + request.children,
-                    FlightObservation.adults == request.adults,
-                    FlightObservation.children == request.children,
-                    FlightObservation.currency == request.currency,
-                    FlightObservation.observed_at < prior_day_cutoff,
-                )
-                .order_by(FlightObservation.observed_at.desc())
-            ).all()
-        latest: dict[str, list[FlightObservation]] = {
-            fingerprint: [] for fingerprint in fingerprints
+            .order_by(FlightObservation.observed_at.desc())
+        ).all()
+        latest: dict[str, HydratedHistory] = {
+            fingerprint: HydratedHistory(canonical=[], visual=[])
+            for fingerprint in fingerprints
         }
         seen: dict[str, set[date]] = {fingerprint: set() for fingerprint in fingerprints}
+        current_day = _as_london_date(current_at)
+        visual_start = current_day - timedelta(days=6)
         for row in rows:
             fingerprint = row.offer_fingerprint
             if fingerprint is None:
                 continue
             local_day = _as_london_date(row.observed_at)
-            if local_day not in seen[fingerprint]:
-                latest[fingerprint].append(row)
+            if visual_start <= local_day <= current_day:
+                latest[fingerprint].visual.append(
+                    ObservedPricePoint(
+                        observed_at=_as_aware_utc(row.observed_at),
+                        price=row.total_price or Decimal(),
+                    )
+                )
+            if local_day < current_day and local_day not in seen[fingerprint]:
+                latest[fingerprint].canonical.append(row)
                 seen[fingerprint].add(local_day)
-        for fingerprint in latest:
-            latest[fingerprint] = latest[fingerprint][
+        for value in latest.values():
+            value.canonical = value.canonical[
                 : TREND_THRESHOLDS.max_series_days - 1
             ]
+            value.visual.reverse()
         return latest
 
     @staticmethod
     def _enrich_option(
         option: TripOption,
-        prior_history: list[TripOptionObservation],
-        offer_history: dict[str, list[FlightObservation]],
+        history: HydratedHistory,
+        offer_history: dict[str, HydratedHistory],
         now: datetime,
     ) -> TripOption:
+        prior_history = history.canonical
         prior = prior_history[0] if prior_history else None
         option_comparison = _comparison(
             option.base_price,
@@ -408,14 +389,16 @@ class PriceHistoryStore:
                 now,
                 option.base_price,
             ),
+            _visual_series_with_current(history.visual, now, option.base_price),
         )
         legs = []
         for leg in option.legs:
-            previous_history = (
+            leg_history = (
                 offer_history.get(leg.constituent_fingerprint)
                 if leg.constituent_fingerprint
-                else []
-            ) or []
+                else None
+            ) or HydratedHistory(canonical=[], visual=[])
+            previous_history = leg_history.canonical
             previous = previous_history[0] if previous_history else None
             legs.append(
                 leg.model_copy(
@@ -431,6 +414,11 @@ class PriceHistoryStore:
                                     (row.observed_at, row.total_price or Decimal())
                                     for row in previous_history
                                 ),
+                                now,
+                                leg.constituent_price or Decimal(),
+                            ),
+                            _visual_series_with_current(
+                                leg_history.visual,
                                 now,
                                 leg.constituent_price or Decimal(),
                             ),

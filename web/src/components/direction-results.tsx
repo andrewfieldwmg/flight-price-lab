@@ -174,7 +174,7 @@ function ResultRow({ option, selected, onClick, showComparisons }: { option: Tri
         <td data-label="Select"><input type="radio" readOnly checked={selected} aria-label={`Select ${option.route.join("-")}`} /> <span className="type-pill">{option.is_nonstop ? "Direct" : "1-stop"}</span></td>
         <td data-label="Price" className="price-cell">{compactPrice(option)}</td>
         <HistoryCell option={option} />
-        <td data-label="Trend" className="trend-column trend-cell"><PriceSparkline points={option.history?.daily_series ?? []} currency={option.currency} /></td>
+        <td data-label="Trend" className="trend-column trend-cell"><PriceSparkline points={option.history?.visual_series ?? []} currency={option.currency} /></td>
         {showComparisons && <td data-label="Saving vs nonstop" className="saving-cell">{option.is_nonstop ? "Reference" : saving > 0 ? `${money(saving, option.currency)} / ${Number(option.saving_vs_nonstop_percent).toFixed(0)}%` : "—"}</td>}
         <td data-label="Depart" className={isEarlyDeparture(option.departure_at) ? "time-warning" : ""}>{localClock(option.departure_at)}</td>
         <td data-label="Arrive" className={isLateArrival(option.arrival_at) ? "time-warning" : ""}>{localClock(option.arrival_at)}</td>

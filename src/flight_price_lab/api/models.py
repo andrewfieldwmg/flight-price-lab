@@ -164,6 +164,13 @@ class DailyPricePoint(BaseModel):
     price: Decimal
 
 
+class ObservedPricePoint(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    observed_at: datetime
+    price: Decimal
+
+
 class PriceHistoryComparison(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -187,6 +194,7 @@ class PriceHistoryComparison(BaseModel):
     price_slope_per_day: Decimal | None = None
     direction_consistency: Decimal | None = None
     daily_series: list[DailyPricePoint] = Field(default_factory=list)
+    visual_series: list[ObservedPricePoint] = Field(default_factory=list)
 
 
 class TripOption(BaseModel):

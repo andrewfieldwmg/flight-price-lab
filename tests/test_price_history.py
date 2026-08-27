@@ -350,6 +350,9 @@ def test_legacy_cached_zero_percent_history_is_rehydrated_from_prior_day() -> No
     assert history.day_difference == 1
     assert history.trend_status is TrendStatus.FALLING
     assert history.observed_day_count == 3
+    assert [point.price for point in history.visual_series] == [
+        Decimal(700), Decimal(623), Decimal(549), Decimal(549)
+    ]
     assert rehydrated.diagnostics.provider_calls_this_invocation == 0
     with Session(engine) as session:
         assert session.scalar(select(func.count()).select_from(SearchObservationRun)) == 3
@@ -443,6 +446,13 @@ def test_trend_uses_latest_observation_once_per_london_day() -> None:
         ("2026-08-25", Decimal(600)),
         ("2026-08-26", Decimal(650)),
     ]
+    visual = result.outbound.baseline.history.visual_series
+    assert [(point.observed_at.hour, point.price) for point in visual] == [
+        (9, Decimal(500)),
+        (15, Decimal(550)),
+        (12, Decimal(600)),
+        (12, Decimal(650)),
+    ]
 
 
 def test_irregular_trend_dates_drive_actual_calendar_day_slope() -> None:
@@ -481,6 +491,29 @@ def test_daily_series_is_chronological_and_limited_to_latest_seven_days() -> Non
     assert len(series) == 7
     assert [point.date.day for point in series] == [2, 3, 4, 5, 6, 7, 8]
     assert [point.price for point in series] == [Decimal(502 + index) for index in range(7)]
+
+
+def test_visual_series_downsamples_real_points_to_twelve_preserving_endpoints() -> None:
+    engine = create_database_engine()
+    store = PriceHistoryStore(engine)
+    departure = datetime(2026, 12, 18, 10, tzinfo=UTC)
+    result = None
+    for hour in range(15):
+        price = str(500 + (hour % 5) * 10)
+        selected = offer("FR 2687", "STN", "CAG", departure, price)
+        result = store.capture_and_enrich(
+            snapshot(f"hour-{hour}", option(Direction.OUTBOUND, (selected,), price)),
+            request(), (selected,), write_observation=True,
+            observed_at=datetime(2026, 8, 27, 8, tzinfo=UTC) + timedelta(hours=hour),
+        )
+
+    visual = result.outbound.baseline.history.visual_series
+    assert len(visual) <= 12
+    assert visual[0].observed_at == datetime(2026, 8, 27, 8, tzinfo=UTC)
+    assert visual[-1].observed_at == datetime(2026, 8, 27, 22, tzinfo=UTC)
+    assert {point.price for point in visual}.issubset(
+        {Decimal(500), Decimal(510), Decimal(520), Decimal(530), Decimal(540)}
+    )
 
 
 def test_prior_day_uses_london_date_and_skips_missing_dates() -> None:

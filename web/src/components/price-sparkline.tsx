@@ -2,7 +2,7 @@ import { memo } from "react";
 import { money } from "./price-display";
 
 export interface SparklinePoint {
-  date: string;
+  observed_at: string;
   price: string;
 }
 
@@ -12,14 +12,14 @@ export interface SparklineGeometry {
 }
 
 const WIDTH = 64;
-const HEIGHT = 22;
+const HEIGHT = 24;
 const PAD_X = 2;
 const PAD_Y = 3;
 
 export function sparklineGeometry(points: SparklinePoint[]): SparklineGeometry {
   if (points.length < 2) return { coordinates: [], path: "" };
   const values = points.map((point) => Number(point.price));
-  const times = points.map((point) => Date.parse(`${point.date}T12:00:00Z`));
+  const times = points.map((point) => Date.parse(point.observed_at));
   const minValue = Math.min(...values);
   const maxValue = Math.max(...values);
   const centre = (minValue + maxValue) / 2;
@@ -35,6 +35,12 @@ export function sparklineGeometry(points: SparklinePoint[]): SparklineGeometry {
       ? HEIGHT / 2
       : PAD_Y + ((high - value) / (high - low)) * (HEIGHT - 2 * PAD_Y),
   ]);
+  if (coordinates.length === 2) {
+    return {
+      coordinates,
+      path: `M ${coordinates[0][0].toFixed(2)} ${coordinates[0][1].toFixed(2)} L ${coordinates[1][0].toFixed(2)} ${coordinates[1][1].toFixed(2)}`,
+    };
+  }
   const slopes = coordinates.slice(0, -1).map((point, index) => {
     const next = coordinates[index + 1];
     return (next[1] - point[1]) / (next[0] - point[0]);
@@ -75,7 +81,11 @@ export function sparklineGeometry(points: SparklinePoint[]): SparklineGeometry {
 
 function observationLabel(points: SparklinePoint[], currency: string): string {
   const dates = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "Europe/London" });
-  return points.map((point) => `${dates.format(new Date(`${point.date}T12:00:00Z`))}  ${money(point.price, currency)}`).join("\n");
+  const times = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: "Europe/London" });
+  return points.map((point) => {
+    const observed = new Date(point.observed_at);
+    return `${dates.format(observed)} ${times.format(observed)}  ${money(point.price, currency)}`;
+  }).join("\n");
 }
 
 export const PriceSparkline = memo(function PriceSparkline({ points, currency }: { points: SparklinePoint[]; currency: string }) {
@@ -85,9 +95,12 @@ export const PriceSparkline = memo(function PriceSparkline({ points, currency }:
   const movement = Number(points.at(-1)!.price) - Number(points[0].price);
   const movementClass = movement > 0 ? "sparkline-rising" : movement < 0 ? "sparkline-falling" : "sparkline-flat";
   const label = observationLabel(points, currency);
+  const [startX] = geometry.coordinates[0];
+  const areaPath = `M ${startX.toFixed(2)} ${HEIGHT} L ${geometry.path.slice(2)} L ${endX.toFixed(2)} ${HEIGHT} Z`;
   return <svg className={`price-sparkline ${movementClass}`} viewBox={`0 0 ${WIDTH} ${HEIGHT}`} role="img" aria-label={`Price history. ${label.replaceAll("\n", ". ")}`}>
     <title>{label}</title>
-    <path d={geometry.path} />
+    <path className="sparkline-area" d={areaPath} />
+    <path className="sparkline-line" d={geometry.path} />
     <circle cx={endX} cy={endY} r="1.5" />
   </svg>;
 });
