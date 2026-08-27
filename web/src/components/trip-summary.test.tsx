@@ -40,7 +40,7 @@ describe("selected trip summary", () => {
   it("shows composite and constituent history without manufacturing unmatched trip totals", () => {
     const outbound = synthetic();
     const inbound = synthetic("RETURN");
-    const comparison = { history_status: "PREVIOUS_FOUND" as const, previous_price: "378", price_change_amount: "24", price_change_percent: "6.35", previous_observed_at: "2026-08-20T08:00:00Z", elapsed_seconds: 3 * 86400, previous_observation_run_id: "common-run" };
+    const comparison = { history_status: "PREVIOUS_FOUND" as const, previous_price: "378", price_change_amount: "24", price_change_percent: "6.35", previous_observed_at: "2026-08-20T08:00:00Z", elapsed_seconds: 3 * 86400, day_difference: 3, previous_observation_run_id: "common-run" };
     outbound.history = comparison;
     inbound.history = { ...comparison, previous_price: "540", price_change_amount: "-54", price_change_percent: "-10" };
     outbound.legs[0].constituent_price = "258";
@@ -74,7 +74,7 @@ describe("selected trip summary", () => {
   it("omits an exact combined history total when prior runs differ", () => {
     const outbound = synthetic();
     const inbound = synthetic("RETURN");
-    const comparison = { history_status: "PREVIOUS_FOUND" as const, previous_price: "400", price_change_amount: "86", price_change_percent: "21.5", previous_observed_at: "2026-08-20T08:00:00Z", elapsed_seconds: 86400, previous_observation_run_id: "out-run" };
+    const comparison = { history_status: "PREVIOUS_FOUND" as const, previous_price: "400", price_change_amount: "86", price_change_percent: "21.5", previous_observed_at: "2026-08-20T08:00:00Z", elapsed_seconds: 86400, day_difference: 1, previous_observation_run_id: "out-run" };
     outbound.history = comparison;
     inbound.history = { ...comparison, previous_observation_run_id: "return-run" };
     render(<TripSummary outbound={outbound} inbound={inbound} outboundBaseline={option({ id: "out" })} inboundBaseline={option({ id: "in", direction: "RETURN" })} />);
@@ -83,7 +83,7 @@ describe("selected trip summary", () => {
   });
 
   it("collapses unchanged nonstop history without repeating leg price", () => {
-    const unchanged = { history_status: "PREVIOUS_FOUND" as const, previous_price: "849", price_change_amount: "0", price_change_percent: "0", previous_observed_at: "2026-08-20T08:00:00Z", elapsed_seconds: 3600, previous_observation_run_id: "run-1" };
+    const unchanged = { history_status: "PREVIOUS_FOUND" as const, previous_price: "849", price_change_amount: "0", price_change_percent: "0", previous_observed_at: "2026-08-20T08:00:00Z", elapsed_seconds: 3600, day_difference: 0, previous_observation_run_id: "run-1" };
     const selected = option({ id: "direct", base_price: "849", history: unchanged });
     selected.legs[0].constituent_price = "849";
     selected.legs[0].history = unchanged;
@@ -95,7 +95,7 @@ describe("selected trip summary", () => {
   });
 
   it("uses natural day-level wording for a one-day increase", () => {
-    const increased = { history_status: "PREVIOUS_FOUND" as const, previous_price: "800", price_change_amount: "49", price_change_percent: "6.125", previous_observed_at: "2026-08-20T08:00:00Z", elapsed_seconds: 24 * 3600, previous_observation_run_id: "run-1" };
+    const increased = { history_status: "PREVIOUS_FOUND" as const, previous_price: "800", price_change_amount: "49", price_change_percent: "6.125", previous_observed_at: "2026-08-20T08:00:00Z", elapsed_seconds: 24 * 3600, day_difference: 1, previous_observation_run_id: "run-1" };
     const selected = option({ id: "increased", base_price: "849", history: increased });
     render(<TripSummary outbound={selected} inbound={null} outboundBaseline={selected} inboundBaseline={null} />);
     expect(screen.getAllByText("↑ 6.1% since yesterday")).toHaveLength(2);

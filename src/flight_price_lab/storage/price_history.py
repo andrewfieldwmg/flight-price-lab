@@ -36,7 +36,8 @@ LONDON = ZoneInfo("Europe/London")
 
 @dataclass(frozen=True)
 class TrendThresholds:
-    max_observed_days: int = 5
+    max_series_days: int = 7
+    classification_days: int = 5
     minimum_observed_days: int = 3
     flat_change_percent: Decimal = Decimal(2)
     minimum_direction_consistency: Decimal = Decimal("0.5")
@@ -81,7 +82,7 @@ def _series_with_current(
     points.append(
         DailyPricePoint(date=_as_london_date(current_at), price=current_price)
     )
-    return points[-TREND_THRESHOLDS.max_observed_days :]
+    return points[-TREND_THRESHOLDS.max_series_days :]
 
 
 def _comparison(
@@ -125,14 +126,16 @@ def _trend_fields(series: list[DailyPricePoint]) -> dict[str, object]:
     }
     if count < TREND_THRESHOLDS.minimum_observed_days:
         return base
-    first, last = series[0], series[-1]
+    trend_series = series[-TREND_THRESHOLDS.classification_days :]
+    first, last = trend_series[0], trend_series[-1]
     span = (last.date - first.date).days
     change = last.price - first.price
     percent = change / first.price * 100 if first.price else None
-    offsets = [Decimal((point.date - first.date).days) for point in series]
-    normalized = [point.price / first.price * 100 for point in series]
-    mean_x = sum(offsets) / Decimal(count)
-    mean_y = sum(normalized) / Decimal(count)
+    trend_count = len(trend_series)
+    offsets = [Decimal((point.date - first.date).days) for point in trend_series]
+    normalized = [point.price / first.price * 100 for point in trend_series]
+    mean_x = sum(offsets) / Decimal(trend_count)
+    mean_y = sum(normalized) / Decimal(trend_count)
     denominator = sum((value - mean_x) ** 2 for value in offsets)
     slope = (
         sum((x - mean_x) * (y - mean_y) for x, y in zip(offsets, normalized, strict=True))
@@ -141,7 +144,7 @@ def _trend_fields(series: list[DailyPricePoint]) -> dict[str, object]:
         else Decimal()
     )
     overall_sign = 1 if change > 0 else -1 if change < 0 else 0
-    movements = [right.price - left.price for left, right in pairwise(series)]
+    movements = [right.price - left.price for left, right in pairwise(trend_series)]
     agreeing = sum(
         1
         for movement in movements
@@ -312,7 +315,7 @@ class PriceHistoryStore:
                 latest[key].append(row)
                 seen[key].add(local_day)
         for key in latest:
-            latest[key] = latest[key][: TREND_THRESHOLDS.max_observed_days - 1]
+            latest[key] = latest[key][: TREND_THRESHOLDS.max_series_days - 1]
         return latest
 
     @staticmethod
@@ -382,7 +385,7 @@ class PriceHistoryStore:
                 seen[fingerprint].add(local_day)
         for fingerprint in latest:
             latest[fingerprint] = latest[fingerprint][
-                : TREND_THRESHOLDS.max_observed_days - 1
+                : TREND_THRESHOLDS.max_series_days - 1
             ]
         return latest
 

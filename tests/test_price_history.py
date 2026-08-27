@@ -463,6 +463,26 @@ def test_irregular_trend_dates_drive_actual_calendar_day_slope() -> None:
     assert history.price_slope_per_day == Decimal("3.2143")
 
 
+def test_daily_series_is_chronological_and_limited_to_latest_seven_days() -> None:
+    engine = create_database_engine()
+    store = PriceHistoryStore(engine)
+    departure = datetime(2026, 12, 18, 10, tzinfo=UTC)
+    result = None
+    for day in range(1, 9):
+        price = str(500 + day)
+        selected = offer("FR 2687", "STN", "CAG", departure, price)
+        result = store.capture_and_enrich(
+            snapshot(f"aug-{day}", option(Direction.OUTBOUND, (selected,), price)),
+            request(), (selected,), write_observation=True,
+            observed_at=datetime(2026, 8, day, 12, tzinfo=UTC),
+        )
+
+    series = result.outbound.baseline.history.daily_series
+    assert len(series) == 7
+    assert [point.date.day for point in series] == [2, 3, 4, 5, 6, 7, 8]
+    assert [point.price for point in series] == [Decimal(502 + index) for index in range(7)]
+
+
 def test_prior_day_uses_london_date_and_skips_missing_dates() -> None:
     engine = create_database_engine()
     store = PriceHistoryStore(engine)
