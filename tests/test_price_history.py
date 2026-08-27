@@ -3,6 +3,7 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from hashlib import sha256
 
+import pytest
 from sqlalchemy import event, func, select
 from sqlalchemy.orm import Session
 
@@ -14,6 +15,7 @@ from flight_price_lab.api.models import (
     SearchSnapshot,
     SearchStatus,
     SelfTransferPolicy,
+    TrendStatus,
     TripLegSummary,
     TripOption,
     TripSearchRequest,
@@ -282,6 +284,12 @@ def test_legacy_cached_zero_percent_history_is_rehydrated_from_prior_day() -> No
     history_store = PriceHistoryStore(engine)
     session_store = SearchSessionStore(engine=engine)
     departure = datetime(2026, 12, 18, 10, tzinfo=UTC)
+    earliest_offer = offer("FR 2687", "STN", "CAG", departure, "700")
+    earliest_option = option(Direction.OUTBOUND, (earliest_offer,), "700")
+    history_store.capture_and_enrich(
+        snapshot("aug-25", earliest_option), request(), (earliest_offer,),
+        write_observation=True, observed_at=datetime(2026, 8, 25, 14, 41, tzinfo=UTC),
+    )
     old_offer = offer("FR 2687", "STN", "CAG", departure, "623")
     old_option = option(Direction.OUTBOUND, (old_offer,), "623")
     history_store.capture_and_enrich(
@@ -340,9 +348,11 @@ def test_legacy_cached_zero_percent_history_is_rehydrated_from_prior_day() -> No
     assert history.price_change_amount == Decimal(-74)
     assert history.price_change_percent == Decimal("-11.88")
     assert history.day_difference == 1
+    assert history.trend_status is TrendStatus.FALLING
+    assert history.observed_day_count == 3
     assert rehydrated.diagnostics.provider_calls_this_invocation == 0
     with Session(engine) as session:
-        assert session.scalar(select(func.count()).select_from(SearchObservationRun)) == 2
+        assert session.scalar(select(func.count()).select_from(SearchObservationRun)) == 3
 
 
 def test_future_backend_cache_payload_omits_derived_history() -> None:
@@ -366,6 +376,91 @@ def test_future_backend_cache_payload_omits_derived_history() -> None:
         payload = session.get(SearchSessionEntry, "stripped-cache").snapshot_json
     assert '"history"' not in payload
     assert session_store.get("stripped-cache").outbound.baseline.history is None
+
+
+@pytest.mark.parametrize(
+    ("prices", "expected_status", "expected_percent"),
+    [
+        (["500", "550", "623", "623"], TrendStatus.RISING, Decimal("24.60")),
+        (["650", "600", "550", "550"], TrendStatus.FALLING, Decimal("-15.38")),
+        (["500", "501", "499", "500"], TrendStatus.FLAT, Decimal("0.00")),
+        (["500", "550"], TrendStatus.INSUFFICIENT_HISTORY, None),
+    ],
+)
+def test_multi_day_trend_classification(
+    prices: list[str],
+    expected_status: TrendStatus,
+    expected_percent: Decimal | None,
+) -> None:
+    engine = create_database_engine()
+    store = PriceHistoryStore(engine)
+    departure = datetime(2026, 12, 18, 10, tzinfo=UTC)
+    result = None
+    for index, price in enumerate(prices):
+        selected = offer("FR 2687", "STN", "CAG", departure, price)
+        selected_option = option(Direction.OUTBOUND, (selected,), price)
+        result = store.capture_and_enrich(
+            snapshot(f"day-{index}", selected_option), request(), (selected,),
+            write_observation=True,
+            observed_at=datetime(2026, 8, 24 + index, 12, tzinfo=UTC),
+        )
+
+    assert result is not None
+    history = result.outbound.baseline.history
+    assert history.trend_status is expected_status
+    assert history.observed_day_count == len(prices)
+    assert history.trend_change_percent == expected_percent
+    if len(prices) >= 3:
+        assert history.trend_current_price == Decimal(prices[-1])
+        assert history.trend_span_days == len(prices) - 1
+    if prices[-1] == prices[-2]:
+        assert history.price_change_percent == Decimal("0.00")
+    if len(prices) == 4:
+        assert result.outbound.baseline.legs[0].history.trend_status is expected_status
+
+
+def test_trend_uses_latest_observation_once_per_london_day() -> None:
+    engine = create_database_engine()
+    store = PriceHistoryStore(engine)
+    departure = datetime(2026, 12, 18, 10, tzinfo=UTC)
+    observations = [
+        (datetime(2026, 8, 24, 9, tzinfo=UTC), "500"),
+        (datetime(2026, 8, 24, 15, tzinfo=UTC), "550"),
+        (datetime(2026, 8, 25, 12, tzinfo=UTC), "600"),
+        (datetime(2026, 8, 26, 12, tzinfo=UTC), "650"),
+    ]
+    result = None
+    for observed_at, price in observations:
+        selected = offer("FR 2687", "STN", "CAG", departure, price)
+        result = store.capture_and_enrich(
+            snapshot(observed_at.isoformat(), option(Direction.OUTBOUND, (selected,), price)),
+            request(), (selected,), write_observation=True, observed_at=observed_at,
+        )
+
+    series = result.outbound.baseline.history.daily_series
+    assert [(point.date.isoformat(), point.price) for point in series] == [
+        ("2026-08-24", Decimal(550)),
+        ("2026-08-25", Decimal(600)),
+        ("2026-08-26", Decimal(650)),
+    ]
+
+
+def test_irregular_trend_dates_drive_actual_calendar_day_slope() -> None:
+    engine = create_database_engine()
+    store = PriceHistoryStore(engine)
+    departure = datetime(2026, 12, 18, 10, tzinfo=UTC)
+    result = None
+    for day, price in [(1, "500"), (3, "550"), (7, "600")]:
+        selected = offer("FR 2687", "STN", "CAG", departure, price)
+        result = store.capture_and_enrich(
+            snapshot(f"aug-{day}", option(Direction.OUTBOUND, (selected,), price)),
+            request(), (selected,), write_observation=True,
+            observed_at=datetime(2026, 8, day, 12, tzinfo=UTC),
+        )
+
+    history = result.outbound.baseline.history
+    assert history.trend_span_days == 6
+    assert history.price_slope_per_day == Decimal("3.2143")
 
 
 def test_prior_day_uses_london_date_and_skips_missing_dates() -> None:

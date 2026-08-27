@@ -174,7 +174,15 @@ describe("dense flight results", () => {
     render(<DirectionResults title="Outbound" date="2026-12-18" results={historicalResults} selectedId={null} onSelect={vi.fn()} complete connectionProfile="CONSERVATIVE" selfTransferEnabled={false} />);
     expect(screen.getByText("↑ 6.3%")).toBeInTheDocument();
     expect(screen.getByText("3d ago")).toBeInTheDocument();
-    expect(screen.getByTitle(/Was £378.00/)).toBeInTheDocument();
+    expect(screen.getByTitle(/Previous day £378.00/)).toBeInTheDocument();
+  });
+
+  it("removes the redundant Tickets column and shows trend below daily movement", () => {
+    const historical = option({ id: "trend", history: { history_status: "PREVIOUS_FOUND", previous_price: "623", price_change_amount: "0", price_change_percent: "0", previous_observed_at: "2026-08-26T14:41:00Z", elapsed_seconds: 86400, day_difference: 1, previous_observation_run_id: "run", trend_status: "RISING", trend_start_price: "500", trend_current_price: "623", trend_change_percent: "24.6", trend_span_days: 3, observed_day_count: 4 } });
+    render(<DirectionResults title="Outbound" date="2026-12-18" results={{ ...results, baseline: historical, nonstop_options: [historical] }} selectedId={null} onSelect={vi.fn()} complete connectionProfile="CONSERVATIVE" selfTransferEnabled={false} />);
+    expect(screen.queryByRole("columnheader", { name: "Tickets" })).not.toBeInTheDocument();
+    expect(screen.queryByText("separate", { selector: "td" })).not.toBeInTheDocument();
+    expect(screen.getByText("1d ago · ↑ 24.6% / 3d")).toBeInTheDocument();
   });
 
   it("uses decrease, neutral, and first-seen indicators in the Change column", () => {

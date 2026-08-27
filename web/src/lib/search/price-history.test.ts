@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { elapsedCompactDay, elapsedShort, elapsedSummaryDay, historyAccessibleLabel, historySignal, historyTooltip, percentageChangeSignal, priceHistoryState, sinceLastSeen } from "./price-history";
+import { elapsedCompactDay, elapsedShort, elapsedSummaryDay, historyAccessibleLabel, historySignal, historyTooltip, percentageChangeSignal, priceHistoryState, sinceLastSeen, summaryTrend, trendSignal } from "./price-history";
 
 const history = {
   history_status: "PREVIOUS_FOUND" as const,
@@ -15,8 +15,8 @@ describe("observation history language", () => {
   it("reports factual change since the latest observation", () => {
     expect(historySignal(history)).toBe("↑ 6.3%");
     expect(sinceLastSeen(history)).toBe("↑ 6.3% since last seen 3d ago");
-    expect(historyTooltip(history, "402", "GBP")).toContain("Was £378.00");
-    expect(historyTooltip(history, "402", "GBP")).toContain("Last seen 3 days 4 hours ago");
+    expect(historyTooltip(history, "402", "GBP")).toContain("Previous day £378.00");
+    expect(historyTooltip(history, "402", "GBP")).toContain("Daily +6.3%");
   });
 
   it("uses New rather than zero percent for first observations", () => {
@@ -51,6 +51,14 @@ describe("observation history language", () => {
     expect(elapsedCompactDay(3600, "2026-08-27T09:50:00Z", new Date("2026-08-27T12:50:00Z"), 1)).toBe("1d ago");
     expect(elapsedSummaryDay(3600, "2026-08-27T09:50:00Z", new Date("2026-08-27T12:50:00Z"), 1)).toBe("since yesterday");
     expect(elapsedSummaryDay(3600, "2026-08-27T09:50:00Z", new Date("2026-08-27T12:50:00Z"), 3)).toBe("since 3d ago");
+  });
+
+  it("formats factual multi-day trends separately from daily movement", () => {
+    const rising = { ...history, trend_status: "RISING" as const, trend_start_price: "500", trend_current_price: "623", trend_change_percent: "24.6", trend_span_days: 3, observed_day_count: 4 };
+    expect(trendSignal(rising)).toBe("↑ 24.6% / 3d");
+    expect(summaryTrend(rising)).toBe("↑ 24.6% over 4 observed days");
+    expect(historyTooltip(rising, "623", "GBP")).toContain("£500.00 → £623.00");
+    expect(trendSignal({ ...rising, trend_status: "INSUFFICIENT_HISTORY" })).toBe("");
   });
 
   it("formats observed elapsed intervals", () => {

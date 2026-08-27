@@ -150,6 +150,20 @@ class HistoryStatus(StrEnum):
     PREVIOUS_FOUND = "PREVIOUS_FOUND"
 
 
+class TrendStatus(StrEnum):
+    INSUFFICIENT_HISTORY = "INSUFFICIENT_HISTORY"
+    FLAT = "FLAT"
+    RISING = "RISING"
+    FALLING = "FALLING"
+
+
+class DailyPricePoint(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    date: date
+    price: Decimal
+
+
 class PriceHistoryComparison(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -161,6 +175,18 @@ class PriceHistoryComparison(BaseModel):
     elapsed_seconds: int | None = None
     day_difference: int | None = None
     previous_observation_run_id: str | None = None
+    trend_status: TrendStatus = TrendStatus.INSUFFICIENT_HISTORY
+    trend_start_price: Decimal | None = None
+    trend_current_price: Decimal | None = None
+    trend_change_amount: Decimal | None = None
+    trend_change_percent: Decimal | None = None
+    trend_first_date: date | None = None
+    trend_last_date: date | None = None
+    trend_span_days: int | None = None
+    observed_day_count: int = 0
+    price_slope_per_day: Decimal | None = None
+    direction_consistency: Decimal | None = None
+    daily_series: list[DailyPricePoint] = Field(default_factory=list)
 
 
 class TripOption(BaseModel):

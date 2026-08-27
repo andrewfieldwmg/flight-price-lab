@@ -102,6 +102,14 @@ describe("selected trip summary", () => {
     expect(screen.queryByText(/\d+[hm] ago/)).not.toBeInTheDocument();
   });
 
+  it("shows meaningful trend separately from an unchanged prior-day movement", () => {
+    const comparison = { history_status: "PREVIOUS_FOUND" as const, previous_price: "623", price_change_amount: "0", price_change_percent: "0", previous_observed_at: "2026-08-26T14:41:00Z", elapsed_seconds: 86400, day_difference: 1, previous_observation_run_id: "run", trend_status: "RISING" as const, trend_start_price: "500", trend_current_price: "623", trend_change_percent: "24.6", trend_span_days: 3, observed_day_count: 4 };
+    const selected = option({ id: "plateau", base_price: "623", history: comparison });
+    render(<TripSummary outbound={selected} inbound={null} outboundBaseline={selected} inboundBaseline={null} />);
+    expect(screen.getAllByText("No change since yesterday").length).toBeGreaterThan(0);
+    expect(screen.getByText("↑ 24.6% over 4 observed days")).toBeInTheDocument();
+  });
+
   it("keeps baggage hidden until requested and leaves the base headline unchanged", () => {
     const selected = synthetic();
     selected.ancillary_price_low = "11.99"; selected.ancillary_price_high = null;

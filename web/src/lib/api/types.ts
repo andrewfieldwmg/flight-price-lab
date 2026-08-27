@@ -57,6 +57,18 @@ export interface PriceHistoryComparison {
   elapsed_seconds: number | null;
   day_difference?: number | null;
   previous_observation_run_id: string | null;
+  trend_status?: "INSUFFICIENT_HISTORY" | "FLAT" | "RISING" | "FALLING";
+  trend_start_price?: string | null;
+  trend_current_price?: string | null;
+  trend_change_amount?: string | null;
+  trend_change_percent?: string | null;
+  trend_first_date?: string | null;
+  trend_last_date?: string | null;
+  trend_span_days?: number | null;
+  observed_day_count?: number;
+  price_slope_per_day?: string | null;
+  direction_consistency?: string | null;
+  daily_series?: Array<{ date: string; price: string }>;
 }
 
 export interface BaggageEstimate {

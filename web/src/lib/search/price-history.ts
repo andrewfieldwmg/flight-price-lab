@@ -98,6 +98,19 @@ export function directionHistory(history: PriceHistoryComparison | null | undefi
   return `${historySignal(history)} since last seen`;
 }
 
+export function trendSignal(history: PriceHistoryComparison | null | undefined): string {
+  if (!history || history.trend_status === "INSUFFICIENT_HISTORY" || !history.trend_status) return "";
+  if (history.trend_status === "FLAT") return "— flat";
+  const arrow = history.trend_status === "RISING" ? "↑" : "↓";
+  return `${arrow} ${Math.abs(Number(history.trend_change_percent ?? 0)).toFixed(1)}% / ${history.trend_span_days ?? 0}d`;
+}
+
+export function summaryTrend(history: PriceHistoryComparison | null | undefined): string {
+  if (!history || (history.trend_status !== "RISING" && history.trend_status !== "FALLING")) return "";
+  const arrow = history.trend_status === "RISING" ? "↑" : "↓";
+  return `${arrow} ${Math.abs(Number(history.trend_change_percent ?? 0)).toFixed(1)}% over ${history.observed_day_count ?? 0} observed days`;
+}
+
 export function historyTooltip(history: PriceHistoryComparison | null | undefined, current: string, currency: string): string {
   const state = priceHistoryState(history);
   if (state === "LOADING") return "Loading price history";
@@ -107,5 +120,8 @@ export function historyTooltip(history: PriceHistoryComparison | null | undefine
   const amount = Number(history.price_change_amount ?? 0);
   const percent = Number(history.price_change_percent ?? 0);
   const observed = history.previous_observed_at ? new Date(history.previous_observed_at).toLocaleString("en-GB") : "unknown";
-  return `Was ${format.format(Number(history.previous_price))}\nNow ${format.format(Number(current))}\n${amount >= 0 ? "+" : "−"}${format.format(Math.abs(amount))} (${amount >= 0 ? "+" : "−"}${Math.abs(percent).toFixed(1)}%)\nLast seen ${elapsedDetailed(history.elapsed_seconds)} ago · ${observed}`;
+  const daily = `Current ${format.format(Number(current))}\nPrevious day ${format.format(Number(history.previous_price))}\nDaily ${amount >= 0 ? "+" : "−"}${Math.abs(percent).toFixed(1)}%\nObserved ${observed}`;
+  const trend = trendSignal(history);
+  if (!trend || history.trend_status === "FLAT") return `${daily}${trend ? `\n\nTrend: ${trend}` : ""}`;
+  return `${daily}\n\n${history.trend_span_days}-day trend:\n${format.format(Number(history.trend_start_price))} → ${format.format(Number(history.trend_current_price))}\n${Number(history.trend_change_percent) >= 0 ? "+" : "−"}${Math.abs(Number(history.trend_change_percent)).toFixed(1)}%\n${history.observed_day_count} observed days`;
 }

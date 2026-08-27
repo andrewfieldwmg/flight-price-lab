@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import type { ConnectionProfile, DirectionResults as Results, TripOption } from "@/lib/api/types";
 import { money } from "./price-display";
 import { duration } from "./result-card";
-import { elapsedCompactDay, historyAccessibleLabel, historySignal, historyTooltip, priceHistoryState } from "@/lib/search/price-history";
+import { elapsedCompactDay, historyAccessibleLabel, historySignal, historyTooltip, priceHistoryState, trendSignal } from "@/lib/search/price-history";
 
 export type SortKey = "saving" | "price" | "departure" | "arrival" | "transfer" | "journey" | "extra";
 const RESULTS_PER_PAGE = 15;
@@ -148,7 +148,7 @@ export function DirectionResults({
             <th><HeaderButton label="Stopover" sortKey="transfer" active={sort === "transfer"} descending={descending} onSort={changeSort} /></th>
             <th><HeaderButton label="Journey" sortKey="journey" active={sort === "journey"} descending={descending} onSort={changeSort} /></th>
             {selfTransferEnabled && <th><HeaderButton label="Extra vs nonstop" sortKey="extra" active={sort === "extra"} descending={descending} onSort={changeSort} /></th>}
-            <th>Airlines</th><th>Tickets</th>
+            <th>Airlines</th>
           </tr></thead>
           <tbody>
             {pageOptions.map((option) => <ResultRow key={option.id} option={option} selected={selectedId === option.id} onClick={() => onSelect(option.id)} showComparisons={selfTransferEnabled} />)}
@@ -180,7 +180,6 @@ function ResultRow({ option, selected, onClick, showComparisons }: { option: Tri
         <td data-label="Journey">{duration(option.total_journey_minutes)}</td>
         {showComparisons && <td data-label="Extra vs nonstop">{option.extra_minutes_vs_nonstop ? `+${duration(option.extra_minutes_vs_nonstop)}` : "—"}</td>}
         <td data-label="Airlines">{option.airlines.join(" / ")}</td>
-        <td data-label="Tickets">{option.ticketing_type === "separate_tickets" ? "separate" : option.ticketing_type === "single_ticket" ? "single" : "unknown"}</td>
       </tr>
   );
 }
@@ -190,6 +189,6 @@ function HistoryCell({ option }: { option: TripOption }) {
   return <td data-label="Change" className={`history-cell ${Number(option.history?.price_change_amount ?? 0) > 0 ? "history-up" : Number(option.history?.price_change_amount ?? 0) < 0 ? "history-down" : ""}`} title={historyTooltip(option.history, option.base_price, option.currency)}>
     {state === "LOADING"
       ? <span className="loading-spinner history-loading-spinner" role="status" aria-label="Loading price history" />
-      : <><strong aria-label={historyAccessibleLabel(option.history)}>{historySignal(option.history)}</strong>{option.history?.history_status === "PREVIOUS_FOUND" && <small>{elapsedCompactDay(option.history.elapsed_seconds, option.history.previous_observed_at, undefined, option.history.day_difference)}</small>}</>}
+      : <><strong aria-label={historyAccessibleLabel(option.history)}>{historySignal(option.history)}</strong>{option.history?.history_status === "PREVIOUS_FOUND" && <small>{elapsedCompactDay(option.history.elapsed_seconds, option.history.previous_observed_at, undefined, option.history.day_difference)}{trendSignal(option.history) && ` · ${trendSignal(option.history)}`}</small>}</>}
   </td>;
 }
