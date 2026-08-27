@@ -1,57 +1,93 @@
-import type { PriceHistoryComparison } from "@/lib/api/types";
+import { memo } from "react";
 import { money } from "./price-display";
 
-const WIDTH = 80;
-const HEIGHT = 26;
-const PAD_X = 3;
+export interface SparklinePoint {
+  date: string;
+  price: string;
+}
+
+export interface SparklineGeometry {
+  coordinates: Array<[number, number]>;
+  path: string;
+}
+
+const WIDTH = 64;
+const HEIGHT = 22;
+const PAD_X = 2;
 const PAD_Y = 3;
 
-export function sparklinePoints(series: Array<{ date: string; price: string }>): string {
-  if (series.length < 2) return "";
-  const values = series.map((point) => Number(point.price));
-  const times = series.map((point) => Date.parse(`${point.date}T12:00:00Z`));
+export function sparklineGeometry(points: SparklinePoint[]): SparklineGeometry {
+  if (points.length < 2) return { coordinates: [], path: "" };
+  const values = points.map((point) => Number(point.price));
+  const times = points.map((point) => Date.parse(`${point.date}T12:00:00Z`));
   const minValue = Math.min(...values);
   const maxValue = Math.max(...values);
   const centre = (minValue + maxValue) / 2;
   const minimumRange = Math.max(Math.abs(centre) * 0.02, 1);
-  const range = Math.max(maxValue - minValue, minimumRange);
-  const low = centre - range * 0.6;
-  const high = centre + range * 0.6;
+  const visualRange = Math.max(maxValue - minValue, minimumRange);
+  const low = centre - visualRange / 2;
+  const high = centre + visualRange / 2;
   const firstTime = times[0];
   const timeSpan = Math.max(times.at(-1)! - firstTime, 1);
-  return values.map((value, index) => {
-    const x = PAD_X + ((times[index] - firstTime) / timeSpan) * (WIDTH - 2 * PAD_X);
-    const y = PAD_Y + ((high - value) / (high - low)) * (HEIGHT - 2 * PAD_Y);
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  }).join(" ");
-}
-
-function observationLabel(history: PriceHistoryComparison, currency: string): string {
-  const series = history.daily_series ?? [];
-  const dates = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "Europe/London" });
-  const observations = series.map((point) => `${dates.format(new Date(`${point.date}T12:00:00Z`))}  ${money(point.price, currency)}`);
-  if (series.length > 1) {
-    const first = Number(series[0].price);
-    const last = Number(series.at(-1)!.price);
-    const overall = first ? (last - first) / first * 100 : null;
-    if (overall !== null) observations.push(`Overall: ${overall >= 0 ? "+" : "−"}${Math.abs(overall).toFixed(1)}%`);
+  const coordinates = values.map((value, index): [number, number] => [
+    PAD_X + ((times[index] - firstTime) / timeSpan) * (WIDTH - 2 * PAD_X),
+    minValue === maxValue
+      ? HEIGHT / 2
+      : PAD_Y + ((high - value) / (high - low)) * (HEIGHT - 2 * PAD_Y),
+  ]);
+  const slopes = coordinates.slice(0, -1).map((point, index) => {
+    const next = coordinates[index + 1];
+    return (next[1] - point[1]) / (next[0] - point[0]);
+  });
+  const tangents = coordinates.map((_point, index) => {
+    if (index === 0) return slopes[0];
+    if (index === coordinates.length - 1) return slopes.at(-1)!;
+    const left = slopes[index - 1];
+    const right = slopes[index];
+    return left * right <= 0 ? 0 : (left + right) / 2;
+  });
+  slopes.forEach((slope, index) => {
+    if (slope === 0) {
+      tangents[index] = 0;
+      tangents[index + 1] = 0;
+      return;
+    }
+    const alpha = tangents[index] / slope;
+    const beta = tangents[index + 1] / slope;
+    const magnitude = Math.hypot(alpha, beta);
+    if (magnitude > 3) {
+      const scale = 3 / magnitude;
+      tangents[index] = scale * alpha * slope;
+      tangents[index + 1] = scale * beta * slope;
+    }
+  });
+  const commands = [`M ${coordinates[0][0].toFixed(2)} ${coordinates[0][1].toFixed(2)}`];
+  for (let index = 0; index < coordinates.length - 1; index += 1) {
+    const [x, y] = coordinates[index];
+    const [nextX, nextY] = coordinates[index + 1];
+    const interval = nextX - x;
+    commands.push(
+      `C ${(x + interval / 3).toFixed(2)} ${(y + tangents[index] * interval / 3).toFixed(2)} ${(nextX - interval / 3).toFixed(2)} ${(nextY - tangents[index + 1] * interval / 3).toFixed(2)} ${nextX.toFixed(2)} ${nextY.toFixed(2)}`,
+    );
   }
-  return observations.join("\n");
+  return { coordinates, path: commands.join(" ") };
 }
 
-export function PriceSparkline({ history, currency }: { history: PriceHistoryComparison | null | undefined; currency: string }) {
-  const series = history?.daily_series ?? [];
-  if (series.length < 2) return <span className="sparkline-empty" aria-label="Insufficient price history">—</span>;
-  const points = sparklinePoints(series);
-  const label = observationLabel(history!, currency);
-  const end = points.split(" ").at(-1)!.split(",").map(Number);
-  return <details className="sparkline-detail" onClick={(event) => event.stopPropagation()}>
-    <summary aria-label={`Price history. ${label.replaceAll("\n", ". ")}`} title={label}>
-      <svg className="price-sparkline" viewBox={`0 0 ${WIDTH} ${HEIGHT}`} role="img" aria-hidden="true">
-        <polyline points={points} />
-        <circle cx={end[0]} cy={end[1]} r="1.8" />
-      </svg>
-    </summary>
-    <span className="sparkline-tooltip">{label.split("\n").map((line) => <span key={line}>{line}</span>)}</span>
-  </details>;
+function observationLabel(points: SparklinePoint[], currency: string): string {
+  const dates = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "Europe/London" });
+  return points.map((point) => `${dates.format(new Date(`${point.date}T12:00:00Z`))}  ${money(point.price, currency)}`).join("\n");
 }
+
+export const PriceSparkline = memo(function PriceSparkline({ points, currency }: { points: SparklinePoint[]; currency: string }) {
+  if (points.length < 2) return <span className="sparkline-empty" aria-label="Insufficient price history">—</span>;
+  const geometry = sparklineGeometry(points);
+  const [endX, endY] = geometry.coordinates.at(-1)!;
+  const movement = Number(points.at(-1)!.price) - Number(points[0].price);
+  const movementClass = movement > 0 ? "sparkline-rising" : movement < 0 ? "sparkline-falling" : "sparkline-flat";
+  const label = observationLabel(points, currency);
+  return <svg className={`price-sparkline ${movementClass}`} viewBox={`0 0 ${WIDTH} ${HEIGHT}`} role="img" aria-label={`Price history. ${label.replaceAll("\n", ". ")}`}>
+    <title>{label}</title>
+    <path d={geometry.path} />
+    <circle cx={endX} cy={endY} r="1.5" />
+  </svg>;
+});

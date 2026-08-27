@@ -210,17 +210,15 @@ button { cursor:pointer; }
 .history-cell.history-up strong { color:#a04431; }
 .history-cell.history-down strong { color:#167360; }
 .history-loading-spinner { display:inline-block; width:12px; height:12px; vertical-align:middle; }
-.trend-cell { width:86px; min-width:86px; padding-left:3px!important; padding-right:3px!important; }
-.price-sparkline { display:block; width:80px; height:26px; overflow:visible; }
-.price-sparkline polyline { fill:none; stroke:#477d72; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round; vector-effect:non-scaling-stroke; }
-.price-sparkline circle { fill:#477d72; }
-.sparkline-empty { color:var(--muted); display:inline-block; width:80px; text-align:center; }
-.sparkline-detail { position:relative; width:80px; }
-.sparkline-detail summary { cursor:pointer; display:block; list-style:none; }
-.sparkline-detail summary::-webkit-details-marker { display:none; }
-.sparkline-tooltip { display:none; position:absolute; z-index:20; left:0; top:28px; width:max-content; min-width:112px; padding:6px 8px; border-radius:4px; background:#173a34; color:#fff; box-shadow:0 2px 8px #0003; font-size:10px; line-height:1.45; white-space:nowrap; }
-.sparkline-tooltip span { display:block; }
-.sparkline-detail[open] .sparkline-tooltip { display:block; }
+.trend-column { box-sizing:border-box; width:72px!important; min-width:72px!important; max-width:72px!important; overflow:hidden; }
+.trend-cell { padding-left:4px!important; padding-right:4px!important; text-align:center; }
+.price-sparkline { display:block; width:64px; height:22px; margin:0 auto; overflow:hidden; color:#477d72; }
+.price-sparkline path { fill:none; stroke:currentColor; stroke-width:1.35; stroke-linecap:round; stroke-linejoin:round; vector-effect:non-scaling-stroke; }
+.price-sparkline circle { fill:currentColor; }
+.price-sparkline.sparkline-rising { color:#a04431; }
+.price-sparkline.sparkline-falling { color:#167360; }
+.price-sparkline.sparkline-flat { color:var(--muted); }
+.sparkline-empty { color:var(--muted); display:block; width:64px; margin:0 auto; text-align:center; }
 .route-cell { font-weight:700; }
 .time-warning { color:#b84c27; font-weight:800; background:#fff5ef !important; }
 .table-footnote { padding:7px 12px; color:var(--muted); font-size:9px; border-top:1px solid var(--line); }

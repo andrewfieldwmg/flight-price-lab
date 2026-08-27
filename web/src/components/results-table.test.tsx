@@ -185,6 +185,8 @@ describe("dense flight results", () => {
     expect(screen.queryByText("separate", { selector: "td" })).not.toBeInTheDocument();
     const headers = screen.getAllByRole("columnheader").map((header) => header.textContent);
     expect(headers.indexOf("Trend")).toBe(headers.indexOf("Change") + 1);
+    expect(screen.getByRole("columnheader", { name: "Trend" })).toHaveClass("trend-column");
+    expect(screen.getByRole("img", { name: /Price history/ }).closest("td")).toHaveClass("trend-column", "trend-cell");
     expect(screen.getByLabelText(/24 Aug.*£500.*27 Aug.*£623/)).toBeInTheDocument();
     expect(screen.getByText("1d ago")).toBeInTheDocument();
   });
