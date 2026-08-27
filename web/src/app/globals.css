@@ -92,7 +92,7 @@ button { cursor:pointer; }
 .summary-strip { margin:12px 0; background:#153d41; color:#fff; border-radius:6px; padding:12px 14px; display:grid; gap:12px; box-shadow:0 4px 14px rgba(20,40,43,.14); }
 .summary-primary { display:grid; gap:10px; padding-bottom:10px; border-bottom:1px solid #31565a; }
 .summary-top-row { display:flex; align-items:flex-start; justify-content:space-between; gap:24px; width:100%; }
-.summary-total-block { display:grid; gap:2px; }
+.summary-total-block { display:grid; gap:2px; min-width:0; max-width:100%; }
 .summary-metrics { display:flex; align-items:end; gap:28px; }
 .summary-metrics > div { display:grid; gap:2px; }
 .summary-primary span,.compact-trip-summary span { color:#abc2c1; font-size:9px; text-transform:uppercase; letter-spacing:.08em; }
@@ -206,6 +206,8 @@ button { cursor:pointer; }
 .saving-cell { color:var(--teal); font-weight:800; }
 .price-cell { font-weight:900; font-size:12px; }
 .history-cell strong,.history-cell small { display:block; }
+.history-cell strong { white-space:normal; overflow-wrap:anywhere; }
+.history-cell strong em { color:var(--muted); font-size:9px; font-style:normal; font-weight:500; margin-left:3px; white-space:nowrap; }
 .history-cell small { color:var(--muted); font-size:9px; margin-top:1px; }
 .history-cell.history-up strong { color:#a04431; }
 .history-cell.history-down strong { color:#167360; }
@@ -220,6 +222,9 @@ button { cursor:pointer; }
 .price-sparkline.sparkline-falling { color:#167360; }
 .price-sparkline.sparkline-flat { color:var(--muted); }
 .sparkline-empty { color:var(--muted); display:block; width:64px; margin:0 auto; text-align:center; }
+.trip-total-sparkline { width:100px; height:28px; max-width:100%; margin:0; color:#d7e7e2; }
+.trip-total-price-row { display:flex; align-items:center; gap:10px; max-width:100%; overflow:hidden; }
+.trip-total-price-row > strong { flex:0 0 auto; }
 .route-cell { font-weight:700; }
 .time-warning { color:#b84c27; font-weight:800; background:#fff5ef !important; }
 .table-footnote { padding:7px 12px; color:var(--muted); font-size:9px; border-top:1px solid var(--line); }

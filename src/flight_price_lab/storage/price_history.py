@@ -94,7 +94,11 @@ def _visual_series_with_current(
     current_price: Decimal,
 ) -> list[ObservedPricePoint]:
     points = [*history]
-    current = ObservedPricePoint(observed_at=current_at, price=current_price)
+    current = ObservedPricePoint(
+        observed_at=current_at,
+        price=current_price,
+        observation_run_id="CURRENT",
+    )
     if not points or points[-1] != current:
         points.append(current)
     points.sort(key=lambda point: point.observed_at)
@@ -306,7 +310,9 @@ class PriceHistoryStore:
             if visual_start <= local_day <= current_day:
                 latest[key].visual.append(
                     ObservedPricePoint(
-                        observed_at=_as_aware_utc(row.observed_at), price=row.base_price
+                        observed_at=_as_aware_utc(row.observed_at),
+                        price=row.base_price,
+                        observation_run_id=row.observation_run_id,
                     )
                 )
             if local_day < current_day and local_day not in seen[key]:
@@ -357,6 +363,7 @@ class PriceHistoryStore:
                     ObservedPricePoint(
                         observed_at=_as_aware_utc(row.observed_at),
                         price=row.total_price or Decimal(),
+                        observation_run_id=row.observation_run_id,
                     )
                 )
             if local_day < current_day and local_day not in seen[fingerprint]:

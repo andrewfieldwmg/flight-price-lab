@@ -88,7 +88,7 @@ function observationLabel(points: SparklinePoint[], currency: string): string {
   }).join("\n");
 }
 
-export const PriceSparkline = memo(function PriceSparkline({ points, currency }: { points: SparklinePoint[]; currency: string }) {
+export const PriceSparkline = memo(function PriceSparkline({ points, currency, className = "" }: { points: SparklinePoint[]; currency: string; className?: string }) {
   if (points.length < 2) return <span className="sparkline-empty" aria-label="Insufficient price history">—</span>;
   const geometry = sparklineGeometry(points);
   const [endX, endY] = geometry.coordinates.at(-1)!;
@@ -97,7 +97,7 @@ export const PriceSparkline = memo(function PriceSparkline({ points, currency }:
   const label = observationLabel(points, currency);
   const [startX] = geometry.coordinates[0];
   const areaPath = `M ${startX.toFixed(2)} ${HEIGHT} L ${geometry.path.slice(2)} L ${endX.toFixed(2)} ${HEIGHT} Z`;
-  return <svg className={`price-sparkline ${movementClass}`} viewBox={`0 0 ${WIDTH} ${HEIGHT}`} role="img" aria-label={`Price history. ${label.replaceAll("\n", ". ")}`}>
+  return <svg className={`price-sparkline ${movementClass} ${className}`.trim()} viewBox={`0 0 ${WIDTH} ${HEIGHT}`} role="img" aria-label={`Price history. ${label.replaceAll("\n", ". ")}`}>
     <title>{label}</title>
     <path className="sparkline-area" d={areaPath} />
     <path className="sparkline-line" d={geometry.path} />

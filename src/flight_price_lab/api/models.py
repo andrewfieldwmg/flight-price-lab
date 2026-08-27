@@ -169,6 +169,7 @@ class ObservedPricePoint(BaseModel):
 
     observed_at: datetime
     price: Decimal
+    observation_run_id: str | None = None
 
 
 class PriceHistoryComparison(BaseModel):
