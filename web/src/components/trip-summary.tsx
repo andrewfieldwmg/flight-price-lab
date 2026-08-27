@@ -12,7 +12,7 @@ import { PriceSparkline } from "./price-sparkline";
 
 function summaryChangeSignal(history: PriceHistoryComparison | null | undefined): string {
   const state = priceHistoryState(history);
-  if (state === "LOADING") return "New";
+  if (state === "LOADING") return "Loading history…";
   if (state === "FIRST_SEEN") return "First seen";
   if (state === "ERROR") return "History unavailable";
   if (state === "UNCHANGED") return "No change";
@@ -31,7 +31,8 @@ function summaryDirectionHistory(history: PriceHistoryComparison | null | undefi
 
 function summaryHistoryAccessibleLabel(history: PriceHistoryComparison | null | undefined): string {
   const state = priceHistoryState(history);
-  return state === "LOADING" || state === "FIRST_SEEN" ? "First price observation" : historyAccessibleLabel(history);
+  if (state === "LOADING") return "Loading price history";
+  return state === "FIRST_SEEN" ? "First price observation" : historyAccessibleLabel(history);
 }
 
 function range(low: number | string | null, high: number | string | null, currency: string) {
@@ -90,25 +91,44 @@ function DirectionSummary({ label, option, showBaggage, date }: { label: string;
   </div>;
 }
 
-export function TripSummary({ outbound, inbound, outboundBaseline, inboundBaseline, outboundComparisonEnabled = false, inboundComparisonEnabled = false, excludeBaggage = true, searchId = null, outboundDate, returnDate }: { outbound: TripOption | null; inbound: TripOption | null; outboundBaseline: TripOption | null; inboundBaseline: TripOption | null; outboundComparisonEnabled?: boolean; inboundComparisonEnabled?: boolean; excludeBaggage?: boolean; searchId?: string | null; outboundDate?: string; returnDate?: string }) {
+export function TripSummary({ outbound, inbound, outboundBaseline, inboundBaseline, outboundComparisonEnabled = false, inboundComparisonEnabled = false, excludeBaggage = true, searchId = null, outboundDate, returnDate, complete = true }: { outbound: TripOption | null; inbound: TripOption | null; outboundBaseline: TripOption | null; inboundBaseline: TripOption | null; outboundComparisonEnabled?: boolean; inboundComparisonEnabled?: boolean; excludeBaggage?: boolean; searchId?: string | null; outboundDate?: string; returnDate?: string; complete?: boolean }) {
   const [showBaggage, setShowBaggage] = useState(false);
   const [compactVisible, setCompactVisible] = useState(false);
   const fullSummary = useRef<HTMLElement>(null);
-  const summaryHasBeenVisible = useRef(false);
+  const summarySentinel = useRef<HTMLDivElement>(null);
   const compareOutbound = outboundComparisonEnabled && !!outbound && !outbound.is_nonstop;
   const compareInbound = inboundComparisonEnabled && !!inbound && !inbound.is_nonstop;
   const summary = aggregateTrip(outbound, inbound, outboundBaseline, inboundBaseline, { outbound: compareOutbound, inbound: compareInbound });
   useEffect(() => {
-    const element = fullSummary.current;
-    if (!element || typeof IntersectionObserver === "undefined") return;
-    const observer = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting) {
-        summaryHasBeenVisible.current = true;
-        setCompactVisible(false);
-      } else if (summaryHasBeenVisible.current) setCompactVisible(true);
-    });
-    observer.observe(element);
-    return () => observer.disconnect();
+    const sentinel = summarySentinel.current;
+    const header = document.querySelector<HTMLElement>(".site-header");
+    if (!sentinel || typeof IntersectionObserver === "undefined") return;
+    let observer: IntersectionObserver | null = null;
+    let frame = 0;
+    const connect = () => {
+      observer?.disconnect();
+      const headerHeight = Math.round(header?.getBoundingClientRect().height ?? 0);
+      document.documentElement.style.setProperty("--sticky-header-height", `${headerHeight}px`);
+      observer = new IntersectionObserver(([entry]) => {
+        setCompactVisible(!entry.isIntersecting && entry.boundingClientRect.top <= headerHeight + 1);
+      }, { rootMargin: `-${headerHeight}px 0px 0px 0px`, threshold: 0 });
+      observer.observe(sentinel);
+    };
+    const reconnect = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(connect);
+    };
+    connect();
+    const resizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(reconnect);
+    if (header) resizeObserver?.observe(header);
+    if (fullSummary.current) resizeObserver?.observe(fullSummary.current);
+    window.addEventListener("resize", reconnect);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer?.disconnect();
+      resizeObserver?.disconnect();
+      window.removeEventListener("resize", reconnect);
+    };
   }, []);
   if (!summary) return null;
   const currency = outbound?.currency ?? inbound?.currency ?? "GBP";
@@ -151,16 +171,16 @@ export function TripSummary({ outbound, inbound, outboundBaseline, inboundBaseli
   const tripHistoryElapsed = outboundHistory?.elapsed_seconds ?? inboundHistory?.elapsed_seconds ?? null;
   const outboundHistoryState = priceHistoryState(outboundHistory);
   const inboundHistoryState = inbound ? priceHistoryState(inboundHistory) : null;
-  const tripHistoryState = inbound
+  const tripHistoryState = !complete ? "LOADING" : inbound
     ? outboundHistoryState === "LOADING" || inboundHistoryState === "LOADING"
       ? "LOADING"
       : outboundHistoryState === "FIRST_SEEN" && inboundHistoryState === "FIRST_SEEN"
         ? "FIRST_SEEN"
         : previousTripTotal !== null && tripHistoryPercent === 0 ? "UNCHANGED" : previousTripTotal !== null ? "CHANGED" : "ERROR"
     : outboundHistoryState;
-  const tripHistoryCompact = tripHistoryState === "LOADING" ? "New" : tripHistoryState === "FIRST_SEEN" ? "First seen" : tripHistoryState === "ERROR" ? "Unavailable" : tripHistoryState === "UNCHANGED" ? "No change" : `${(tripHistoryPercent ?? 0) > 0 ? "↑" : "↓"}${Math.abs(tripHistoryPercent ?? 0).toFixed(1)}%`;
+  const tripHistoryCompact = tripHistoryState === "LOADING" ? "Updating…" : tripHistoryState === "FIRST_SEEN" ? "First seen" : tripHistoryState === "ERROR" ? "Unavailable" : tripHistoryState === "UNCHANGED" ? "No change" : `${(tripHistoryPercent ?? 0) > 0 ? "↑" : "↓"}${Math.abs(tripHistoryPercent ?? 0).toFixed(1)}%`;
   const tripHistoryDetailed = tripHistoryState === "LOADING"
-    ? "New"
+    ? "Updating…"
     : tripHistoryState === "FIRST_SEEN"
       ? "First seen"
       : tripHistoryState === "ERROR"
@@ -171,6 +191,7 @@ export function TripSummary({ outbound, inbound, outboundBaseline, inboundBaseli
       ? `No change ${elapsedSummaryDay(tripHistoryElapsed, combinedPriorPoint?.observed_at ?? outboundHistory?.previous_observed_at, currentTripPoint ? new Date(currentTripPoint.observed_at) : undefined, combinedDayDifference ?? outboundHistory?.day_difference)}`
       : `${tripHistoryPercent > 0 ? "↑" : "↓"} ${Math.abs(tripHistoryPercent).toFixed(1)}% ${elapsedSummaryDay(tripHistoryElapsed, combinedPriorPoint?.observed_at ?? outboundHistory?.previous_observed_at, currentTripPoint ? new Date(currentTripPoint.observed_at) : undefined, combinedDayDifference ?? outboundHistory?.day_difference)}`;
   return <>
+    <div ref={summarySentinel} className="summary-sentinel" aria-hidden="true" />
     {compactVisible && <aside className="compact-trip-summary" aria-label="Compact selected trip summary">
       <div><span>Trip total</span><strong>{money(summary.baseAlternativePrice, currency)}{tripHistoryCompact && ` · ${tripHistoryCompact}`}</strong></div>
       {comparisonEnabled && <div><span>Save</span><strong>{money(saving, currency)} / {percentage.toFixed(0)}%</strong></div>}
@@ -180,7 +201,7 @@ export function TripSummary({ outbound, inbound, outboundBaseline, inboundBaseli
     <section ref={fullSummary} className="summary-strip" aria-label="Selected trip summary">
       <div className="summary-primary">
         <div className="summary-top-row" data-testid="summary-top-row">
-          <div className="summary-total-block"><span>Trip total</span><div className="trip-total-price-row"><strong>{money(summary.baseAlternativePrice, currency)}</strong>{tripTotalSeries.length >= 2 && <PriceSparkline points={tripTotalSeries} currency={currency} className="trip-total-sparkline" />}</div>{tripHistoryDetailed && <small aria-label={tripHistoryState === "FIRST_SEEN" ? "First price observation" : tripHistoryState === "ERROR" ? "Price history unavailable" : tripHistoryChange !== null && tripHistoryChange > 0 ? `Trip price increased by ${Math.abs(tripHistoryPercent ?? 0).toFixed(1)} percent since last seen` : tripHistoryChange !== null && tripHistoryChange < 0 ? `Trip price decreased by ${Math.abs(tripHistoryPercent ?? 0).toFixed(1)} percent since last seen` : "No trip price change since last seen"}>{tripHistoryDetailed}</small>}{previousTripTotal !== null && <span className="summary-previous-price">was {money(previousTripTotal, currency)}</span>}</div>
+          <div className="summary-total-block"><span>Trip total</span><div className="trip-total-price-row"><strong>{money(summary.baseAlternativePrice, currency)}</strong>{complete && tripTotalSeries.length >= 2 && <PriceSparkline points={tripTotalSeries} currency={currency} className="trip-total-sparkline" />}</div>{tripHistoryDetailed && <small aria-live="polite" aria-label={tripHistoryState === "LOADING" ? "Updating trip total and price history" : tripHistoryState === "FIRST_SEEN" ? "First price observation" : tripHistoryState === "ERROR" ? "Price history unavailable" : tripHistoryChange !== null && tripHistoryChange > 0 ? `Trip price increased by ${Math.abs(tripHistoryPercent ?? 0).toFixed(1)} percent since last seen` : tripHistoryChange !== null && tripHistoryChange < 0 ? `Trip price decreased by ${Math.abs(tripHistoryPercent ?? 0).toFixed(1)} percent since last seen` : "No trip price change since last seen"}>{tripHistoryDetailed}</small>}{complete && previousTripTotal !== null && <span className="summary-previous-price">was {money(previousTripTotal, currency)}</span>}</div>
           <div className="summary-header-actions"><BookingPreparation searchId={searchId} optionIds={[outbound?.id, inbound?.id].filter((id): id is string => Boolean(id))} /><label><input type="checkbox" checked={showBaggage} onChange={(event) => setShowBaggage(event.target.checked)} /> Show estimated baggage costs</label></div>
         </div>
         {comparisonEnabled && <div className="summary-metrics">

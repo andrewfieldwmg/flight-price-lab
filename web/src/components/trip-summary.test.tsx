@@ -4,13 +4,14 @@ import { option, synthetic } from "@/test/fixtures";
 import { TripSummary } from "./trip-summary";
 
 let observerCallback: IntersectionObserverCallback | null = null;
+let observerOptions: IntersectionObserverInit | undefined;
 class MockIntersectionObserver {
-  constructor(callback: IntersectionObserverCallback) { observerCallback = callback; }
+  constructor(callback: IntersectionObserverCallback, options?: IntersectionObserverInit) { observerCallback = callback; observerOptions = options; }
   observe = vi.fn(); disconnect = vi.fn(); unobserve = vi.fn(); takeRecords = vi.fn(() => []);
   root = null; rootMargin = "0px"; thresholds = [];
 }
 
-afterEach(() => { observerCallback = null; vi.unstubAllGlobals(); });
+afterEach(() => { observerCallback = null; observerOptions = undefined; document.querySelector(".site-header")?.remove(); vi.unstubAllGlobals(); });
 
 const renderOutbound = (comparison = true) => render(<TripSummary outbound={synthetic()} inbound={null} outboundBaseline={option({ id: "baseline" })} inboundBaseline={null} outboundComparisonEnabled={comparison} />);
 
@@ -50,16 +51,17 @@ describe("selected trip summary", () => {
     expect(screen.getByText("↑ 6.3% since 3d ago")).toBeInTheDocument();
     expect(screen.getByText("£258")).toBeInTheDocument();
     expect(screen.getByText("↑ 3.2% since 3d ago")).toBeInTheDocument();
-    expect(screen.getByText("New", { selector: ".summary-leg em" })).toBeInTheDocument();
+    expect(screen.getByText("Loading history…", { selector: ".summary-leg em" })).toBeInTheDocument();
     expect(screen.getByText("↓ 10.0% since 3d ago")).toBeInTheDocument();
     expect(screen.getByText("↑ 5.9% since 3d ago")).toHaveAccessibleName("Trip price increased by 5.9 percent since last seen");
     expect(screen.getByText("was £918")).toHaveClass("summary-previous-price");
   });
 
-  it("keeps the legacy summary fallback separate from table loading presentation", () => {
+  it("keeps unresolved summary history in a loading state", () => {
     const unresolved = option({ id: "unresolved", history: undefined });
     render(<TripSummary outbound={unresolved} inbound={null} outboundBaseline={unresolved} inboundBaseline={null} />);
-    expect(screen.getByText("New", { selector: ".summary-total-block small" })).toBeInTheDocument();
+    expect(screen.getByText("Updating…", { selector: ".summary-total-block small" })).toBeInTheDocument();
+    expect(screen.queryByText("New")).not.toBeInTheDocument();
     expect(screen.queryByText("First seen")).not.toBeInTheDocument();
   });
 
@@ -165,13 +167,31 @@ describe("selected trip summary", () => {
     vi.stubGlobal("IntersectionObserver", MockIntersectionObserver);
     renderOutbound();
     expect(screen.queryByLabelText("Compact selected trip summary")).not.toBeInTheDocument();
-    act(() => observerCallback?.([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver));
-    act(() => observerCallback?.([{ isIntersecting: false } as IntersectionObserverEntry], {} as IntersectionObserver));
+    act(() => observerCallback?.([{ isIntersecting: true, boundingClientRect: { top: 100 } } as IntersectionObserverEntry], {} as IntersectionObserver));
+    act(() => observerCallback?.([{ isIntersecting: false, boundingClientRect: { top: -1 } } as IntersectionObserverEntry], {} as IntersectionObserver));
     expect(screen.getByLabelText("Compact selected trip summary")).toBeInTheDocument();
     expect(screen.getByLabelText("Compact selected trip summary")).toHaveTextContent("18 Dec LGW→CAG");
-    expect(screen.getByLabelText("Compact selected trip summary")).toHaveTextContent("£486 · New");
-    act(() => observerCallback?.([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver));
+    expect(screen.getByLabelText("Compact selected trip summary")).toHaveTextContent("£486 · Updating…");
+    act(() => observerCallback?.([{ isIntersecting: true, boundingClientRect: { top: 100 } } as IntersectionObserverEntry], {} as IntersectionObserver));
     expect(screen.queryByLabelText("Compact selected trip summary")).not.toBeInTheDocument();
+  });
+
+  it("uses the measured sticky-header height for the visibility boundary", () => {
+    const header = document.createElement("header");
+    header.className = "site-header";
+    header.getBoundingClientRect = () => ({ height: 54 } as DOMRect);
+    document.body.prepend(header);
+    vi.stubGlobal("IntersectionObserver", MockIntersectionObserver);
+    renderOutbound();
+    expect(observerOptions?.rootMargin).toBe("-54px 0px 0px 0px");
+    expect(document.documentElement.style.getPropertyValue("--sticky-header-height")).toBe("54px");
+  });
+
+  it("keeps a provisional trip total and unresolved history distinct from first seen", () => {
+    render(<TripSummary outbound={synthetic()} inbound={null} outboundBaseline={option({ id: "baseline" })} inboundBaseline={null} complete={false} />);
+    expect(screen.getByText("Updating…")).toBeInTheDocument();
+    expect(screen.queryByText("New")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Updating trip total and price history")).toBeInTheDocument();
   });
 
   it("places one primary Prepare booking action in the top summary", () => {
@@ -188,8 +208,8 @@ describe("selected trip summary", () => {
     vi.stubGlobal("IntersectionObserver", MockIntersectionObserver);
     const direct = option({ id: "direct" });
     render(<TripSummary outbound={direct} inbound={null} outboundBaseline={direct} inboundBaseline={null} />);
-    act(() => observerCallback?.([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver));
-    act(() => observerCallback?.([{ isIntersecting: false } as IntersectionObserverEntry], {} as IntersectionObserver));
+    act(() => observerCallback?.([{ isIntersecting: true, boundingClientRect: { top: 100 } } as IntersectionObserverEntry], {} as IntersectionObserver));
+    act(() => observerCallback?.([{ isIntersecting: false, boundingClientRect: { top: -1 } } as IntersectionObserverEntry], {} as IntersectionObserver));
     const compact = screen.getByLabelText("Compact selected trip summary");
     expect(compact).toHaveTextContent("18 Dec LGW→CAG");
     expect(compact).not.toHaveTextContent("Save");

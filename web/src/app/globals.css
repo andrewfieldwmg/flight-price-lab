@@ -166,7 +166,8 @@ button { cursor:pointer; }
 .summary-baggage-enrichment > div,.summary-baggage-enrichment details div { display:flex; justify-content:space-between; gap:14px; }
 .summary-baggage-enrichment span { color:#b8cbc9; }
 .summary-baggage-enrichment summary { cursor:pointer; color:#d7e4e3; margin-top:2px; }
-.compact-trip-summary { position:fixed; top:62px; left:0; right:0; z-index:19; min-height:45px; padding:6px max(20px,calc((100vw - 1500px)/2)); background:#153d41; color:#fff; box-shadow:0 5px 14px #102a2440; display:flex; align-items:center; gap:26px; }
+.summary-sentinel { height:1px; overflow:hidden; pointer-events:none; }
+.compact-trip-summary { position:fixed; top:var(--sticky-header-height, 62px); left:0; right:0; z-index:19; min-height:45px; padding:6px max(20px,calc((100vw - 1500px)/2)); background:#153d41; color:#fff; box-shadow:0 5px 14px #102a2440; display:flex; align-items:center; gap:26px; }
 .compact-trip-summary > div { display:grid; gap:1px; }
 .compact-trip-summary > div strong { font-size:12px; }
 .compact-trip-summary > div:first-child strong { color:#dcfb7b; font-size:16px; }
@@ -266,7 +267,7 @@ footer { max-width:1540px; margin:auto; padding:14px 20px 30px; color:var(--mute
   .summary-itineraries { flex-direction:column; gap:10px; }
   .summary-direction { min-width:0; }
   .summary-totals { min-width:0; }
-  .compact-trip-summary { top:54px; padding:6px 10px; gap:12px; flex-wrap:wrap; }
+  .compact-trip-summary { top:var(--sticky-header-height, 54px); padding:6px 10px; gap:12px; flex-wrap:wrap; }
   .compact-trip-summary > b { width:100%; margin-left:0; }
   .table-scroll { max-height:none; overflow:visible; }
   .results-table { min-width:0; display:block; }

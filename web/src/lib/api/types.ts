@@ -205,6 +205,9 @@ export interface SearchSnapshot {
     median_provider_call_ms?: number;
     p95_provider_call_ms?: number;
     provider_requests?: Record<string, unknown>[];
+    calendar_background_prefetch_calls?: number;
+    calendar_background_prefetch_avoided?: number;
+    calendar_background_prefetch_failures?: number;
   };
 }
 

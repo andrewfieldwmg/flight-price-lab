@@ -61,6 +61,8 @@ export function SearchStatusPanel({ snapshot, cachedMinutes, directionProgress, 
         <div><dt>Provider calls now</dt><dd>{calls}</dd></div>
         <div><dt>Calls avoided</dt><dd>{avoided}</dd></div>
         {diagnostics.original_provider_calls !== null && <div><dt>Original live calls</dt><dd>{diagnostics.original_provider_calls}</dd></div>}
+        {diagnostics.calendar_background_prefetch_calls !== undefined && <div><dt>Calendar prefetch calls</dt><dd>{diagnostics.calendar_background_prefetch_calls}</dd></div>}
+        {diagnostics.calendar_background_prefetch_avoided !== undefined && <div><dt>Calendar dates cached</dt><dd>{diagnostics.calendar_background_prefetch_avoided}</dd></div>}
       </dl></section>
       {technical && <section><h3>Technical</h3><dl><div><dt>Search key</dt><dd>{(diagnostics.search_key || snapshot.search_key).slice(0, 12)}</dd></div></dl></section>}
     </div>}

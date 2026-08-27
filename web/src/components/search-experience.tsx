@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { getSearch, getSearchKey, streamSearch } from "@/lib/api/client";
+import { getCalendarPrices, getSearch, getSearchKey, streamSearch } from "@/lib/api/client";
 import type { SearchSnapshot, TripOption, TripSearchRequest } from "@/lib/api/types";
 import { uniqueOptions } from "@/lib/search/calculations";
 import { initialSearchState, searchReducer } from "@/lib/search/state";
@@ -11,6 +11,7 @@ import { DirectionResults } from "./direction-results";
 import { SearchForm } from "./search-form";
 import { SearchStatusPanel } from "./search-status-panel";
 import { TripSummary } from "./trip-summary";
+import { calendarPrefetchKey, prefetchSearchCalendar } from "@/lib/search/calendar-prefetch";
 
 const emptyDirectionResults = {
   baseline: null,
@@ -35,6 +36,7 @@ export function SearchExperience() {
   const savedTrips = useRef(new Set<string>());
   const searchClickedAt = useRef<number | null>(null);
   const firstRenderedResultRecorded = useRef(false);
+  const calendarPrefetchStarted = useRef(new Set<string>());
 
   async function submit(request: TripSearchRequest) {
     searchClickedAt.current = performance.now();
@@ -123,6 +125,34 @@ export function SearchExperience() {
   }, [refreshProviderUsage]);
 
   useEffect(() => {
+    if (!state.request || !state.snapshot || !isTerminal || searchClickedAt.current === null) return;
+    const key = calendarPrefetchKey(state.request);
+    if (calendarPrefetchStarted.current.has(key) || localStorage.getItem(key)) return;
+    calendarPrefetchStarted.current.add(key);
+    localStorage.setItem(key, "pending");
+    let cancelled = false;
+    const run = async () => {
+      const result = await prefetchSearchCalendar(state.request!, getCalendarPrices);
+      localStorage.setItem(key, "complete");
+      console.info("CALENDAR_BACKGROUND_PREFETCH", result);
+      if (!cancelled) dispatch({ type: "snapshot", snapshot: { ...state.snapshot!, diagnostics: {
+        ...state.snapshot!.diagnostics,
+        calendar_background_prefetch_calls: result.calls,
+        calendar_background_prefetch_avoided: result.avoided,
+        calendar_background_prefetch_failures: result.failures,
+      } } });
+    };
+    const idleWindow = window as Window & { requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number; cancelIdleCallback?: (id: number) => void };
+    const idleId = idleWindow.requestIdleCallback?.(() => void run(), { timeout: 2_000 });
+    const timerId = idleId === undefined ? window.setTimeout(() => void run(), 0) : null;
+    return () => {
+      cancelled = true;
+      if (idleId !== undefined) idleWindow.cancelIdleCallback?.(idleId);
+      if (timerId !== null) window.clearTimeout(timerId);
+    };
+  }, [isTerminal, state.request, state.snapshot]);
+
+  useEffect(() => {
     const snapshot = state.snapshot;
     if (!snapshot || !state.request || !isTerminal || cachedMinutes !== null) return;
     const tripId = snapshot.trip_id || snapshot.search_id;
@@ -169,6 +199,7 @@ export function SearchExperience() {
             searchId={state.snapshot.search_id}
             outboundDate={state.request?.outbound_date}
             returnDate={state.request?.return_date ?? undefined}
+            complete={isTerminal || (state.directionCompleted.OUTBOUND && (!state.request?.return_date || state.directionCompleted.RETURN))}
           />}
           <DirectionResults
             title="Outbound"

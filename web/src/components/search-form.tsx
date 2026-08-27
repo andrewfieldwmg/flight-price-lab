@@ -90,7 +90,7 @@ export function SearchForm({ onSearch, disabled, onExcludeBaggageChange }: { onS
         <DirectionControls title="Outbound" allowStop={outboundTransfer} onAllowStop={setOutboundTransfer} />
         <DirectionControls title="Return" allowStop={returnTransfer} onAllowStop={setReturnTransfer} disabled={!roundTrip} />
       </div>
-      <div className="search-foot"><label><input type="checkbox" checked={roundTrip} onChange={(event) => setRoundTrip(event.target.checked)} /> Return trip</label><label><input type="checkbox" checked={excludeBaggage} onChange={(event) => { setExcludeBaggage(event.target.checked); onExcludeBaggageChange?.(event.target.checked); }} /> Exclude baggage from comparison</label>{excludeBaggage && <span>Prices exclude baggage.</span>}</div>
+      <div className="search-foot"><label><input type="checkbox" checked={roundTrip} onChange={(event) => setRoundTrip(event.target.checked)} /> Return trip</label><label><input type="checkbox" checked={excludeBaggage} onChange={(event) => { setExcludeBaggage(event.target.checked); onExcludeBaggageChange?.(event.target.checked); }} /> Exclude baggage from comparison</label></div>
     </form>
   );
 }

@@ -72,7 +72,8 @@ describe("search controls", () => {
     const onExcludeBaggageChange = vi.fn();
     render(<SearchForm onSearch={onSearch} disabled={false} onExcludeBaggageChange={onExcludeBaggageChange} />);
     expect(screen.getByLabelText("Exclude baggage from comparison")).toBeChecked();
-    expect(screen.getByText("Prices exclude baggage.")).toBeInTheDocument();
+    expect(screen.queryByText("Prices exclude baggage.")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Exclude baggage from comparison")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Adults"), { target: { value: "3" } });
     fireEvent.click(screen.getByRole("button", { name: "Search" }));
     expect(onSearch).toHaveBeenCalledWith(expect.objectContaining({ baggage: { cabin_bags: 1, checked_bags: 0 } }));
