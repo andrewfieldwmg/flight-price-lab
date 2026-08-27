@@ -7,7 +7,6 @@ import { duration } from "./result-card";
 import { elapsedCompactDay, historyAccessibleLabel, historySignal, historyTooltip, priceHistoryState } from "@/lib/search/price-history";
 
 export type SortKey = "saving" | "price" | "departure" | "arrival" | "transfer" | "journey" | "extra";
-type ViewMode = "all" | "efficient";
 const RESULTS_PER_PAGE = 15;
 
 export function localClock(value: string): string {
@@ -85,7 +84,6 @@ export function DirectionResults({
   selectedId,
   onSelect,
   complete,
-  connectionProfile,
   selfTransferEnabled,
   date,
 }: {
@@ -100,8 +98,6 @@ export function DirectionResults({
 }) {
   const [sort, setSort] = useState<SortKey | null>(null);
   const [descending, setDescending] = useState(false);
-  const [expanded, setExpanded] = useState<string | null>(null);
-  const [mode, setMode] = useState<ViewMode>("all");
   const [minimumSaving, setMinimumSaving] = useState(100);
   const [customSaving, setCustomSaving] = useState(false);
   const [page, setPage] = useState(1);
@@ -109,13 +105,11 @@ export function DirectionResults({
     const nonstops = results.nonstop_options.length ? results.nonstop_options : results.baseline ? [results.baseline] : [];
     const candidates = !selfTransferEnabled
       ? nonstops
-      : mode === "efficient"
-        ? deduplicate([...nonstops, ...results.pareto_frontier])
-        : deduplicate([...nonstops, ...results.feasible_options]);
+      : deduplicate([...nonstops, ...results.feasible_options]);
     const basePriced = withBaseFareSavings(candidates, results.baseline);
     const filtered = selfTransferEnabled ? filterByMinimumSaving(basePriced, minimumSaving, selectedId) : basePriced;
     return sort ? sortOptions(filtered, sort, descending) : filtered;
-  }, [results, sort, descending, mode, selfTransferEnabled, minimumSaving, selectedId]);
+  }, [results, sort, descending, selfTransferEnabled, minimumSaving, selectedId]);
   const pageCount = Math.max(1, Math.ceil(options.length / RESULTS_PER_PAGE));
   const currentPage = Math.min(page, pageCount);
   const pageOptions = options.slice((currentPage - 1) * RESULTS_PER_PAGE, currentPage * RESULTS_PER_PAGE);
@@ -131,13 +125,11 @@ export function DirectionResults({
     }
   }
 
-  const columnCount = selfTransferEnabled ? 12 : 10;
   return (
     <section className="results-section">
       <div className="results-heading">
         <div><h2>{title}</h2><div className="direction-date">{longSearchDate(date)}</div></div>
         <div className="compromise-controls">
-          {selfTransferEnabled && <div className="mode-toggle"><button type="button" className={mode === "all" ? "active" : ""} onClick={() => { setMode("all"); setPage(1); }}>All options</button><button type="button" className={mode === "efficient" ? "active" : ""} onClick={() => { setMode("efficient"); setPage(1); }}>Efficient only</button></div>}
           {selfTransferEnabled && <label className="minimum-saving">Minimum saving <select aria-label={`${title} minimum saving`} value={customSaving ? "custom" : minimumSaving} onChange={(event) => { setPage(1); if (event.target.value === "custom") setCustomSaving(true); else { setCustomSaving(false); setMinimumSaving(Number(event.target.value)); } }}><option value="0">£0</option><option value="50">£50</option><option value="100">£100</option><option value="200">£200</option><option value="custom">custom</option></select>{customSaving && <input aria-label={`${title} custom minimum saving`} type="number" min="0" value={minimumSaving} onChange={(event) => { setMinimumSaving(Number(event.target.value)); setPage(1); }} />}</label>}
           <span>{options.length} shown</span>
         </div>
@@ -159,7 +151,7 @@ export function DirectionResults({
             <th>Airlines</th><th>Tickets</th>
           </tr></thead>
           <tbody>
-            {pageOptions.map((option) => <FragmentRow key={option.id} option={option} selected={selectedId === option.id} expanded={expanded === option.id} onClick={() => { onSelect(option.id); setExpanded(expanded === option.id ? null : option.id); }} connectionProfile={connectionProfile} showComparisons={selfTransferEnabled} columnCount={columnCount} />)}
+            {pageOptions.map((option) => <ResultRow key={option.id} option={option} selected={selectedId === option.id} onClick={() => onSelect(option.id)} showComparisons={selfTransferEnabled} />)}
           </tbody>
         </table>
       </div>
@@ -170,14 +162,13 @@ export function DirectionResults({
   );
 }
 
-function FragmentRow({ option, selected, expanded, onClick, connectionProfile, showComparisons, columnCount }: { option: TripOption; selected: boolean; expanded: boolean; onClick: () => void; connectionProfile: ConnectionProfile; showComparisons: boolean; columnCount: number }) {
+function ResultRow({ option, selected, onClick, showComparisons }: { option: TripOption; selected: boolean; onClick: () => void; showComparisons: boolean }) {
   const saving = Number(option.saving_vs_nonstop_amount ?? 0);
   const stopover = option.connection_airport && option.connection_minutes !== null
     ? `${option.connection_airport} · ${duration(option.connection_minutes)}`
     : "—";
   return (
-    <>
-      <tr className={`${selected ? "selected-row" : ""} ${expanded ? "expanded-row" : ""}`} onClick={onClick}>
+      <tr className={selected ? "selected-row" : ""} onClick={onClick}>
         <td data-label="Select"><input type="radio" readOnly checked={selected} aria-label={`Select ${option.route.join("-")}`} /> <span className="type-pill">{option.is_nonstop ? "Direct" : "1-stop"}</span></td>
         <td data-label="Price" className="price-cell">{compactPrice(option)}</td>
         <HistoryCell option={option} />
@@ -191,8 +182,6 @@ function FragmentRow({ option, selected, expanded, onClick, connectionProfile, s
         <td data-label="Airlines">{option.airlines.join(" / ")}</td>
         <td data-label="Tickets">{option.ticketing_type === "separate_tickets" ? "separate" : option.ticketing_type === "single_ticket" ? "single" : "unknown"}</td>
       </tr>
-      {expanded && <tr className="detail-row"><td colSpan={columnCount}><div className="row-detail"><div className="leg-list">{option.legs.map((leg, index) => <div key={`${leg.flight_number}-${index}`}><strong>{leg.origin} {localClock(leg.departure_at)} → {leg.destination} {localClock(leg.arrival_at)}</strong><span>{leg.airline} · {leg.flight_number}</span>{index < option.legs.length - 1 && <em>Stopover {option.connection_airport} · {duration(option.connection_minutes)}</em>}</div>)}</div><dl><div><dt>Base fare</dt><dd>{money(option.base_price, option.currency)}</dd></div><div><dt>Ancillary status</dt><dd>{option.price_completeness}</dd></div><div><dt>Connection profile</dt><dd>{connectionProfile}</dd></div></dl>{option.ticketing_type === "separate_tickets" && <p className="inline-warning">Separate tickets: missed-connection protection is not guaranteed.</p>}</div></td></tr>}
-    </>
   );
 }
 

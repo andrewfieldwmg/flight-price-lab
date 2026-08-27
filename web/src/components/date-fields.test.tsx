@@ -71,6 +71,37 @@ describe("directional date pricing", () => {
     await waitFor(() => expect(getCalendarPrices).toHaveBeenCalledTimes(2));
   });
 
+  it("keeps only one calendar open", async () => {
+    renderFields();
+    fireEvent.click(screen.getByRole("button", { name: /Out18 Dec 2026/ }));
+    expect(screen.getByRole("dialog", { name: /Out directional/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Return28 Dec 2026/ }));
+    expect(screen.queryByRole("dialog", { name: /Out directional/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: /Return directional/ })).toBeInTheDocument();
+  });
+
+  it("closes on outside click and Escape", () => {
+    renderFields();
+    const out = screen.getByRole("button", { name: /Out18 Dec 2026/ });
+    fireEvent.click(out);
+    fireEvent.mouseDown(document.body);
+    expect(screen.queryByRole("dialog", { name: /Out directional/ })).not.toBeInTheDocument();
+    fireEvent.click(out);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: /Out directional/ })).not.toBeInTheDocument();
+  });
+
+  it("closes and reopens without refetching loaded prices", async () => {
+    renderFields();
+    const out = screen.getByRole("button", { name: /Out18 Dec 2026/ });
+    fireEvent.click(out);
+    await screen.findByText("£849");
+    fireEvent.click(out);
+    fireEvent.click(out);
+    expect(screen.getByRole("dialog", { name: /Out directional/ })).toHaveClass("date-popover");
+    expect(getCalendarPrices).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps outbound and return markets independent and selection makes no search", async () => {
     const props = renderFields();
     fireEvent.click(screen.getByRole("button", { name: /Return28 Dec 2026/ }));
@@ -80,6 +111,7 @@ describe("directional date pricing", () => {
     const dialog = screen.getByRole("dialog", { name: /Return directional/ });
     fireEvent.click(within(dialog).getAllByRole("button").find((button) => button.classList.contains("date-price-cell") && button.textContent?.includes("28"))!);
     expect(props.onInboundChange).toHaveBeenCalled();
+    expect(screen.queryByRole("dialog", { name: /Return directional/ })).not.toBeInTheDocument();
     expect(getCalendarPrices).toHaveBeenCalledTimes(1);
   });
 

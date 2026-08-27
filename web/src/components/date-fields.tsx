@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import type { RefObject } from "react";
 import { getCalendarPrices } from "@/lib/api/client";
 import type { CalendarPrice } from "@/lib/api/types";
 
@@ -9,6 +10,8 @@ interface DateFieldsProps {
   adults: number; childPassengers: number; currency: string;
   onOutboundChange: (value: string) => void; onInboundChange: (value: string) => void;
 }
+
+export interface DateFieldsHandle { close: () => void; }
 
 type CellState = "UNLOADED" | "LOADING" | "LOADED" | "CACHED" | "STALE_AVAILABLE" | "UNAVAILABLE" | "ERROR";
 
@@ -23,12 +26,11 @@ function shift(value: string, days: number) { const result = dateAt(value); resu
 function range(center: string) { return Array.from({ length: 7 }, (_, index) => shift(center, index - 3)); }
 function category(value: CalendarPrice["classification"]) { return value === "LOW" ? "Likely cheaper" : value === "HIGH" ? "Higher" : "Typical"; }
 
-function DirectionalDatePicker({ label, value, disabled, origins, destinations, adults, childPassengers, currency, direction, onChange }: {
+function DirectionalDatePicker({ label, value, disabled, origins, destinations, adults, childPassengers, currency, direction, open, rootRef, onOpen, onClose, onChange }: {
   label: string; value: string; disabled?: boolean; origins: string[]; destinations: string[];
   adults: number; childPassengers: number; currency: string; direction: "OUTBOUND" | "RETURN";
-  onChange: (value: string) => void;
+  open: boolean; rootRef: RefObject<HTMLDivElement | null>; onOpen: () => void; onClose: () => void; onChange: (value: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
   const [center, setCenter] = useState(value);
   const [prices, setPrices] = useState<Record<string, CalendarPrice>>({});
   const [states, setStates] = useState<Record<string, CellState>>({});
@@ -61,16 +63,16 @@ function DirectionalDatePicker({ label, value, disabled, origins, destinations, 
     }
   }
 
-  function show() { setOpen(true); setCenter(value); void load(range(value)); }
+  function show() { onOpen(); setCenter(value); void load(range(value)); }
   function navigate(days: number) { const next = shift(center, days); setCenter(next); void load(range(next)); }
 
-  return <div className="directional-date compact-field">
-    <button type="button" className="date-trigger" disabled={disabled} onClick={() => open ? setOpen(false) : show()}><span>{label}</span><strong>{new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(dateAt(value))}</strong></button>
+  return <div ref={rootRef} className="directional-date compact-field">
+    <button type="button" className="date-trigger" disabled={disabled} onClick={() => open ? onClose() : show()}><span>{label}</span><strong>{new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(dateAt(value))}</strong></button>
     {open && <div className="date-popover" role="dialog" aria-label={`${label} directional date prices`}>
       <div className="date-popover-nav"><button type="button" aria-label="Previous dates" onClick={() => navigate(-7)}>‹</button><strong>{new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric" }).format(dateAt(center))}</strong><button type="button" aria-label="Next dates" onClick={() => navigate(7)}>›</button></div>
       <div className="date-price-grid">{dates.map((date) => {
         const item = prices[date]; const state = states[date] ?? "UNLOADED";
-        return <button type="button" key={date} className={`date-price-cell ${item?.classification?.toLowerCase() ?? ""} ${date === value ? "selected" : ""}`} onClick={() => { onChange(date); setOpen(false); }}>
+        return <button type="button" key={date} className={`date-price-cell ${item?.classification?.toLowerCase() ?? ""} ${date === value ? "selected" : ""}`} onClick={() => { onChange(date); onClose(); }}>
           <span>{new Intl.DateTimeFormat("en-GB", { weekday: "short" }).format(dateAt(date))}</span><strong>{dateAt(date).getDate()}</strong>
           {state === "LOADING" ? <i role="status" aria-label="Loading date price" className="date-price-spinner" /> : state === "UNAVAILABLE" || state === "ERROR" ? <small title={state === "ERROR" ? "Price temporarily unavailable" : "No nonstop fare observed"}>—</small> : item?.price !== null && item ? <><small>{new Intl.NumberFormat("en-GB", { style: "currency", currency: item.currency, maximumFractionDigits: 0 }).format(Number(item.price))}</small><em>{state === "STALE_AVAILABLE" ? "Last observed" : category(item.classification)}</em></> : <small>Load</small>}
         </button>;
@@ -80,9 +82,23 @@ function DirectionalDatePicker({ label, value, disabled, origins, destinations, 
   </div>;
 }
 
-export function DateFields(props: DateFieldsProps) {
+export const DateFields = forwardRef<DateFieldsHandle, DateFieldsProps>(function DateFields(props, ref) {
+  const [openDirection, setOpenDirection] = useState<"OUTBOUND" | "RETURN" | null>(null);
+  const outboundRoot = useRef<HTMLDivElement>(null);
+  const returnRoot = useRef<HTMLDivElement>(null);
+  useImperativeHandle(ref, () => ({ close: () => setOpenDirection(null) }), []);
+  useEffect(() => {
+    const outside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!outboundRoot.current?.contains(target) && !returnRoot.current?.contains(target)) setOpenDirection(null);
+    };
+    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") setOpenDirection(null); };
+    document.addEventListener("mousedown", outside);
+    document.addEventListener("keydown", escape);
+    return () => { document.removeEventListener("mousedown", outside); document.removeEventListener("keydown", escape); };
+  }, []);
   return <>
-    <DirectionalDatePicker label="Out" value={props.outbound} origins={props.origins} destinations={props.destinations} adults={props.adults} childPassengers={props.childPassengers} currency={props.currency} direction="OUTBOUND" onChange={props.onOutboundChange} />
-    <DirectionalDatePicker label="Return" value={props.inbound} disabled={!props.roundTrip} origins={props.destinations} destinations={props.origins} adults={props.adults} childPassengers={props.childPassengers} currency={props.currency} direction="RETURN" onChange={props.onInboundChange} />
+    <DirectionalDatePicker label="Out" value={props.outbound} origins={props.origins} destinations={props.destinations} adults={props.adults} childPassengers={props.childPassengers} currency={props.currency} direction="OUTBOUND" open={openDirection === "OUTBOUND"} rootRef={outboundRoot} onOpen={() => setOpenDirection("OUTBOUND")} onClose={() => setOpenDirection(null)} onChange={props.onOutboundChange} />
+    <DirectionalDatePicker label="Return" value={props.inbound} disabled={!props.roundTrip} origins={props.destinations} destinations={props.origins} adults={props.adults} childPassengers={props.childPassengers} currency={props.currency} direction="RETURN" open={openDirection === "RETURN"} rootRef={returnRoot} onOpen={() => setOpenDirection("RETURN")} onClose={() => setOpenDirection(null)} onChange={props.onInboundChange} />
   </>;
-}
+});

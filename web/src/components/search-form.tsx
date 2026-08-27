@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { TripSearchRequest } from "@/lib/api/types";
 import { mapSelfTransferPolicy } from "@/lib/search/policy";
 import { DateFields } from "./date-fields";
+import type { DateFieldsHandle } from "./date-fields";
 
 const LONDON = { LGW: "Gatwick", STN: "Stansted", LTN: "Luton", LHR: "Heathrow", LCY: "London City" };
 const SARDINIA = { CAG: "Cagliari", OLB: "Olbia", AHO: "Alghero" };
@@ -12,7 +13,7 @@ function NumberField({ label, value, min, onChange }: { label: string; value: nu
   return <label className="compact-field number-field"><span>{label}</span><input type="number" min={min} value={value} onChange={(event) => onChange(Number(event.target.value))} /></label>;
 }
 
-function AirportMultiSelect({ label, group, airports, selected, onChange }: { label: string; group: string; airports: Record<string, string>; selected: string[]; onChange: (value: string[]) => void }) {
+function AirportMultiSelect({ label, group, airports, selected, onChange, onOpen }: { label: string; group: string; airports: Record<string, string>; selected: string[]; onChange: (value: string[]) => void; onOpen: () => void }) {
   const codes = Object.keys(airports);
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
@@ -25,7 +26,7 @@ function AirportMultiSelect({ label, group, airports, selected, onChange }: { la
   }, []);
   return (
     <div ref={root} className="airport-select compact-field">
-      <button type="button" className="airport-select-trigger" aria-label={`${label} ${group} (${selected.length})`} aria-expanded={open} onClick={() => setOpen((value) => !value)}><span>{label}</span><strong>{group} ({selected.length})</strong></button>
+      <button type="button" className="airport-select-trigger" aria-label={`${label} ${group} (${selected.length})`} aria-expanded={open} onClick={() => setOpen((value) => { if (!value) onOpen(); return !value; })}><span>{label}</span><strong>{group} ({selected.length})</strong></button>
       {open && <div className="airport-menu">
         <div className="airport-menu-actions"><button type="button" onClick={() => onChange(codes)}>Select all</button><button type="button" onClick={() => onChange([])}>Clear</button></div>
         {Object.entries(airports).map(([code, name]) => <label className="airport-option" key={code}><input aria-label={`${label} ${code}`} type="checkbox" checked={selected.includes(code)} onChange={() => onChange(selected.includes(code) ? selected.filter((item) => item !== code) : [...selected, code])} /><strong>{code}</strong><span>{name}</span></label>)}
@@ -46,23 +47,18 @@ export function SearchForm({ onSearch, disabled, onExcludeBaggageChange }: { onS
   const [roundTrip, setRoundTrip] = useState(true);
   const [adults, setAdults] = useState(2);
   const [children, setChildren] = useState(2);
-  const [cabinBags, setCabinBags] = useState(1);
-  const [checkedBags, setCheckedBags] = useState(0);
+  const [cabinBags] = useState(1);
+  const [checkedBags] = useState(0);
   const [outboundTransfer, setOutboundTransfer] = useState(false);
   const [returnTransfer, setReturnTransfer] = useState(false);
   const [excludeBaggage, setExcludeBaggage] = useState(true);
-
-  function reset() {
-    setOrigins(Object.keys(LONDON)); setDestinations(Object.keys(SARDINIA));
-    setOutboundDate("2026-12-18"); setReturnDate("2026-12-28"); setRoundTrip(true);
-    setAdults(2); setChildren(2); setCabinBags(1); setCheckedBags(0);
-    setOutboundTransfer(false); setReturnTransfer(false);
-    setExcludeBaggage(true); onExcludeBaggageChange?.(true);
-  }
+  const calendarRef = useRef<DateFieldsHandle>(null);
+  const closeCalendars = () => calendarRef.current?.close();
 
   return (
-    <form className="search-panel" onReset={reset} onSubmit={(event) => {
+    <form className="search-panel" onSubmit={(event) => {
       event.preventDefault();
+      closeCalendars();
       const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
       onSearch({
         origins,
@@ -82,14 +78,13 @@ export function SearchForm({ onSearch, disabled, onExcludeBaggageChange }: { onS
       });
     }}>
       <div className="primary-controls">
-        <AirportMultiSelect label="From" group="London" airports={LONDON} selected={origins} onChange={setOrigins} />
-        <AirportMultiSelect label="To" group="Sardinia" airports={SARDINIA} selected={destinations} onChange={setDestinations} />
-        <DateFields outbound={outboundDate} inbound={returnDate} roundTrip={roundTrip} origins={origins} destinations={destinations} adults={adults} childPassengers={children} currency="GBP" onOutboundChange={setOutboundDate} onInboundChange={setReturnDate} />
+        <AirportMultiSelect label="From" group="London" airports={LONDON} selected={origins} onChange={setOrigins} onOpen={closeCalendars} />
+        <AirportMultiSelect label="To" group="Sardinia" airports={SARDINIA} selected={destinations} onChange={setDestinations} onOpen={closeCalendars} />
+        <DateFields ref={calendarRef} outbound={outboundDate} inbound={returnDate} roundTrip={roundTrip} origins={origins} destinations={destinations} adults={adults} childPassengers={children} currency="GBP" onOutboundChange={setOutboundDate} onInboundChange={setReturnDate} />
         <NumberField label="Adults" value={adults} min={1} onChange={setAdults} />
         <NumberField label="Children" value={children} min={0} onChange={setChildren} />
         <button className="search-button" value="search" disabled={disabled || !origins.length || !destinations.length}>{disabled ? "Searching…" : "Search"}</button>
         <button className="refresh-button" value="refresh" disabled={disabled || !origins.length || !destinations.length}>Refresh live prices</button>
-        <button className="reset-button" type="reset" disabled={disabled}>Reset</button>
       </div>
       <div className="constraint-grid">
         <DirectionControls title="Outbound" allowStop={outboundTransfer} onAllowStop={setOutboundTransfer} />

@@ -3,6 +3,11 @@ import { describe, expect, it, vi } from "vitest";
 import { SearchForm } from "./search-form";
 
 describe("search controls", () => {
+  it("does not render an obsolete Reset action", () => {
+    render(<SearchForm onSearch={vi.fn()} disabled={false} />);
+    expect(screen.queryByRole("button", { name: "Reset" })).not.toBeInTheDocument();
+  });
+
   it("changes selected airports in the submitted request only after Search", () => {
     const onSearch = vi.fn();
     render(<SearchForm onSearch={onSearch} disabled={false} />);
@@ -28,6 +33,17 @@ describe("search controls", () => {
     render(<SearchForm onSearch={onSearch} disabled={false} />);
     fireEvent.click(screen.getByRole("button", { name: "Refresh live prices" }));
     expect(onSearch).toHaveBeenCalledWith(expect.objectContaining({ refresh_prices: true }));
+  });
+
+  it("closes an open calendar when Search or another popover is opened", () => {
+    render(<SearchForm onSearch={vi.fn()} disabled={false} />);
+    fireEvent.click(screen.getByRole("button", { name: /Out18 Dec 2026/ }));
+    expect(screen.getByRole("dialog", { name: /Out directional/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /From London/ }));
+    expect(screen.queryByRole("dialog", { name: /Out directional/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Out18 Dec 2026/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    expect(screen.queryByRole("dialog", { name: /Out directional/ })).not.toBeInTheDocument();
   });
 
   it("allows clearing a group and disables both search actions", () => {

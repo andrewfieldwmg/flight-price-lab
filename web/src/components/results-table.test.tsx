@@ -131,10 +131,12 @@ describe("dense flight results", () => {
     expect(sortOptions([...options], key, true)[1].id).toBe(firstId);
   });
 
-  it("can restrict the table to efficient options", () => {
+  it("shows all eligible options without an efficient-only toggle", () => {
     renderResults();
-    fireEvent.click(screen.getByRole("button", { name: "Efficient only" }));
-    expect(screen.queryByText("LGW–FCO–CAG")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Efficient only" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "All options" })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Outbound minimum saving"), { target: { value: "0" } });
+    expect(screen.getByText("LGW–FCO–CAG")).toBeInTheDocument();
     expect(screen.getByText("LGW–MXP–CAG")).toBeInTheDocument();
   });
 
@@ -146,11 +148,13 @@ describe("dense flight results", () => {
     expect(screen.getByText("LGW–CAG")).toBeInTheDocument();
   });
 
-  it("expands a row inline with leg and stopover details", () => {
+  it("has no obsolete row expansion affordance or ancillary/profile detail", () => {
     renderResults();
     fireEvent.click(screen.getByText("LGW–MXP–CAG"));
-    expect(screen.getByText(/LGW 08:00 → MXP 10:00/)).toBeInTheDocument();
-    expect(screen.getByText("Stopover MXP · 3h 50m")).toBeInTheDocument();
+    expect(screen.queryByText("Ancillary status")).not.toBeInTheDocument();
+    expect(screen.queryByText("Connection profile")).not.toBeInTheDocument();
+    expect(screen.queryByText(/missed-connection protection/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("row", { name: /Base fare/ })).not.toBeInTheDocument();
   });
 
   it("shows composite change since the most recent comparable observation", () => {
