@@ -986,7 +986,7 @@ class SearchSessionStore:
             search_key=snapshot.search_key,
             status=snapshot.status.value,
             request_json=request.model_dump_json(by_alias=True),
-            snapshot_json=snapshot.model_dump_json(by_alias=True),
+            snapshot_json=self._cache_snapshot_json(snapshot),
             created_at=now,
             updated_at=now,
             completed_at=None,
@@ -1015,7 +1015,7 @@ class SearchSessionStore:
             if entry is None:
                 raise KeyError(f"search session {snapshot.search_id} was not persisted")
             entry.status = snapshot.status.value
-            entry.snapshot_json = snapshot.model_dump_json(by_alias=True)
+            entry.snapshot_json = self._cache_snapshot_json(snapshot)
             entry.updated_at = now
             if terminal:
                 entry.completed_at = now
@@ -1044,3 +1044,29 @@ class SearchSessionStore:
                     return None
             value = entry.snapshot_json
         return SearchSnapshot.model_validate_json(value)
+
+    def get_request(self, search_id: str) -> Any | None:
+        """Load the request context needed to derive history on cache reads."""
+        from flight_price_lab.api.models import TripSearchRequest
+
+        with Session(self.engine) as session:
+            entry = session.get(SearchSessionEntry, search_id)
+            value = entry.request_json if entry is not None else None
+        return TripSearchRequest.model_validate_json(value) if value is not None else None
+
+    @staticmethod
+    def _cache_snapshot_json(snapshot: Any) -> str:
+        """Serialize search facts without derived, non-authoritative history."""
+        value = snapshot.model_dump(mode="json", by_alias=True)
+
+        def strip_history(item: Any) -> None:
+            if isinstance(item, dict):
+                item.pop("history", None)
+                for child in item.values():
+                    strip_history(child)
+            elif isinstance(item, list):
+                for child in item:
+                    strip_history(child)
+
+        strip_history(value)
+        return json.dumps(value, separators=(",", ":"))

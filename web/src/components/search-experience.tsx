@@ -52,6 +52,8 @@ export function SearchExperience() {
           dispatch({ type: "restore_cached", snapshot: restored, selectedOutboundId: cached.ui_state.selected_outbound_id, selectedReturnId: cached.ui_state.selected_return_id, directionProgress: cached.ui_state.direction_progress });
           logFrontendCacheEvent("RESULT_RESTORED_FROM_CACHE", { trip_id: cached.trip_id, search_key: key, search_key_short: key.slice(0, 12) });
           setCachedMinutes(cachedAgeMinutes(cached));
+          const rehydrated = await getSearch(cached.trip_id);
+          dispatch({ type: "restore_cached", snapshot: rehydrated, selectedOutboundId: cached.ui_state.selected_outbound_id, selectedReturnId: cached.ui_state.selected_return_id, directionProgress: cached.ui_state.direction_progress });
           return;
         }
       }

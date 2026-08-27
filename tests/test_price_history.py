@@ -10,6 +10,7 @@ from flight_price_lab.api.models import (
     Direction,
     HistoryStatus,
     PriceCompleteness,
+    PriceHistoryComparison,
     SearchSnapshot,
     SearchStatus,
     SelfTransferPolicy,
@@ -24,6 +25,8 @@ from flight_price_lab.models import FlightLeg, FlightOffer, TicketingType
 from flight_price_lab.storage.database import (
     FlightObservation,
     SearchObservationRun,
+    SearchSessionEntry,
+    SearchSessionStore,
     TripOptionObservation,
     create_database_engine,
 )
@@ -272,6 +275,97 @@ def test_same_day_observations_never_replace_previous_day_baseline() -> None:
         assert result.outbound.baseline.legs[0].history.previous_price == Decimal(623)
     with Session(engine) as session:
         assert session.scalar(select(func.count()).select_from(SearchObservationRun)) == 3
+
+
+def test_legacy_cached_zero_percent_history_is_rehydrated_from_prior_day() -> None:
+    engine = create_database_engine()
+    history_store = PriceHistoryStore(engine)
+    session_store = SearchSessionStore(engine=engine)
+    departure = datetime(2026, 12, 18, 10, tzinfo=UTC)
+    old_offer = offer("FR 2687", "STN", "CAG", departure, "623")
+    old_option = option(Direction.OUTBOUND, (old_offer,), "623")
+    history_store.capture_and_enrich(
+        snapshot("aug-26", old_option), request(), (old_offer,),
+        write_observation=True, observed_at=datetime(2026, 8, 26, 14, 41, tzinfo=UTC),
+    )
+    current_offer = old_offer.model_copy(update={"total_price": Decimal(549)})
+    current_option = option(Direction.OUTBOUND, (current_offer,), "549")
+    history_store.capture_and_enrich(
+        snapshot("aug-27-am", current_option), request(), (current_offer,),
+        write_observation=True, observed_at=datetime(2026, 8, 27, 9, 50, tzinfo=UTC),
+    )
+    stale_history = PriceHistoryComparison(
+        history_status=HistoryStatus.PREVIOUS_FOUND,
+        previous_price=Decimal(549),
+        price_change_amount=Decimal(0),
+        price_change_percent=Decimal(0),
+        previous_observed_at=datetime(2026, 8, 27, 9, 50, tzinfo=UTC),
+        elapsed_seconds=2 * 60 * 60 + 40 * 60,
+        day_difference=0,
+        previous_observation_run_id="same-day-run",
+    )
+    stale_option = current_option.model_copy(
+        update={
+            "history": stale_history,
+            "legs": [
+                current_option.legs[0].model_copy(update={"history": stale_history})
+            ],
+        }
+    )
+    stale_snapshot = snapshot("legacy-cache", stale_option)
+    stale_snapshot.status = SearchStatus.COMPLETED
+    stale_snapshot.diagnostics.original_search_completed_at = datetime(
+        2026, 8, 27, 12, 30, tzinfo=UTC
+    )
+    session_store.create(stale_snapshot, request())
+    # Emulate an existing cache row written before history was stripped on writes.
+    with Session(engine) as session:
+        entry = session.get(SearchSessionEntry, "legacy-cache")
+        assert entry is not None
+        entry.snapshot_json = stale_snapshot.model_dump_json(by_alias=True)
+        session.commit()
+
+    cached = session_store.get("legacy-cache", now=datetime(2026, 8, 27, 12, 50, tzinfo=UTC))
+    assert cached.outbound.baseline.history.price_change_percent == Decimal(0)
+    rehydrated = history_store.capture_and_enrich(
+        cached,
+        session_store.get_request("legacy-cache"),
+        (),
+        write_observation=False,
+        observed_at=datetime(2026, 8, 27, 12, 30, tzinfo=UTC),
+    )
+
+    history = rehydrated.outbound.baseline.history
+    assert history.previous_price == Decimal(623)
+    assert history.price_change_amount == Decimal(-74)
+    assert history.price_change_percent == Decimal("-11.88")
+    assert history.day_difference == 1
+    assert rehydrated.diagnostics.provider_calls_this_invocation == 0
+    with Session(engine) as session:
+        assert session.scalar(select(func.count()).select_from(SearchObservationRun)) == 2
+
+
+def test_future_backend_cache_payload_omits_derived_history() -> None:
+    engine = create_database_engine()
+    session_store = SearchSessionStore(engine=engine)
+    selected = offer(
+        "FR 2687", "STN", "CAG", datetime(2026, 12, 18, 10, tzinfo=UTC), "549"
+    )
+    selected_option = option(Direction.OUTBOUND, (selected,), "549")
+    stale = PriceHistoryComparison(
+        history_status=HistoryStatus.PREVIOUS_FOUND,
+        previous_price=Decimal(549),
+        price_change_amount=Decimal(0),
+        price_change_percent=Decimal(0),
+    )
+    selected_option = selected_option.model_copy(update={"history": stale})
+    cached_snapshot = snapshot("stripped-cache", selected_option)
+    session_store.create(cached_snapshot, request())
+
+    with Session(engine) as session:
+        payload = session.get(SearchSessionEntry, "stripped-cache").snapshot_json
+    assert '"history"' not in payload
+    assert session_store.get("stripped-cache").outbound.baseline.history is None
 
 
 def test_prior_day_uses_london_date_and_skips_missing_dates() -> None:

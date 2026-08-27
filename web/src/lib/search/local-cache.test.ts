@@ -74,4 +74,23 @@ describe("completed search localStorage cache", () => {
       expect(invocation.diagnostics.original_provider_calls).toBe(17);
     }
   });
+
+  it("strips stale history from new and legacy localStorage entries", () => {
+    const staleHistory = { history_status: "PREVIOUS_FOUND" as const, previous_price: "549", price_change_amount: "0", price_change_percent: "0", previous_observed_at: "2026-08-27T09:50:00Z", elapsed_seconds: 9600, day_difference: 0, previous_observation_run_id: "same-day" };
+    const staleResults = JSON.parse(JSON.stringify(results)) as SearchSnapshot;
+    staleResults.outbound.baseline!.history = staleHistory;
+    staleResults.outbound.baseline!.legs[0].history = staleHistory;
+    staleResults.outbound.nonstop_options[0].history = staleHistory;
+
+    saveLocalSearch("key-1", request, staleResults);
+    const newlySaved = window.localStorage.getItem("flight-price-lab:key-1")!;
+    expect(newlySaved).not.toContain('"history"');
+
+    const legacy = { ...JSON.parse(newlySaved), results: staleResults };
+    window.localStorage.setItem("flight-price-lab:key-1", JSON.stringify(legacy));
+    const replay = currentInvocationFromLocalCache(loadLocalSearch("key-1")!);
+    expect(replay.outbound.baseline!.history).toBeUndefined();
+    expect(replay.outbound.baseline!.legs[0].history).toBeUndefined();
+    expect(replay.outbound.nonstop_options[0].history).toBeUndefined();
+  });
 });

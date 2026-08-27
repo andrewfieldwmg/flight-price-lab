@@ -379,7 +379,22 @@ def create_app(
         snapshot = search_store.get(search_id)
         if snapshot is None:
             raise HTTPException(status_code=404, detail="search not found")
-        return snapshot
+        search_request = search_store.get_request(search_id)
+        if search_request is None:
+            raise HTTPException(status_code=404, detail="search request not found")
+        current_observed_at = (
+            snapshot.diagnostics.original_search_completed_at
+            or snapshot.diagnostics.search_completed_at
+            or datetime.now(UTC)
+        )
+        return await asyncio.to_thread(
+            price_history_store.capture_and_enrich,
+            snapshot,
+            search_request,
+            (),
+            write_observation=False,
+            observed_at=current_observed_at,
+        )
 
     @application.get("/api/search/{search_id}/events")
     async def search_events(search_id: str) -> StreamingResponse:

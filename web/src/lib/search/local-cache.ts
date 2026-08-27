@@ -53,6 +53,21 @@ export interface LocalSearchSnapshot {
   };
 }
 
+export function withoutHistory(snapshot: SearchSnapshot): SearchSnapshot {
+  const value = JSON.parse(JSON.stringify(snapshot)) as SearchSnapshot;
+  const strip = (item: unknown): void => {
+    if (Array.isArray(item)) {
+      item.forEach(strip);
+    } else if (item && typeof item === "object") {
+      const record = item as Record<string, unknown>;
+      delete record.history;
+      Object.values(record).forEach(strip);
+    }
+  };
+  strip(value);
+  return value;
+}
+
 export function saveLocalSearch(
   searchKey: string,
   request: TripSearchRequest,
@@ -70,7 +85,7 @@ export function saveLocalSearch(
     saved_at: now.toISOString(),
     expires_at: nextLondonCacheCutoff(now).toISOString(),
     request: { ...request, refresh_prices: false },
-    results,
+    results: withoutHistory(results),
     ui_state: uiState,
   };
   window.localStorage.setItem(`${PREFIX}${searchKey}`, JSON.stringify(value));
@@ -78,9 +93,10 @@ export function saveLocalSearch(
 }
 
 export function currentInvocationFromLocalCache(value: LocalSearchSnapshot): SearchSnapshot {
-  const previous = value.results.diagnostics;
+  const cachedResults = withoutHistory(value.results);
+  const previous = cachedResults.diagnostics;
   return {
-    ...value.results,
+    ...cachedResults,
     diagnostics: {
       ...previous,
       local_cache_hit: true,
