@@ -174,7 +174,7 @@ describe("dense flight results", () => {
     const historicalResults = { ...results, baseline: historical, nonstop_options: [historical] };
     render(<DirectionResults title="Outbound" date="2026-12-18" results={historicalResults} selectedId={null} onSelect={vi.fn()} complete connectionProfile="CONSERVATIVE" selfTransferEnabled={false} />);
     expect(screen.getByText("↑ 6.3%")).toBeInTheDocument();
-    expect(screen.getByText("3d ago")).toBeInTheDocument();
+    expect(screen.getByText("vs 3d ago")).toBeInTheDocument();
     expect(screen.getByTitle(/Previous day £378.00/)).toBeInTheDocument();
   });
 
@@ -188,7 +188,7 @@ describe("dense flight results", () => {
     expect(screen.getByRole("columnheader", { name: "Trend" })).toHaveClass("trend-column");
     expect(screen.getByRole("img", { name: /Price history/ }).closest("td")).toHaveClass("trend-column", "trend-cell");
     expect(screen.getByLabelText(/24 Aug.*£500.*27 Aug.*£623/)).toBeInTheDocument();
-    expect(screen.getByText("1d ago")).toBeInTheDocument();
+    expect(screen.getByText("vs yesterday")).toBeInTheDocument();
   });
 
   it("uses decrease, neutral, and first-seen indicators in the Change column", () => {
@@ -207,12 +207,13 @@ describe("dense flight results", () => {
     const first = option({ id: "first", history: { ...comparison, history_status: "FIRST_SEEN", previous_price: null, price_change_amount: null, price_change_percent: null } });
     render(<DirectionResults title="Outbound" date="2026-12-18" results={{ ...results, baseline: first, nonstop_options: [decreased, unchanged, first] }} selectedId={null} onSelect={vi.fn()} complete connectionProfile="CONSERVATIVE" selfTransferEnabled={false} />);
     expect(screen.getByText("↓ 5.0%")).toHaveAccessibleName("Price decreased by 5.0 percent since last seen");
-    expect(screen.getByText("— (0%)")).toHaveAccessibleName("No price change since last seen");
+    expect(screen.getByText("— 0%")).toHaveAccessibleName("No price change since last seen");
     expect(screen.getByText("New")).toHaveAccessibleName("First price observation");
     expect(screen.getByText("was £400")).toHaveClass("history-was");
     expect(screen.getByText("was £486")).toHaveClass("history-was");
     expect(screen.getByText("New").closest("td")).not.toHaveTextContent("was");
-    expect(screen.getAllByText("today")).toHaveLength(2);
+    expect(screen.getByText("New").closest("td")).not.toHaveTextContent("vs");
+    expect(screen.getAllByText("vs today")).toHaveLength(2);
     expect(screen.queryByText(/\d+[hm] ago/)).not.toBeInTheDocument();
   });
 
@@ -222,7 +223,13 @@ describe("dense flight results", () => {
     expect(screen.getByText("↓ 7.7%")).toBeInTheDocument();
     expect(screen.getByText("was £849")).toHaveClass("history-was");
     expect(screen.getByText("was £849").tagName).toBe("SPAN");
-    expect(screen.getByText("1d ago")).toBeInTheDocument();
+    expect(screen.getByText("vs yesterday")).toBeInTheDocument();
+  });
+
+  it("labels a two-calendar-day comparison explicitly", () => {
+    const selected = option({ id: "two-days", history: { history_status: "PREVIOUS_FOUND", previous_price: "700", price_change_amount: "41", price_change_percent: "5.86", previous_observed_at: "2026-08-25T14:41:00Z", elapsed_seconds: 172800, day_difference: 2, previous_observation_run_id: "run" } });
+    render(<DirectionResults title="Outbound" date="2026-12-18" results={{ ...results, baseline: selected, nonstop_options: [selected] }} selectedId={null} onSelect={vi.fn()} complete connectionProfile="CONSERVATIVE" selfTransferEnabled={false} />);
+    expect(screen.getByText("vs 2d ago")).toBeInTheDocument();
   });
 
   it("shows unresolved history as loading rather than New", () => {

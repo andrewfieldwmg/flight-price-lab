@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { option, synthetic } from "@/test/fixtures";
-import { TripSummary } from "./trip-summary";
+import { reconstructTripTotalHistory, TripSummary } from "./trip-summary";
 
 let observerCallback: IntersectionObserverCallback | null = null;
 let observerOptions: IntersectionObserverInit | undefined;
@@ -53,8 +53,8 @@ describe("selected trip summary", () => {
     expect(screen.getByText("↑ 3.2% since 3d ago")).toBeInTheDocument();
     expect(screen.getByText("Loading history…", { selector: ".summary-leg em" })).toBeInTheDocument();
     expect(screen.getByText("↓ 10.0% since 3d ago")).toBeInTheDocument();
-    expect(screen.getByText("↑ 5.9% since 3d ago")).toHaveAccessibleName("Trip price increased by 5.9 percent since last seen");
-    expect(screen.getByText("was £918")).toHaveClass("summary-previous-price");
+    expect(screen.getByText("History unavailable", { selector: ".summary-total-block small" })).toHaveAccessibleName("Price history unavailable");
+    expect(screen.queryByText("was £918")).not.toBeInTheDocument();
   });
 
   it("keeps unresolved summary history in a loading state", () => {
@@ -85,18 +85,18 @@ describe("selected trip summary", () => {
     expect(screen.getAllByText(/since yesterday/).length).toBeGreaterThan(0);
   });
 
-  it("combines only common-run direction history for trip change and sparkline", () => {
+  it("reconstructs trip history independently of observation-run pairing", () => {
     const outbound = option({ id: "out-current", base_price: "784" });
     const inbound = option({ id: "in-current", direction: "RETURN", base_price: "735" });
     outbound.history = { history_status: "PREVIOUS_FOUND", previous_price: "849", price_change_amount: "-65", price_change_percent: "-7.66", previous_observed_at: "2026-08-26T14:41:00Z", elapsed_seconds: 86400, day_difference: 1, previous_observation_run_id: "prior", visual_series: [
       { observed_at: "2026-08-26T14:41:00Z", price: "849", observation_run_id: "prior" },
       { observed_at: "2026-08-27T12:30:00Z", price: "784", observation_run_id: "CURRENT" },
-    ] };
+    ], daily_series: [{ date: "2026-08-26", price: "849" }, { date: "2026-08-27", price: "784" }] };
     inbound.history = { history_status: "PREVIOUS_FOUND", previous_price: "788", price_change_amount: "-53", price_change_percent: "-6.73", previous_observed_at: "2026-08-26T14:41:00Z", elapsed_seconds: 86400, day_difference: 1, previous_observation_run_id: "prior", visual_series: [
       { observed_at: "2026-08-26T14:41:00Z", price: "788", observation_run_id: "prior" },
       { observed_at: "2026-08-27T10:00:00Z", price: "999", observation_run_id: "unmatched-return" },
       { observed_at: "2026-08-27T12:30:00Z", price: "735", observation_run_id: "CURRENT" },
-    ] };
+    ], daily_series: [{ date: "2026-08-26", price: "788" }, { date: "2026-08-27", price: "735" }] };
     render(<TripSummary outbound={outbound} inbound={inbound} outboundBaseline={outbound} inboundBaseline={inbound} />);
     expect(screen.getByText("£1,519")).toBeInTheDocument();
     expect(screen.getByText("↓ 7.2% since yesterday")).toBeInTheDocument();
@@ -109,6 +109,33 @@ describe("selected trip summary", () => {
     expect(sparkline).not.toHaveAccessibleName(/999/);
     expect(screen.getByText("↓ 7.7% since yesterday")).toBeInTheDocument();
     expect(screen.getByText("↓ 6.7% since yesterday")).toBeInTheDocument();
+  });
+
+  it("reconstructs exact and three-day carry-forward trip totals without carrying backward", () => {
+    const outbound = [{ date: "2026-08-24", price: "450" }, { date: "2026-08-25", price: "430" }, { date: "2026-08-27", price: "503" }];
+    const inbound = [{ date: "2026-08-24", price: "600" }, { date: "2026-08-26", price: "549" }, { date: "2026-08-27", price: "549" }];
+    expect(reconstructTripTotalHistory(outbound, inbound)).toEqual([
+      { observed_at: "2026-08-24T12:00:00Z", price: "1050", history_quality: "EXACT" },
+      { observed_at: "2026-08-25T12:00:00Z", price: "1030", history_quality: "PARTIAL_CARRY_FORWARD" },
+      { observed_at: "2026-08-26T12:00:00Z", price: "979", history_quality: "PARTIAL_CARRY_FORWARD" },
+      { observed_at: "2026-08-27T12:00:00Z", price: "1052", history_quality: "EXACT" },
+    ]);
+    expect(reconstructTripTotalHistory([{ date: "2026-08-20", price: "430" }], [{ date: "2026-08-24", price: "549" }])).toEqual([]);
+    expect(reconstructTripTotalHistory([{ date: "2026-08-24", price: "430" }], [{ date: "2026-08-23", price: "600" }, { date: "2026-08-25", price: "549" }])).toEqual([
+      { observed_at: "2026-08-24T12:00:00Z", price: "1030", history_quality: "PARTIAL_CARRY_FORWARD" },
+      { observed_at: "2026-08-25T12:00:00Z", price: "979", history_quality: "PARTIAL_CARRY_FORWARD" },
+    ]);
+    expect(reconstructTripTotalHistory([{ date: "2026-08-24", price: "450" }], inbound)[0].price).not.toBe(reconstructTripTotalHistory([{ date: "2026-08-24", price: "400" }], inbound)[0].price);
+  });
+
+  it("calculates the screenshot-case headline change from reconstructed totals", () => {
+    const outbound = option({ id: "out-503", base_price: "503", history: { history_status: "PREVIOUS_FOUND", previous_price: "430", price_change_amount: "73", price_change_percent: "16.98", previous_observed_at: "2026-08-25T12:00:00Z", elapsed_seconds: 172800, day_difference: 2, previous_observation_run_id: "out", daily_series: [{ date: "2026-08-24", price: "450" }, { date: "2026-08-25", price: "430" }, { date: "2026-08-27", price: "503" }] } });
+    const inbound = option({ id: "in-549", direction: "RETURN", base_price: "549", history: { history_status: "PREVIOUS_FOUND", previous_price: "549", price_change_amount: "0", price_change_percent: "0", previous_observed_at: "2026-08-26T12:00:00Z", elapsed_seconds: 86400, day_difference: 1, previous_observation_run_id: "in", daily_series: [{ date: "2026-08-24", price: "600" }, { date: "2026-08-26", price: "549" }, { date: "2026-08-27", price: "549" }] } });
+    render(<TripSummary outbound={outbound} inbound={inbound} outboundBaseline={outbound} inboundBaseline={inbound} />);
+    expect(screen.getByText("£1,052")).toBeInTheDocument();
+    expect(screen.getByText("↑ 7.5% since yesterday")).toBeInTheDocument();
+    expect(screen.getByText("was £979")).toBeInTheDocument();
+    expect(screen.getByText("↑ 7.5% since yesterday")).toHaveAttribute("data-history-quality", "PARTIAL_CARRY_FORWARD");
   });
 
   it("collapses unchanged nonstop history without repeating leg price", () => {
@@ -220,7 +247,7 @@ describe("selected trip summary", () => {
     vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })));
     const outbound = synthetic();
     const inbound = synthetic("RETURN");
-    const history = { history_status: "PREVIOUS_FOUND" as const, previous_price: "500", price_change_amount: "-14", price_change_percent: "-2.8", previous_observed_at: "2026-08-26T10:00:00Z", elapsed_seconds: 86400, day_difference: 1, previous_observation_run_id: "prior", trend_status: "FALLING" as const, trend_start_price: "530", trend_current_price: "486", trend_change_percent: "-8.3", trend_span_days: 3, observed_day_count: 2, visual_series: [
+    const history = { history_status: "PREVIOUS_FOUND" as const, previous_price: "500", price_change_amount: "-14", price_change_percent: "-2.8", previous_observed_at: "2026-08-26T10:00:00Z", elapsed_seconds: 86400, day_difference: 1, previous_observation_run_id: "prior", trend_status: "FALLING" as const, trend_start_price: "530", trend_current_price: "486", trend_change_percent: "-8.3", trend_span_days: 3, observed_day_count: 2, daily_series: [{ date: "2026-08-26", price: "500" }, { date: "2026-08-27", price: "486" }], visual_series: [
       { observed_at: "2026-08-26T10:00:00Z", price: "500", observation_run_id: "prior" },
       { observed_at: "2026-08-27T10:00:00Z", price: "486", observation_run_id: "current" },
     ] };

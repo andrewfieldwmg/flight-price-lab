@@ -63,24 +63,44 @@ function summaryDate(value: string, weekday = true) {
   }).replace(",", "");
 }
 
+export interface TripTotalHistoryPoint {
+  observed_at: string;
+  price: string;
+  history_quality: "EXACT" | "PARTIAL_CARRY_FORWARD";
+}
+
+type DailyDirectionPoint = { date: string; price: string };
+
+function calendarDays(left: string, right: string): number {
+  return (Date.parse(`${right}T12:00:00Z`) - Date.parse(`${left}T12:00:00Z`)) / 86_400_000;
+}
+
+export function reconstructTripTotalHistory(outbound: DailyDirectionPoint[], inbound: DailyDirectionPoint[] | null): TripTotalHistoryPoint[] {
+  const out = new Map(outbound.map((point) => [point.date, point.price]));
+  if (!inbound) return [...out].sort(([left], [right]) => left.localeCompare(right)).map(([date, price]) => ({ observed_at: `${date}T12:00:00Z`, price, history_quality: "EXACT" }));
+  const back = new Map(inbound.map((point) => [point.date, point.price]));
+  const dates = [...new Set([...out.keys(), ...back.keys()])].sort();
+  const prior = (series: Map<string, string>, date: string) => [...series]
+    .filter(([candidate]) => candidate < date)
+    .sort(([left], [right]) => right.localeCompare(left))
+    .find(([candidate]) => calendarDays(candidate, date) <= 3)?.[1];
+  return dates.flatMap((date): TripTotalHistoryPoint[] => {
+    const exactOut = out.get(date);
+    const exactBack = back.get(date);
+    const outPrice = exactOut ?? prior(out, date);
+    const backPrice = exactBack ?? prior(back, date);
+    if (outPrice === undefined || backPrice === undefined) return [];
+    return [{
+      observed_at: `${date}T12:00:00Z`,
+      price: String(Number(outPrice) + Number(backPrice)),
+      history_quality: exactOut !== undefined && exactBack !== undefined ? "EXACT" : "PARTIAL_CARRY_FORWARD",
+    }];
+  });
+}
+
 function combinedTripHistory(outbound: TripOption | null, inbound: TripOption | null) {
-  if (!outbound || !inbound) return [];
-  const returns = new Map(
-    (inbound.history?.visual_series ?? [])
-      .filter((point) => point.observation_run_id)
-      .map((point) => [point.observation_run_id, point]),
-  );
-  return (outbound.history?.visual_series ?? [])
-    .filter((point) => point.observation_run_id && returns.has(point.observation_run_id))
-    .map((point) => {
-      const paired = returns.get(point.observation_run_id)!;
-      return {
-        observed_at: new Date(point.observed_at) > new Date(paired.observed_at) ? point.observed_at : paired.observed_at,
-        price: String(Number(point.price) + Number(paired.price)),
-        observation_run_id: point.observation_run_id,
-      };
-    })
-    .sort((left, right) => Date.parse(left.observed_at) - Date.parse(right.observed_at));
+  if (!outbound) return [];
+  return reconstructTripTotalHistory(outbound.history?.daily_series ?? [], inbound ? inbound.history?.daily_series ?? [] : null);
 }
 
 function DirectionSummary({ label, option, showBaggage, date, suppressTicketingBadge = false }: { label: string; option: TripOption; showBaggage: boolean; date: string; suppressTicketingBadge?: boolean }) {
@@ -172,19 +192,9 @@ export function TripSummary({ outbound, inbound, outboundBaseline, inboundBaseli
   const combinedPriorPoint = currentTripPoint
     ? [...tripTotalSeries].reverse().find((point) => londonCalendarDayCount(point.observed_at, new Date(currentTripPoint.observed_at))! > 0) ?? null
     : null;
-  const commonPriorRun = Boolean(
-    outbound
-    && inbound
-    && outboundHistory?.history_status === "PREVIOUS_FOUND"
-    && inboundHistory?.history_status === "PREVIOUS_FOUND"
-    && outboundHistory.previous_observation_run_id
-    && outboundHistory.previous_observation_run_id === inboundHistory.previous_observation_run_id,
-  );
   const oneWayPrior = Boolean(outbound && !inbound && outboundHistory?.history_status === "PREVIOUS_FOUND");
   const previousTripTotal = combinedPriorPoint
     ? Number(combinedPriorPoint.price)
-    : commonPriorRun
-    ? Number(outboundHistory?.previous_price) + Number(inboundHistory?.previous_price)
     : oneWayPrior ? Number(outboundHistory?.previous_price) : null;
   const tripHistoryChange = previousTripTotal === null ? null : summary.baseAlternativePrice - previousTripTotal;
   const tripHistoryPercent = previousTripTotal ? (tripHistoryChange ?? 0) / previousTripTotal * 100 : null;
@@ -233,7 +243,7 @@ export function TripSummary({ outbound, inbound, outboundBaseline, inboundBaseli
       <div className="mobile-summary-total">
         <span>Trip total</span>
         <div><strong>{money(summary.baseAlternativePrice, currency)}</strong>{complete && tripTotalSeries.length >= 2 && <PriceSparkline points={tripTotalSeries} currency={currency} className="trip-total-sparkline" />}</div>
-        <small aria-live="polite">{mobileTripHistory}</small>
+        <small aria-live="polite" data-history-quality={combinedPriorPoint?.history_quality}>{mobileTripHistory}</small>
       </div>
       {comparisonEnabled && <div className="mobile-summary-value">
         <div><span>Save</span><strong>{money(saving, currency)} / {percentage.toFixed(0)}%</strong></div>
@@ -254,7 +264,7 @@ export function TripSummary({ outbound, inbound, outboundBaseline, inboundBaseli
     </section> : <section ref={fullSummary} className="summary-strip" aria-label="Selected trip summary">
       <div className="summary-primary">
         <div className="summary-top-row" data-testid="summary-top-row">
-          <div className="summary-total-block"><span>Trip total</span><div className="trip-total-price-row"><strong>{money(summary.baseAlternativePrice, currency)}</strong>{complete && tripTotalSeries.length >= 2 && <PriceSparkline points={tripTotalSeries} currency={currency} className="trip-total-sparkline" />}</div>{tripHistoryDetailed && <small aria-live="polite" aria-label={tripHistoryState === "LOADING" ? "Updating trip total and price history" : tripHistoryState === "FIRST_SEEN" ? "First price observation" : tripHistoryState === "ERROR" ? "Price history unavailable" : tripHistoryChange !== null && tripHistoryChange > 0 ? `Trip price increased by ${Math.abs(tripHistoryPercent ?? 0).toFixed(1)} percent since last seen` : tripHistoryChange !== null && tripHistoryChange < 0 ? `Trip price decreased by ${Math.abs(tripHistoryPercent ?? 0).toFixed(1)} percent since last seen` : "No trip price change since last seen"}>{tripHistoryDetailed}</small>}{complete && previousTripTotal !== null && <span className="summary-previous-price">was {money(previousTripTotal, currency)}</span>}</div>
+          <div className="summary-total-block"><span>Trip total</span><div className="trip-total-price-row"><strong>{money(summary.baseAlternativePrice, currency)}</strong>{complete && tripTotalSeries.length >= 2 && <PriceSparkline points={tripTotalSeries} currency={currency} className="trip-total-sparkline" />}</div>{tripHistoryDetailed && <small aria-live="polite" data-history-quality={combinedPriorPoint?.history_quality} aria-label={tripHistoryState === "LOADING" ? "Updating trip total and price history" : tripHistoryState === "FIRST_SEEN" ? "First price observation" : tripHistoryState === "ERROR" ? "Price history unavailable" : tripHistoryChange !== null && tripHistoryChange > 0 ? `Trip price increased by ${Math.abs(tripHistoryPercent ?? 0).toFixed(1)} percent since last seen` : tripHistoryChange !== null && tripHistoryChange < 0 ? `Trip price decreased by ${Math.abs(tripHistoryPercent ?? 0).toFixed(1)} percent since last seen` : "No trip price change since last seen"}>{tripHistoryDetailed}</small>}{complete && previousTripTotal !== null && <span className="summary-previous-price">was {money(previousTripTotal, currency)}</span>}</div>
           <div className="summary-header-actions"><BookingPreparation searchId={searchId} optionIds={[outbound?.id, inbound?.id].filter((id): id is string => Boolean(id))} /><label><input type="checkbox" checked={showBaggage} onChange={(event) => setShowBaggage(event.target.checked)} /> Show estimated baggage costs</label></div>
         </div>
         {comparisonEnabled && <div className="summary-metrics">

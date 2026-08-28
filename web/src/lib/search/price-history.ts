@@ -53,12 +53,21 @@ export function elapsedDetailed(seconds: number | null): string {
   return `${Math.max(1, hours)} hour${hours === 1 ? "" : "s"}`;
 }
 
+export function comparisonPeriod(history: PriceHistoryComparison | null | undefined): string {
+  const state = priceHistoryState(history);
+  if (state !== "CHANGED" && state !== "UNCHANGED") return "";
+  const days = history?.day_difference ?? londonCalendarDayCount(history?.previous_observed_at);
+  if (days === null) return "";
+  if (days === 0) return "vs today";
+  return days === 1 ? "vs yesterday" : `vs ${days}d ago`;
+}
+
 export function historySignal(history: PriceHistoryComparison | null | undefined): string {
   const state = priceHistoryState(history);
   if (state === "LOADING") return "Loading…";
   if (state === "FIRST_SEEN") return "New";
   if (state === "ERROR") return "Unavailable";
-  if (state === "UNCHANGED") return "— (0%)";
+  if (state === "UNCHANGED") return "— 0%";
   const percent = Number(history?.price_change_percent ?? 0);
   const arrow = percent > 0 ? "↑" : "↓";
   return `${arrow} ${Math.abs(percent).toFixed(1)}%`;

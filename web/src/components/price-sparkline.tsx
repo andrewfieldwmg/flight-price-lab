@@ -4,6 +4,7 @@ import { money } from "./price-display";
 export interface SparklinePoint {
   observed_at: string;
   price: string;
+  history_quality?: "EXACT" | "PARTIAL_CARRY_FORWARD";
 }
 
 export interface SparklineGeometry {
@@ -84,7 +85,7 @@ function observationLabel(points: SparklinePoint[], currency: string): string {
   const times = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: "Europe/London" });
   return points.map((point) => {
     const observed = new Date(point.observed_at);
-    return `${dates.format(observed)} ${times.format(observed)}  ${money(point.price, currency)}`;
+    return `${dates.format(observed)} ${times.format(observed)}  ${money(point.price, currency)}${point.history_quality === "PARTIAL_CARRY_FORWARD" ? " · carried direction price" : ""}`;
   }).join("\n");
 }
 

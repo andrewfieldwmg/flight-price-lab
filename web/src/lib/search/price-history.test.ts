@@ -33,7 +33,7 @@ describe("observation history language", () => {
     expect(historySignal(decrease)).toBe("↓ 4.1%");
     expect(historyAccessibleLabel(decrease)).toContain("decreased by 4.1 percent");
     const unchanged = { ...history, price_change_amount: "0", price_change_percent: "0" };
-    expect(historySignal(unchanged)).toBe("— (0%)");
+    expect(historySignal(unchanged)).toBe("— 0%");
     expect(historyAccessibleLabel(unchanged)).toBe("No price change since last seen");
     expect(percentageChangeSignal(0)).toBe("— (0%)");
   });

@@ -214,7 +214,7 @@ button { cursor:pointer; }
 .price-cell { font-weight:900; font-size:12px; }
 .history-cell strong,.history-cell small { display:block; }
 .history-cell strong { white-space:normal; overflow-wrap:anywhere; }
-.history-cell .history-was { color:var(--muted); font-size:9px; font-style:normal; font-weight:500; margin-left:7px; text-transform:none; letter-spacing:0; white-space:nowrap; }
+.history-cell .history-was { display:block; color:var(--muted); font-size:9px; font-style:normal; font-weight:500; margin-top:1px; text-transform:none; letter-spacing:0; white-space:nowrap; }
 .history-cell small { color:var(--muted); font-size:9px; margin-top:1px; }
 .history-cell.history-up strong { color:#a04431; }
 .history-cell.history-down strong { color:#167360; }
@@ -326,6 +326,7 @@ footer { max-width:1540px; margin:auto; padding:14px 20px 30px; color:var(--mute
   .mobile-economics > span { color:var(--teal); font-size:11px; font-weight:900; white-space:nowrap; }
   .mobile-bottom { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:9px; margin-top:5px; color:var(--ink); font-size:11px; font-variant-numeric:tabular-nums; }
   .mobile-history { display:flex; align-items:center; gap:5px; min-width:0; color:var(--muted); white-space:nowrap; }
+  .mobile-history small { display:block; color:inherit; font-size:9px; }
   .mobile-history.history-up { color:#a04431; }
   .mobile-history.history-down { color:#167360; }
   .mobile-history .price-sparkline { width:48px; height:18px; margin:0; }

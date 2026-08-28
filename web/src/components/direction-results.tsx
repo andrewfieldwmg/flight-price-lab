@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { ConnectionProfile, DirectionResults as Results, TripOption } from "@/lib/api/types";
 import { money } from "./price-display";
 import { duration } from "./result-card";
-import { elapsedCompactDay, historyAccessibleLabel, historySignal, historyTooltip, priceHistoryState } from "@/lib/search/price-history";
+import { comparisonPeriod, historyAccessibleLabel, historySignal, historyTooltip, priceHistoryState } from "@/lib/search/price-history";
 import { PriceSparkline } from "./price-sparkline";
 
 export type SortKey = "saving" | "price" | "departure" | "arrival" | "transfer" | "journey" | "extra";
@@ -230,7 +230,7 @@ function MobileTripCard({ option, expanded, showComparisons, connectionProfile }
     <div className="mobile-bottom">
       <span className={(option.connection_minutes ?? 0) > 240 ? "time-warning" : ""}>{duration(option.total_journey_minutes)}{option.connection_airport && option.connection_minutes !== null ? ` · ${option.connection_airport} ${duration(option.connection_minutes)}` : ""}</span>
       <span className={`mobile-history ${historyClass}`} title={historyTooltip(option.history, option.base_price, option.currency)}>
-        {historyState === "LOADING" ? <span className="loading-spinner history-loading-spinner" role="status" aria-label="Loading price history" /> : <span><b aria-label={historyAccessibleLabel(option.history)}>{historySignal(option.history)}</b>{option.history?.history_status === "PREVIOUS_FOUND" && option.history.previous_price !== null && <> · was {money(option.history.previous_price, option.currency)}</>}</span>}
+        {historyState === "LOADING" ? <span className="loading-spinner history-loading-spinner" role="status" aria-label="Loading price history" /> : <span><b aria-label={historyAccessibleLabel(option.history)}>{historySignal(option.history)}</b>{comparisonPeriod(option.history) && <> · {comparisonPeriod(option.history)}</>}{option.history?.history_status === "PREVIOUS_FOUND" && option.history.previous_price !== null && <small>was {money(option.history.previous_price, option.currency)}</small>}</span>}
         <PriceSparkline points={option.history?.visual_series ?? []} currency={option.currency} />
       </span>
     </div>
@@ -256,6 +256,6 @@ function HistoryCell({ option }: { option: TripOption }) {
   return <td data-label="Change" className={`history-cell ${Number(option.history?.price_change_amount ?? 0) > 0 ? "history-up" : Number(option.history?.price_change_amount ?? 0) < 0 ? "history-down" : ""}`} title={historyTooltip(option.history, option.base_price, option.currency)}>
     {state === "LOADING"
       ? <span className="loading-spinner history-loading-spinner" role="status" aria-label="Loading price history" />
-      : <><strong><span aria-label={historyAccessibleLabel(option.history)}>{historySignal(option.history)}</span>{option.history?.history_status === "PREVIOUS_FOUND" && option.history.previous_price !== null && <span className="history-was">was {money(option.history.previous_price, option.currency)}</span>}</strong>{option.history?.history_status === "PREVIOUS_FOUND" && <small>{elapsedCompactDay(option.history.elapsed_seconds, option.history.previous_observed_at, undefined, option.history.day_difference)}</small>}</>}
+      : <><strong><span aria-label={historyAccessibleLabel(option.history)}>{historySignal(option.history)}</span></strong>{comparisonPeriod(option.history) && <small className="history-period">{comparisonPeriod(option.history)}</small>}{option.history?.history_status === "PREVIOUS_FOUND" && option.history.previous_price !== null && <span className="history-was">was {money(option.history.previous_price, option.currency)}</span>}</>}
   </td>;
 }
