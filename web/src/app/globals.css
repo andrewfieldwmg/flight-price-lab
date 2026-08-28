@@ -343,8 +343,12 @@ footer { max-width:1540px; margin:auto; padding:14px 20px 30px; color:var(--mute
   .mobile-history .price-sparkline { width:48px; height:18px; margin:0; }
   .mobile-history .sparkline-empty { width:16px; margin:0; }
   .mobile-details { margin:10px 0 0 -27px; padding:9px 0 2px; border-top:1px solid var(--line); color:var(--ink); cursor:default; }
-  .mobile-details dl { display:grid; gap:6px; margin:0; }
-  .mobile-details dl > div { display:grid; grid-template-columns:120px minmax(0,1fr); gap:8px; }
-  .mobile-details dt { color:var(--muted); font-size:9px; text-transform:uppercase; letter-spacing:.04em; }
-  .mobile-details dd { min-width:0; margin:0; font-size:11px; overflow-wrap:anywhere; }
+  .mobile-details-title { display:block; margin-bottom:6px; color:var(--muted); font-size:9px; text-transform:uppercase; letter-spacing:.06em; }
+  .mobile-detail-flights { display:grid; gap:7px; }
+  .mobile-detail-flights > div { display:grid; gap:1px; }
+  .mobile-detail-flights b { font-size:11px; }
+  .mobile-detail-flights span { color:var(--muted); font-size:11px; font-variant-numeric:tabular-nums; }
+  .mobile-detail-extra { display:flex; justify-content:space-between; gap:12px; margin-top:8px; padding-top:7px; border-top:1px solid var(--line); font-size:11px; }
+  .mobile-detail-extra span { color:var(--muted); }
+  .mobile-detail-warning { margin-top:7px; padding:6px 8px; border-radius:4px; background:#fff2ec; color:#713e2b; font-size:10px; }
 }

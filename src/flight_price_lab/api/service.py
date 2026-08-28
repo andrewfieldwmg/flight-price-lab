@@ -646,11 +646,15 @@ class TripSearchService:
             snapshot.diagnostics.provider_calls_this_invocation += (
                 response.provider_calls
             )
+            snapshot.diagnostics.provider_calls += response.provider_calls
             snapshot.diagnostics.backend_cache_hits += response.backend_cache_hits
             snapshot.diagnostics.backend_cache_misses += response.backend_cache_misses
+            snapshot.diagnostics.exact_cache_hits += response.exact_cache_hits
+            snapshot.diagnostics.superset_cache_hits += response.superset_cache_hits
             snapshot.diagnostics.provider_calls_avoided_this_invocation += (
                 response.provider_calls_avoided
             )
+            snapshot.diagnostics.calls_avoided += response.provider_calls_avoided
             snapshot.diagnostics.normalization_ms += response.normalization_ms
             snapshot.diagnostics.postgres_write_ms += response.postgres_write_ms
             if response.request_timing is not None:

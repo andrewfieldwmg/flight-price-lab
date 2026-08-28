@@ -268,13 +268,26 @@ describe("dense flight results", () => {
 
     fireEvent.click(stopCard);
     expect(onSelect).not.toHaveBeenCalled();
-    expect(stopCard).toHaveTextContent("LGW → MXP → CAG");
-    expect(stopCard).toHaveTextContent("Separate tickets");
-    expect(stopCard).toHaveTextContent("Connection profile");
+    expect(stopCard).toHaveTextContent("Flights");
+    expect(stopCard).toHaveTextContent("easyJet U2 8309");
+    expect(stopCard).toHaveTextContent("LGW 08:00 → MXP 10:00");
+    expect(stopCard).toHaveTextContent("Wizz Air Malta W4 6997");
+    expect(stopCard).toHaveTextContent("MXP 13:50 → CAG 15:25");
+    expect(stopCard).toHaveTextContent("Extra vs nonstop+4h 45m");
+    expect(within(stopCard).getAllByText("Separate tickets · connection not protected")).toHaveLength(1);
+    expect(stopCard).not.toHaveTextContent("Connection profile");
+    expect(stopCard).not.toHaveTextContent("Ancillaries");
+    expect(stopCard).not.toHaveTextContent("Transfer airport");
+    expect(stopCard).not.toHaveTextContent("Journey duration");
+    expect(stopCard).not.toHaveTextContent("Departure / arrival");
+
+    fireEvent.click(directCard);
+    expect(directCard).toHaveTextContent("Ryanair FR 2687");
+    expect(directCard).not.toHaveTextContent("Separate tickets · connection not protected");
 
     fireEvent.click(screen.getByLabelText("Select LGW-MXP-CAG"));
     expect(onSelect).toHaveBeenCalledWith("synthetic-OUTBOUND");
-    expect(stopCard).toHaveTextContent("Separate tickets");
+    expect(stopCard).toHaveTextContent("Separate tickets · connection not protected");
     vi.unstubAllGlobals();
   });
 });

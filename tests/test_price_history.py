@@ -679,6 +679,7 @@ class ObservationProvider:
             backend_cache_misses=int(self.live),
             provider_calls=int(self.live),
             provider_calls_avoided=int(not self.live),
+            superset_cache_hits=int(not self.live),
         )
 
     async def calendar(self, **arguments: object) -> list[object]:

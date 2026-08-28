@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import json
 import logging
 import os
@@ -15,6 +16,7 @@ from flight_price_lab.storage.database import (
     SearchCacheEntry,
     SearchResponseCache,
     canonical_search_key,
+    is_compatible_search_superset,
 )
 
 
@@ -50,6 +52,37 @@ def arguments() -> dict[str, object]:
         "checked_bags": 0,
         "bypass_cache": False,
     }
+
+
+def route_payload(routes: list[tuple[str, str, str]]) -> dict[str, object]:
+    payload = copy.deepcopy(fixture_payload())
+    groups = []
+    for index, (origin, destination, token) in enumerate(routes):
+        group = copy.deepcopy(payload["other_flights"][0])  # type: ignore[index]
+        group["booking_token"] = token
+        group["flights"][0]["departure_airport"]["id"] = origin
+        group["flights"][0]["arrival_airport"]["id"] = destination
+        group["flights"][0]["flight_number"] = f"FR {2000 + index}"
+        groups.append(group)
+    payload["other_flights"] = groups
+    return payload
+
+
+def cache_parameters(
+    origins: list[str], destinations: list[str], **updates: object
+) -> dict[str, object]:
+    parameters: dict[str, object] = {
+        "origins": origins,
+        "destinations": destinations,
+        "date": "2026-12-18",
+        "adults": 2,
+        "children": 2,
+        "currency": "GBP",
+        "flight_type": "one_way",
+        "stops": "nonstop",
+    }
+    parameters.update(updates)
+    return parameters
 
 
 def test_identical_search_uses_persistent_cache_and_preserves_raw_json(
@@ -111,6 +144,155 @@ def test_cache_key_sorts_airports_and_excludes_ui_preferences() -> None:
     }
     reordered = {**base, "origins": ["LGW", "STN"]}
     assert canonical_search_key(base) == canonical_search_key(reordered)
+
+
+@pytest.mark.parametrize(
+    ("cached_origins", "cached_destinations", "origins", "destinations"),
+    [
+        (["MXP"], ["CAG", "OLB", "AHO"], ["MXP"], ["CAG", "AHO"]),
+        (["CAG", "OLB", "AHO"], ["MXP"], ["CAG", "AHO"], ["MXP"]),
+        (
+            ["LGW", "STN", "LTN"],
+            ["CAG", "OLB", "AHO"],
+            ["LGW", "STN"],
+            ["CAG", "AHO"],
+        ),
+    ],
+)
+def test_airport_narrowing_is_a_compatible_superset(
+    cached_origins: list[str],
+    cached_destinations: list[str],
+    origins: list[str],
+    destinations: list[str],
+) -> None:
+    assert is_compatible_search_superset(
+        cache_parameters(cached_origins, cached_destinations),
+        cache_parameters(origins, destinations),
+    )
+
+
+def test_widening_and_other_dimension_changes_are_not_compatible_supersets() -> None:
+    narrow = cache_parameters(["MXP"], ["CAG", "AHO"])
+    wide = cache_parameters(["MXP"], ["CAG", "OLB", "AHO"])
+    assert not is_compatible_search_superset(narrow, wide)
+    for field, value in (
+        ("date", "2026-12-19"),
+        ("adults", 1),
+        ("currency", "EUR"),
+    ):
+        assert not is_compatible_search_superset(
+            wide, {**cache_parameters(["MXP"], ["CAG", "AHO"]), field: value}
+        )
+
+
+def test_destination_narrowing_filters_normalized_offers_and_preserves_lineage(
+    tmp_path: Path,
+) -> None:
+    cache = SearchResponseCache(postgres_test_url(), raw_root=tmp_path / "raw")
+    superset = cache_parameters(["MXP"], ["CAG", "OLB", "AHO"])
+    payload = route_payload(
+        [
+            ("MXP", "CAG", "keep-cag"),
+            ("MXP", "OLB", "drop-olb"),
+            ("MXP", "AHO", "keep-aho"),
+        ]
+    )
+    cache.put(superset, payload, result_count=3)
+    client = FakeSearchClient(payload)
+    gateway = SearchAPIProviderGateway(client, cache)  # type: ignore[arg-type]
+    result = asyncio.run(
+        gateway.search_direct(
+            **{
+                **arguments(),
+                "origins": ("MXP",),
+                "destinations": ("CAG", "AHO"),
+                "query_type": "direct_baseline",
+            }
+        )
+    )
+
+    assert client.calls == 0
+    assert result.provider_calls == 0
+    assert result.exact_cache_hits == 0
+    assert result.superset_cache_hits == 1
+    assert result.provider_calls_avoided == 1
+    assert {offer.legs[-1].destination for offer in result.offers} == {"CAG", "AHO"}
+    assert all(offer.legs[-1].destination != "OLB" for offer in result.offers)
+    assert {
+        offer.raw_metadata["provider_action_metadata"]["booking_token"]
+        for offer in result.offers
+    } == {"keep-cag", "keep-aho"}
+
+
+def test_origin_and_both_side_narrowing_reuse_superset(tmp_path: Path) -> None:
+    cache = SearchResponseCache(postgres_test_url(), raw_root=tmp_path / "raw")
+    payload = route_payload(
+        [("CAG", "MXP", "cag"), ("OLB", "MXP", "olb"), ("AHO", "MXP", "aho")]
+    )
+    cache.put(
+        cache_parameters(["CAG", "OLB", "AHO"], ["MXP", "BGY"]),
+        payload,
+        result_count=3,
+    )
+    client = FakeSearchClient(payload)
+    gateway = SearchAPIProviderGateway(client, cache)  # type: ignore[arg-type]
+    result = asyncio.run(
+        gateway.search_direct(
+            **{
+                **arguments(),
+                "origins": ("CAG", "AHO"),
+                "destinations": ("MXP",),
+            }
+        )
+    )
+    assert client.calls == 0
+    assert result.superset_cache_hits == 1
+    assert {
+        (offer.legs[0].origin, offer.legs[-1].destination) for offer in result.offers
+    } == {
+        ("CAG", "MXP"),
+        ("AHO", "MXP"),
+    }
+
+
+def test_widening_or_expired_superset_calls_provider(tmp_path: Path) -> None:
+    payload = route_payload([("MXP", "CAG", "cag")])
+    cache = SearchResponseCache(postgres_test_url(), raw_root=tmp_path / "raw")
+    cache.put(cache_parameters(["MXP"], ["CAG", "AHO"]), payload, result_count=1)
+    client = FakeSearchClient(payload)
+    gateway = SearchAPIProviderGateway(client, cache)  # type: ignore[arg-type]
+    widened = asyncio.run(
+        gateway.search_direct(
+            **{
+                **arguments(),
+                "origins": ("MXP",),
+                "destinations": ("CAG", "OLB", "AHO"),
+            }
+        )
+    )
+    assert widened.provider_calls == 1
+
+    expired_cache = SearchResponseCache(
+        postgres_test_url(), raw_root=tmp_path / "expired-raw"
+    )
+    expired_cache.put(
+        cache_parameters(["MXP"], ["CAG", "OLB", "AHO"]),
+        payload,
+        result_count=1,
+        now=datetime.now(UTC) - timedelta(days=1),
+    )
+    expired_client = FakeSearchClient(payload)
+    expired_gateway = SearchAPIProviderGateway(expired_client, expired_cache)  # type: ignore[arg-type]
+    expired = asyncio.run(
+        expired_gateway.search_direct(
+            **{
+                **arguments(),
+                "origins": ("MXP",),
+                "destinations": ("CAG", "AHO"),
+            }
+        )
+    )
+    assert expired.provider_calls == 1
 
 
 def test_refresh_bypasses_cache_without_deleting_previous_raw_capture(

@@ -99,7 +99,6 @@ export function DirectionResults({
   onSelect,
   complete,
   selfTransferEnabled,
-  connectionProfile,
   date,
 }: {
   title: string;
@@ -167,7 +166,7 @@ export function DirectionResults({
             <th>Airlines</th>
           </tr></thead>
           <tbody>
-            {pageOptions.map((option) => <ResultRow key={option.id} option={option} selected={selectedId === option.id} onSelect={() => onSelect(option.id)} showComparisons={selfTransferEnabled} connectionProfile={connectionProfile} />)}
+            {pageOptions.map((option) => <ResultRow key={option.id} option={option} selected={selectedId === option.id} onSelect={() => onSelect(option.id)} showComparisons={selfTransferEnabled} />)}
           </tbody>
         </table>
       </div>
@@ -178,7 +177,7 @@ export function DirectionResults({
   );
 }
 
-function ResultRow({ option, selected, onSelect, showComparisons, connectionProfile }: { option: TripOption; selected: boolean; onSelect: () => void; showComparisons: boolean; connectionProfile: ConnectionProfile }) {
+function ResultRow({ option, selected, onSelect, showComparisons }: { option: TripOption; selected: boolean; onSelect: () => void; showComparisons: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const mobile = useMobileResults();
   const saving = Number(option.saving_vs_nonstop_amount ?? 0);
@@ -193,7 +192,7 @@ function ResultRow({ option, selected, onSelect, showComparisons, connectionProf
         <td data-label="Select" className="select-cell">
           <input className="trip-select-radio" type="radio" readOnly checked={selected} aria-label={`Select ${option.route.join("-")}`} onClick={(event) => { event.stopPropagation(); onSelect(); }} />
           <div className="desktop-select"><span className="type-pill">{option.is_nonstop ? "Direct" : "1-stop"}</span></div>
-          {mobile && <MobileTripCard option={option} expanded={expanded} showComparisons={showComparisons} connectionProfile={connectionProfile} />}
+          {mobile && <MobileTripCard option={option} expanded={expanded} showComparisons={showComparisons} />}
         </td>
         <td data-label="Price" className="price-cell">{compactPrice(option)}</td>
         <HistoryCell option={option} />
@@ -210,7 +209,7 @@ function ResultRow({ option, selected, onSelect, showComparisons, connectionProf
   );
 }
 
-function MobileTripCard({ option, expanded, showComparisons, connectionProfile }: { option: TripOption; expanded: boolean; showComparisons: boolean; connectionProfile: ConnectionProfile }) {
+function MobileTripCard({ option, expanded, showComparisons }: { option: TripOption; expanded: boolean; showComparisons: boolean }) {
   const saving = Number(option.saving_vs_nonstop_amount ?? 0);
   const historyState = priceHistoryState(option.history);
   const historyClass = Number(option.history?.price_change_amount ?? 0) > 0 ? "history-up" : Number(option.history?.price_change_amount ?? 0) < 0 ? "history-down" : "";
@@ -235,18 +234,13 @@ function MobileTripCard({ option, expanded, showComparisons, connectionProfile }
       </span>
     </div>
     {expanded && <div className="mobile-details">
-      <dl>
-        <div><dt>Route</dt><dd>{option.route.join(" → ")}</dd></div>
-        <div><dt>Flights</dt><dd>{option.legs.map((leg) => `${leg.airline} ${leg.flight_number}`).join(" / ")}</dd></div>
-        <div><dt>Departure / arrival</dt><dd>{origin} {localClock(option.departure_at)} → {destination} {localClock(option.arrival_at)}</dd></div>
-        {option.connection_airport && <div><dt>Transfer airport</dt><dd>{option.connection_airport}</dd></div>}
-        {option.connection_minutes !== null && <div><dt>Transfer duration</dt><dd>{duration(option.connection_minutes)}</dd></div>}
-        <div><dt>Journey duration</dt><dd>{duration(option.total_journey_minutes)}</dd></div>
-        {showComparisons && option.extra_minutes_vs_nonstop !== null && <div><dt>Extra travel vs nonstop</dt><dd>+{duration(option.extra_minutes_vs_nonstop)}</dd></div>}
-        <div><dt>Tickets</dt><dd>{option.ticketing_type === "separate_tickets" ? "Separate tickets" : option.ticketing_type === "single_ticket" ? "Single ticket" : "Not confirmed"}</dd></div>
-        <div><dt>Connection profile</dt><dd>{connectionProfile.toLowerCase()}</dd></div>
-        <div><dt>Ancillaries</dt><dd>{option.price_completeness === "COMPLETE" ? "Included in displayed estimates" : "Estimate incomplete"}</dd></div>
-      </dl>
+      <strong className="mobile-details-title">Flights</strong>
+      <div className="mobile-detail-flights">{option.legs.map((leg, index) => <div key={`${leg.flight_number}-${index}`}>
+        <b>{leg.airline} {leg.flight_number}</b>
+        <span>{leg.origin} {localClock(leg.departure_at)} → {leg.destination} {localClock(leg.arrival_at)}</span>
+      </div>)}</div>
+      {showComparisons && option.extra_minutes_vs_nonstop !== null && <div className="mobile-detail-extra"><span>Extra vs nonstop</span><b>+{duration(option.extra_minutes_vs_nonstop)}</b></div>}
+      {option.is_self_transfer && option.ticketing_type === "separate_tickets" && <div className="mobile-detail-warning">Separate tickets · connection not protected</div>}
     </div>}
   </div>;
 }

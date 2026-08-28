@@ -673,10 +673,12 @@ class CacheLookup:
     created_at: datetime | None
     expires_at: datetime | None
     age_seconds: float | None
+    source_cache_key: str | None = None
+    cache_source: str | None = None
 
     @property
     def fresh(self) -> bool:
-        return self.status == "hit"
+        return self.status in {"hit", "superset_hit"}
 
 
 def canonical_search_json(parameters: dict[str, Any]) -> str:
@@ -694,6 +696,39 @@ def canonical_search_json(parameters: dict[str, Any]) -> str:
 
 def canonical_search_key(parameters: dict[str, Any]) -> str:
     return sha256(canonical_search_json(parameters).encode()).hexdigest()
+
+
+def is_compatible_search_superset(
+    candidate: dict[str, Any], requested: dict[str, Any]
+) -> bool:
+    """Return whether candidate can safely answer requested by airport filtering."""
+
+    candidate_other = {
+        key: value
+        for key, value in candidate.items()
+        if key not in {"origins", "destinations"}
+    }
+    requested_other = {
+        key: value
+        for key, value in requested.items()
+        if key not in {"origins", "destinations"}
+    }
+    if candidate_other != requested_other:
+        return False
+    candidate_origins = set(candidate.get("origins", []))
+    candidate_destinations = set(candidate.get("destinations", []))
+    requested_origins = set(requested.get("origins", []))
+    requested_destinations = set(requested.get("destinations", []))
+    return (
+        bool(requested_origins)
+        and bool(requested_destinations)
+        and requested_origins <= candidate_origins
+        and requested_destinations <= candidate_destinations
+        and (
+            requested_origins != candidate_origins
+            or requested_destinations != candidate_destinations
+        )
+    )
 
 
 class SearchResponseCache:
@@ -752,7 +787,60 @@ class SearchResponseCache:
                 created_at,
                 expires_at,
                 age_seconds,
+                entry.cache_key,
+                "EXACT",
             )
+
+    def lookup_superset(
+        self, parameters: dict[str, Any], *, now: datetime | None = None
+    ) -> CacheLookup:
+        current = now or datetime.now(UTC)
+        epoch = current_cache_epoch(current)
+        candidates: list[tuple[int, datetime, SearchCacheEntry, dict[str, Any]]] = []
+        with Session(self.engine) as session:
+            entries = session.scalars(
+                select(SearchCacheEntry).where(SearchCacheEntry.created_at >= epoch)
+            ).all()
+            for entry in entries:
+                try:
+                    candidate_parameters = json.loads(entry.request_json)
+                except (TypeError, json.JSONDecodeError):
+                    continue
+                if not isinstance(
+                    candidate_parameters, dict
+                ) or not is_compatible_search_superset(candidate_parameters, parameters):
+                    continue
+                size = len(set(candidate_parameters["origins"])) + len(
+                    set(candidate_parameters["destinations"])
+                )
+                created_at = entry.created_at
+                if created_at.tzinfo is None:
+                    created_at = created_at.replace(tzinfo=UTC)
+                candidates.append((size, created_at, entry, candidate_parameters))
+            candidates.sort(key=lambda item: (item[0], -item[1].timestamp()))
+            for _size, created_at, entry, _candidate_parameters in candidates:
+                path = Path(entry.raw_response_path)
+                if entry.response_json:
+                    payload = json.loads(entry.response_json)
+                elif path.is_file():
+                    payload = json.loads(path.read_text(encoding="utf-8"))
+                else:
+                    continue
+                if not isinstance(payload, dict):
+                    continue
+                expires_at = entry.expires_at
+                if expires_at.tzinfo is None:
+                    expires_at = expires_at.replace(tzinfo=UTC)
+                return CacheLookup(
+                    "superset_hit",
+                    CachedSearch(payload, path, entry.result_count),
+                    created_at,
+                    expires_at,
+                    (current - created_at).total_seconds(),
+                    entry.cache_key,
+                    "DERIVED_SUPERSET",
+                )
+        return CacheLookup("miss", None, None, None, None)
 
     def put(
         self,

@@ -266,6 +266,10 @@ class SearchDiagnostics(BaseModel):
     local_cache_hit: bool = False
     backend_cache_hits: int = 0
     backend_cache_misses: int = 0
+    exact_cache_hits: int = 0
+    superset_cache_hits: int = 0
+    provider_calls: int = 0
+    calls_avoided: int = 0
     provider_calls_this_invocation: int = 0
     provider_calls_avoided_this_invocation: int = 0
     original_provider_calls: int | None = None
