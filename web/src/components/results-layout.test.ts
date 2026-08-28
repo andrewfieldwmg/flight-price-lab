@@ -31,5 +31,9 @@ describe("results page scrolling layout", () => {
     expect(css).toMatch(/grid-template-columns\s*:\s*minmax\(0,1fr\) max-content/);
     expect(css).toMatch(/grid-template-rows\s*:\s*28px 25px/);
     expect(css).toMatch(/compact-trip-sparkline[^}]*width\s*:\s*52px/);
+    expect(css).not.toMatch(/\.compact-trip-summary\s*\{[^}]*display\s*:\s*none/);
+    const workspace = css.match(/\.workspace\s*\{([^}]*)\}/)?.[1] ?? "";
+    expect(workspace).not.toMatch(/overflow\s*:\s*(hidden|auto)/);
+    expect(workspace).not.toMatch(/(?:transform|contain)\s*:/);
   });
 });

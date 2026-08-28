@@ -9,12 +9,13 @@ class MockResizeObserver {
   observe = vi.fn(); disconnect = vi.fn(); unobserve = vi.fn();
 }
 
-function installStickyGeometry(summaryBottom: { value: number }, headerBottom = 54) {
+function installStickyGeometry(summaryBottom: { value: number }, headerBottom: number | { value: number } = 54) {
   const header = document.createElement("header");
   header.className = "site-header";
   document.body.prepend(header);
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function geometry(this: Element) {
-    const bottom = this.classList.contains("site-header") ? headerBottom : this.classList.contains("summary-strip") ? summaryBottom.value : 0;
+    const measuredHeaderBottom = typeof headerBottom === "number" ? headerBottom : headerBottom.value;
+    const bottom = this.classList.contains("site-header") ? measuredHeaderBottom : this.classList.contains("summary-strip") ? summaryBottom.value : 0;
     return { bottom, height: bottom, top: 0, left: 0, right: 390, width: 390, x: 0, y: 0, toJSON: () => ({}) };
   });
   vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => { callback(0); return 1; });
@@ -27,6 +28,17 @@ afterEach(() => { resizeCallback = null; document.querySelector(".site-header")?
 const renderOutbound = (comparison = true) => render(<TripSummary outbound={synthetic()} inbound={null} outboundBaseline={option({ id: "baseline" })} inboundBaseline={null} outboundComparisonEnabled={comparison} />);
 
 describe("selected trip summary", () => {
+  it("uses the full-summary and sticky-header bottoms as the visibility threshold", () => {
+    const summary = document.createElement("section");
+    const header = document.createElement("header");
+    summary.getBoundingClientRect = () => ({ bottom: 55 } as DOMRect);
+    header.getBoundingClientRect = () => ({ bottom: 54 } as DOMRect);
+    expect(shouldShowCompactSummary(summary, header, true)).toBe(false);
+    summary.getBoundingClientRect = () => ({ bottom: 54 } as DOMRect);
+    expect(shouldShowCompactSummary(summary, header, true)).toBe(true);
+    expect(shouldShowCompactSummary(summary, header, false)).toBe(false);
+  });
+
   it("puts the trip total and base-fare saving before itinerary detail", () => {
     renderOutbound();
     const total = screen.getByText("Trip total");
@@ -202,25 +214,31 @@ describe("selected trip summary", () => {
   });
 
   it("shows compact summary only after the full summary leaves the viewport", () => {
-    vi.stubGlobal("IntersectionObserver", MockIntersectionObserver);
+    const summaryBottom = { value: 180 };
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
+    vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })));
+    installStickyGeometry(summaryBottom);
     renderOutbound();
     expect(screen.queryByLabelText("Compact selected trip summary")).not.toBeInTheDocument();
-    act(() => observerCallback?.([{ isIntersecting: true, boundingClientRect: { top: 100 } } as IntersectionObserverEntry], {} as IntersectionObserver));
-    act(() => observerCallback?.([{ isIntersecting: false, boundingClientRect: { top: -1 } } as IntersectionObserverEntry], {} as IntersectionObserver));
+    summaryBottom.value = 40;
+    act(() => window.dispatchEvent(new Event("scroll")));
     expect(screen.getByLabelText("Compact selected trip summary")).toBeInTheDocument();
     expect(screen.getByLabelText("Compact selected trip summary")).toHaveTextContent("18 Dec LGW→CAG");
     expect(screen.getByLabelText("Compact selected trip summary")).toHaveTextContent("£486");
     expect(screen.getByLabelText("Compact selected trip summary")).not.toHaveTextContent("Updating");
     expect(screen.getByLabelText("Insufficient trip price history")).toHaveTextContent("—");
-    act(() => observerCallback?.([{ isIntersecting: true, boundingClientRect: { top: 100 } } as IntersectionObserverEntry], {} as IntersectionObserver));
+    summaryBottom.value = -2000;
+    act(() => window.dispatchEvent(new Event("scroll")));
+    expect(screen.getByLabelText("Compact selected trip summary")).toBeInTheDocument();
+    summaryBottom.value = 180;
+    act(() => window.dispatchEvent(new Event("scroll")));
     expect(screen.queryByLabelText("Compact selected trip summary")).not.toBeInTheDocument();
   });
 
   it("shows the trip-total sparkline instead of a numerical change in the sticky summary", () => {
-    vi.stubGlobal("IntersectionObserver", MockIntersectionObserver);
+    installStickyGeometry({ value: 40 });
     const selected = option({ id: "sticky-history", base_price: "784", history: { history_status: "PREVIOUS_FOUND", previous_price: "849", price_change_amount: "-65", price_change_percent: "-7.66", previous_observed_at: "2026-08-26T12:00:00Z", elapsed_seconds: 86400, day_difference: 1, previous_observation_run_id: "prior", daily_series: [{ date: "2026-08-26", price: "849" }, { date: "2026-08-27", price: "784" }] } });
     render(<TripSummary outbound={selected} inbound={null} outboundBaseline={selected} inboundBaseline={null} />);
-    act(() => observerCallback?.([{ isIntersecting: false, boundingClientRect: { top: -1 } } as IntersectionObserverEntry], {} as IntersectionObserver));
     const compact = screen.getByLabelText("Compact selected trip summary");
     expect(compact).toHaveTextContent("£784");
     expect(compact).not.toHaveTextContent("7.7%");
@@ -231,11 +249,10 @@ describe("selected trip summary", () => {
   it.each([320, 375, 390, 768, 1440])("keeps mandatory sticky content at a %dpx viewport", (width) => {
     Object.defineProperty(window, "innerWidth", { configurable: true, value: width });
     vi.stubGlobal("matchMedia", vi.fn((query: string) => ({ matches: query.includes("680px") && width <= 680, addEventListener: vi.fn(), removeEventListener: vi.fn() })));
-    vi.stubGlobal("IntersectionObserver", MockIntersectionObserver);
+    installStickyGeometry({ value: 40 });
     const selected = synthetic();
     selected.history = { history_status: "PREVIOUS_FOUND", previous_price: "500", price_change_amount: "-14", price_change_percent: "-2.8", previous_observed_at: "2026-08-26T12:00:00Z", elapsed_seconds: 86400, day_difference: 1, previous_observation_run_id: "prior", daily_series: [{ date: "2026-08-26", price: "500" }, { date: "2026-08-27", price: "486" }] };
     render(<TripSummary outbound={selected} inbound={null} outboundBaseline={option({ id: "baseline" })} inboundBaseline={null} outboundComparisonEnabled />);
-    act(() => observerCallback?.([{ isIntersecting: false, boundingClientRect: { top: -1 } } as IntersectionObserverEntry], {} as IntersectionObserver));
     const compact = screen.getByLabelText("Compact selected trip summary");
     expect(compact).toHaveTextContent("£486");
     expect(compact).toHaveTextContent("Save");
@@ -245,15 +262,30 @@ describe("selected trip summary", () => {
     expect(compact.querySelector(".compact-trip-sparkline")).toBeInTheDocument();
   });
 
-  it("uses the measured sticky-header height for the visibility boundary", () => {
-    const header = document.createElement("header");
-    header.className = "site-header";
-    header.getBoundingClientRect = () => ({ height: 54 } as DOMRect);
-    document.body.prepend(header);
-    vi.stubGlobal("IntersectionObserver", MockIntersectionObserver);
+  it("uses geometry and reacts to summary and header resizing", () => {
+    const summaryBottom = { value: 80 };
+    const headerBottom = { value: 54 };
+    installStickyGeometry(summaryBottom, headerBottom);
+    vi.stubGlobal("ResizeObserver", MockResizeObserver);
     renderOutbound();
-    expect(observerOptions?.rootMargin).toBe("-54px 0px 0px 0px");
-    expect(document.documentElement.style.getPropertyValue("--sticky-header-height")).toBe("54px");
+    expect(screen.queryByLabelText("Compact selected trip summary")).not.toBeInTheDocument();
+    headerBottom.value = 90;
+    act(() => resizeCallback?.([], {} as ResizeObserver));
+    expect(screen.getByLabelText("Compact selected trip summary")).toBeInTheDocument();
+    expect(document.documentElement.style.getPropertyValue("--app-header-bottom")).toBe("90px");
+    summaryBottom.value = 120;
+    act(() => resizeCallback?.([], {} as ResizeObserver));
+    expect(screen.queryByLabelText("Compact selected trip summary")).not.toBeInTheDocument();
+  });
+
+  it("remeasures and preserves compact visibility when the selected trip changes", () => {
+    installStickyGeometry({ value: 40 });
+    const first = option({ id: "first-selection", base_price: "700" });
+    const second = option({ id: "second-selection", base_price: "650" });
+    const { rerender } = render(<TripSummary outbound={first} inbound={null} outboundBaseline={first} inboundBaseline={null} />);
+    expect(screen.getByLabelText("Compact selected trip summary")).toHaveTextContent("£700");
+    rerender(<TripSummary outbound={second} inbound={null} outboundBaseline={second} inboundBaseline={null} />);
+    expect(screen.getByLabelText("Compact selected trip summary")).toHaveTextContent("£650");
   });
 
   it("keeps a provisional trip total and unresolved history distinct from first seen", () => {
@@ -274,11 +306,9 @@ describe("selected trip summary", () => {
   });
 
   it("hides saving and extra travel in a nonstop-only compact summary", () => {
-    vi.stubGlobal("IntersectionObserver", MockIntersectionObserver);
+    installStickyGeometry({ value: 40 });
     const direct = option({ id: "direct" });
     render(<TripSummary outbound={direct} inbound={null} outboundBaseline={direct} inboundBaseline={null} />);
-    act(() => observerCallback?.([{ isIntersecting: true, boundingClientRect: { top: 100 } } as IntersectionObserverEntry], {} as IntersectionObserver));
-    act(() => observerCallback?.([{ isIntersecting: false, boundingClientRect: { top: -1 } } as IntersectionObserverEntry], {} as IntersectionObserver));
     const compact = screen.getByLabelText("Compact selected trip summary");
     expect(compact).toHaveTextContent("18 Dec LGW→CAG");
     expect(compact).not.toHaveTextContent("Save");

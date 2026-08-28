@@ -147,6 +147,7 @@ export function TripSummary({ outbound, inbound, outboundBaseline, inboundBaseli
   useEffect(() => {
     const header = document.querySelector<HTMLElement>(".site-header");
     let frame = 0;
+    let measurementScheduled = false;
     const selectedTripPresent = Boolean(outbound || inbound);
     const measure = () => {
       frame = 0;
@@ -165,8 +166,12 @@ export function TripSummary({ outbound, inbound, outboundBaseline, inboundBaseli
       }
     };
     const scheduleMeasure = () => {
-      if (frame) return;
-      frame = requestAnimationFrame(measure);
+      if (measurementScheduled) return;
+      measurementScheduled = true;
+      frame = requestAnimationFrame(() => {
+        measurementScheduled = false;
+        measure();
+      });
     };
     const resizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(scheduleMeasure);
     if (header) resizeObserver?.observe(header);
