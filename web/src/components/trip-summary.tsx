@@ -146,9 +146,12 @@ export function TripSummary({ outbound, inbound, outboundBaseline, inboundBaseli
   const summary = aggregateTrip(outbound, inbound, outboundBaseline, inboundBaseline, { outbound: compareOutbound, inbound: compareInbound });
   useEffect(() => {
     const header = document.querySelector<HTMLElement>(".site-header");
+    const selectedTripPresent = Boolean(outbound || inbound);
+    if (!selectedTripPresent || !header) {
+      return;
+    }
     let frame = 0;
     let measurementScheduled = false;
-    const selectedTripPresent = Boolean(outbound || inbound);
     const measure = () => {
       frame = 0;
       const summaryElement = fullSummary.current;
