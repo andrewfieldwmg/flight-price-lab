@@ -215,4 +215,43 @@ describe("selected trip summary", () => {
     expect(compact).not.toHaveTextContent("Save");
     expect(compact).not.toHaveTextContent("Extra travel");
   });
+
+  it("uses the compact decision hierarchy for the mobile selected-trip summary", () => {
+    vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })));
+    const outbound = synthetic();
+    const inbound = synthetic("RETURN");
+    const history = { history_status: "PREVIOUS_FOUND" as const, previous_price: "500", price_change_amount: "-14", price_change_percent: "-2.8", previous_observed_at: "2026-08-26T10:00:00Z", elapsed_seconds: 86400, day_difference: 1, previous_observation_run_id: "prior", trend_status: "FALLING" as const, trend_start_price: "530", trend_current_price: "486", trend_change_percent: "-8.3", trend_span_days: 3, observed_day_count: 2, visual_series: [
+      { observed_at: "2026-08-26T10:00:00Z", price: "500", observation_run_id: "prior" },
+      { observed_at: "2026-08-27T10:00:00Z", price: "486", observation_run_id: "current" },
+    ] };
+    outbound.history = history;
+    inbound.history = history;
+    const { container } = render(<TripSummary outbound={outbound} inbound={inbound} outboundBaseline={option({ id: "out-direct" })} inboundBaseline={option({ id: "in-direct", direction: "RETURN" })} outboundComparisonEnabled inboundComparisonEnabled outboundDate="2026-12-18" returnDate="2026-12-28" searchId="search" />);
+    const summary = screen.getByLabelText("Selected trip summary");
+
+    expect(summary).toHaveClass("mobile-selected-summary");
+    expect(container.querySelector(".mobile-summary-total > div > strong")).toHaveTextContent("£972");
+    expect(container.querySelector(".mobile-summary-total .trip-total-sparkline")).toBeInTheDocument();
+    expect(summary).toHaveTextContent("↓ 2.8% · was £1,000");
+    expect(summary).toHaveTextContent("£510 / 34%");
+    expect(summary).toHaveTextContent("+9h 30m");
+    expect(summary).toHaveTextContent("Outbound · 18 Dec");
+    expect(summary).toHaveTextContent("LGW 08:00 → CAG 15:25");
+    expect(summary).toHaveTextContent("1 stop · MXP 3h 50m");
+    expect(summary).toHaveTextContent("Return · 28 Dec");
+    expect(summary).not.toHaveTextContent("U2 8309");
+    expect(summary).not.toHaveTextContent("over 2 observed days");
+    expect(screen.queryByLabelText("Show estimated baggage costs")).not.toBeInTheDocument();
+    expect(summary).not.toHaveTextContent("Separate tickets");
+    expect(summary).not.toHaveTextContent("Prices exclude baggage");
+    const booking = screen.getByRole("button", { name: "Prepare booking" });
+    const details = screen.getByRole("button", { name: /Trip details/ });
+    expect(booking.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    fireEvent.click(details);
+    expect(screen.getByLabelText("Show estimated baggage costs")).toBeInTheDocument();
+    expect(summary).toHaveTextContent("easyJet U2 8309");
+    expect(summary).toHaveTextContent("Separate tickets · connection not protected");
+    expect(outbound.id).toBe("synthetic-OUTBOUND");
+  });
 });

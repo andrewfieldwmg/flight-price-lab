@@ -10,6 +10,19 @@ import { BookingPreparation } from "./booking-preparation";
 import { elapsedSummaryDay, historyAccessibleLabel, londonCalendarDayCount, priceHistoryState, summaryTrend } from "@/lib/search/price-history";
 import { PriceSparkline } from "./price-sparkline";
 
+function useMobileSummary(): boolean {
+  const [mobile, setMobile] = useState(false);
+  useEffect(() => {
+    if (!window.matchMedia) return;
+    const query = window.matchMedia("(max-width: 680px)");
+    const update = () => setMobile(query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+  return mobile;
+}
+
 function summaryChangeSignal(history: PriceHistoryComparison | null | undefined): string {
   const state = priceHistoryState(history);
   if (state === "LOADING") return "Loading history…";
@@ -70,7 +83,7 @@ function combinedTripHistory(outbound: TripOption | null, inbound: TripOption | 
     .sort((left, right) => Date.parse(left.observed_at) - Date.parse(right.observed_at));
 }
 
-function DirectionSummary({ label, option, showBaggage, date }: { label: string; option: TripOption; showBaggage: boolean; date: string }) {
+function DirectionSummary({ label, option, showBaggage, date, suppressTicketingBadge = false }: { label: string; option: TripOption; showBaggage: boolean; date: string; suppressTicketingBadge?: boolean }) {
   const baggageEstimates = option.baggage_estimates ?? [];
   return <div className="summary-direction">
     <div className="summary-direction-head"><strong>{label} · {summaryDate(date)}</strong><b>{money(option.base_price, option.currency)}</b></div>
@@ -82,7 +95,7 @@ function DirectionSummary({ label, option, showBaggage, date }: { label: string;
         {index < option.legs.length - 1 && <div className="summary-transfer">{option.connection_airport} · {duration(option.connection_minutes)} transfer</div>}
       </div>)}
     </div>
-    {option.ticketing_type === "separate_tickets" && <div className="summary-ticketing">Separate tickets</div>}
+    {!suppressTicketingBadge && option.ticketing_type === "separate_tickets" && <div className="summary-ticketing">Separate tickets</div>}
     {showBaggage && <div className="summary-baggage-enrichment">
       <div><span>Estimated bags</span><strong>{range(option.ancillary_price_low, option.ancillary_price_high, option.currency)}</strong></div>
       <div><span>Indicative total</span><strong>{range(option.effective_price_low, option.effective_price_high, option.currency)}</strong></div>
@@ -91,9 +104,19 @@ function DirectionSummary({ label, option, showBaggage, date }: { label: string;
   </div>;
 }
 
+function MobileDirectionOverview({ label, option, date }: { label: string; option: TripOption; date: string }) {
+  return <div className="mobile-summary-direction">
+    <div><strong>{label} · {summaryDate(date, false)}</strong><b>{money(option.base_price, option.currency)}</b></div>
+    <p>{option.route[0]} {localClock(option.departure_at)} <span>→</span> {option.route.at(-1)} {localClock(option.arrival_at)}</p>
+    <small>{option.is_nonstop ? `Direct · ${option.airlines.join(" / ")}` : `1 stop · ${option.connection_airport} ${duration(option.connection_minutes)}`}</small>
+  </div>;
+}
+
 export function TripSummary({ outbound, inbound, outboundBaseline, inboundBaseline, outboundComparisonEnabled = false, inboundComparisonEnabled = false, excludeBaggage = true, searchId = null, outboundDate, returnDate, complete = true }: { outbound: TripOption | null; inbound: TripOption | null; outboundBaseline: TripOption | null; inboundBaseline: TripOption | null; outboundComparisonEnabled?: boolean; inboundComparisonEnabled?: boolean; excludeBaggage?: boolean; searchId?: string | null; outboundDate?: string; returnDate?: string; complete?: boolean }) {
   const [showBaggage, setShowBaggage] = useState(false);
   const [compactVisible, setCompactVisible] = useState(false);
+  const [detailsExpanded, setDetailsExpanded] = useState(false);
+  const mobile = useMobileSummary();
   const fullSummary = useRef<HTMLElement>(null);
   const summarySentinel = useRef<HTMLDivElement>(null);
   const compareOutbound = outboundComparisonEnabled && !!outbound && !outbound.is_nonstop;
@@ -190,6 +213,14 @@ export function TripSummary({ outbound, inbound, outboundBaseline, inboundBaseli
     : tripHistoryPercent === 0
       ? `No change ${elapsedSummaryDay(tripHistoryElapsed, combinedPriorPoint?.observed_at ?? outboundHistory?.previous_observed_at, currentTripPoint ? new Date(currentTripPoint.observed_at) : undefined, combinedDayDifference ?? outboundHistory?.day_difference)}`
       : `${tripHistoryPercent > 0 ? "↑" : "↓"} ${Math.abs(tripHistoryPercent).toFixed(1)}% ${elapsedSummaryDay(tripHistoryElapsed, combinedPriorPoint?.observed_at ?? outboundHistory?.previous_observed_at, currentTripPoint ? new Date(currentTripPoint.observed_at) : undefined, combinedDayDifference ?? outboundHistory?.day_difference)}`;
+  const mobileTripHistory = tripHistoryState === "LOADING"
+    ? "Updating…"
+    : tripHistoryState === "FIRST_SEEN"
+      ? "First seen"
+      : tripHistoryState === "ERROR" || tripHistoryPercent === null
+        ? "History unavailable"
+        : `${tripHistoryPercent === 0 ? "— (0%)" : `${tripHistoryPercent > 0 ? "↑" : "↓"} ${Math.abs(tripHistoryPercent).toFixed(1)}%`}${previousTripTotal !== null ? ` · was ${money(previousTripTotal, currency)}` : ""}`;
+  const optionIds = [outbound?.id, inbound?.id].filter((id): id is string => Boolean(id));
   return <>
     <div ref={summarySentinel} className="summary-sentinel" aria-hidden="true" />
     {compactVisible && <aside className="compact-trip-summary" aria-label="Compact selected trip summary">
@@ -198,7 +229,29 @@ export function TripSummary({ outbound, inbound, outboundBaseline, inboundBaseli
       {comparisonEnabled && <div><span>Extra travel</span><strong>+{duration(summary.extraMinutes)}</strong></div>}
       <b>{compactRoutes || routes}</b>
     </aside>}
-    <section ref={fullSummary} className="summary-strip" aria-label="Selected trip summary">
+    {mobile ? <section ref={fullSummary} className="summary-strip mobile-selected-summary" aria-label="Selected trip summary">
+      <div className="mobile-summary-total">
+        <span>Trip total</span>
+        <div><strong>{money(summary.baseAlternativePrice, currency)}</strong>{complete && tripTotalSeries.length >= 2 && <PriceSparkline points={tripTotalSeries} currency={currency} className="trip-total-sparkline" />}</div>
+        <small aria-live="polite">{mobileTripHistory}</small>
+      </div>
+      {comparisonEnabled && <div className="mobile-summary-value">
+        <div><span>Save</span><strong>{money(saving, currency)} / {percentage.toFixed(0)}%</strong></div>
+        <div><span>Extra travel</span><strong>+{duration(summary.extraMinutes)}</strong></div>
+      </div>}
+      <div className="mobile-summary-itineraries">
+        {outbound && <MobileDirectionOverview label="Outbound" option={outbound} date={resolvedOutboundDate} />}
+        {inbound && <MobileDirectionOverview label="Return" option={inbound} date={resolvedReturnDate} />}
+      </div>
+      <div className="mobile-summary-booking"><BookingPreparation searchId={searchId} optionIds={optionIds} /></div>
+      <button type="button" className="mobile-trip-details-toggle" aria-expanded={detailsExpanded} onClick={() => setDetailsExpanded((value) => !value)}>Trip details <span aria-hidden="true">{detailsExpanded ? "▴" : "▾"}</span></button>
+      {detailsExpanded && <div className="mobile-trip-details">
+        <label><input type="checkbox" checked={showBaggage} onChange={(event) => setShowBaggage(event.target.checked)} /> Show estimated baggage costs</label>
+        {outbound && <DirectionSummary label="Outbound" option={outbound} showBaggage={showBaggage} date={resolvedOutboundDate} suppressTicketingBadge />}
+        {inbound && <DirectionSummary label="Return" option={inbound} showBaggage={showBaggage} date={resolvedReturnDate} suppressTicketingBadge />}
+        {[outbound, inbound].filter((option): option is TripOption => Boolean(option?.is_self_transfer && option.ticketing_type === "separate_tickets")).map((option) => <p className="mobile-ticket-warning" key={option.id}>{option.direction === "OUTBOUND" ? "Outbound" : "Return"}: Separate tickets · connection not protected</p>)}
+      </div>}
+    </section> : <section ref={fullSummary} className="summary-strip" aria-label="Selected trip summary">
       <div className="summary-primary">
         <div className="summary-top-row" data-testid="summary-top-row">
           <div className="summary-total-block"><span>Trip total</span><div className="trip-total-price-row"><strong>{money(summary.baseAlternativePrice, currency)}</strong>{complete && tripTotalSeries.length >= 2 && <PriceSparkline points={tripTotalSeries} currency={currency} className="trip-total-sparkline" />}</div>{tripHistoryDetailed && <small aria-live="polite" aria-label={tripHistoryState === "LOADING" ? "Updating trip total and price history" : tripHistoryState === "FIRST_SEEN" ? "First price observation" : tripHistoryState === "ERROR" ? "Price history unavailable" : tripHistoryChange !== null && tripHistoryChange > 0 ? `Trip price increased by ${Math.abs(tripHistoryPercent ?? 0).toFixed(1)} percent since last seen` : tripHistoryChange !== null && tripHistoryChange < 0 ? `Trip price decreased by ${Math.abs(tripHistoryPercent ?? 0).toFixed(1)} percent since last seen` : "No trip price change since last seen"}>{tripHistoryDetailed}</small>}{complete && previousTripTotal !== null && <span className="summary-previous-price">was {money(previousTripTotal, currency)}</span>}</div>
@@ -214,6 +267,6 @@ export function TripSummary({ outbound, inbound, outboundBaseline, inboundBaseli
         {inbound && <DirectionSummary label="Return" option={inbound} showBaggage={showBaggage} date={resolvedReturnDate} />}
       </div>
       {excludeBaggage && <em>Prices exclude baggage.</em>}
-    </section>
+    </section>}
   </>;
 }

@@ -261,6 +261,35 @@ footer { max-width:1540px; margin:auto; padding:14px 20px 30px; color:var(--mute
   .search-foot { flex-wrap:wrap; }
   .search-status-details { grid-template-columns:1fr; }
   .summary-strip { padding:8px 10px; gap:10px; }
+  .mobile-selected-summary { padding:12px 13px 0; gap:0; overflow:hidden; }
+  .mobile-summary-total { display:grid; gap:3px; padding-bottom:10px; }
+  .mobile-summary-total > span,.mobile-summary-value span { color:#abc2c1; font-size:9px; text-transform:uppercase; letter-spacing:.08em; }
+  .mobile-summary-total > div { display:flex; align-items:center; gap:12px; min-width:0; }
+  .mobile-summary-total > div > strong { color:#dcfb7b; font-size:28px; line-height:1; font-weight:900; font-variant-numeric:tabular-nums; }
+  .mobile-summary-total .trip-total-sparkline { width:90px; height:25px; margin:0; }
+  .mobile-summary-total small { color:#d7e7e2; font-size:11px; }
+  .mobile-summary-value { display:grid; grid-template-columns:1fr 1fr; gap:16px; padding:9px 0 10px; border-block:1px solid #31565a; }
+  .mobile-summary-value > div { display:grid; gap:2px; }
+  .mobile-summary-value strong { color:#fff; font-size:16px; font-variant-numeric:tabular-nums; }
+  .mobile-summary-itineraries { display:grid; }
+  .mobile-summary-direction { min-width:0; padding:9px 0; border-bottom:1px solid #31565a; font-variant-numeric:tabular-nums; }
+  .mobile-summary-direction > div { display:flex; align-items:baseline; justify-content:space-between; gap:10px; }
+  .mobile-summary-direction strong { color:#abc2c1; font-size:9px; text-transform:uppercase; letter-spacing:.07em; }
+  .mobile-summary-direction b { color:#dcfb7b; font-size:13px; }
+  .mobile-summary-direction p { margin:4px 0 2px; color:#fff; font-size:14px; font-weight:800; white-space:nowrap; }
+  .mobile-summary-direction p span { color:#8eaaa9; padding:0 4px; }
+  .mobile-summary-direction small { color:#c4d5d3; font-size:10px; }
+  .mobile-summary-booking { padding:10px 0; }
+  .mobile-summary-booking .booking-preparation-action { width:100%; margin:0; }
+  .mobile-summary-booking .primary-booking-cta { width:100%; min-height:42px; }
+  .mobile-trip-details-toggle { width:calc(100% + 26px); min-height:35px; margin-left:-13px; border:0; border-top:1px solid #31565a; padding:8px 13px; background:#12363a; color:#d7e7e2; text-align:left; font-size:11px; font-weight:800; }
+  .mobile-trip-details-toggle span { float:right; }
+  .mobile-trip-details { display:grid; gap:12px; padding:12px 0 14px; }
+  .mobile-trip-details > label { color:#d7e7e2; font-size:10px; }
+  .mobile-trip-details .summary-direction { min-width:0; padding:9px; border:1px solid #31565a; border-radius:5px; }
+  .mobile-trip-details .summary-leg { white-space:normal; }
+  .mobile-trip-details .summary-leg > b { float:none; display:block; margin:2px 0 0; }
+  .mobile-ticket-warning { margin:0; padding:7px 9px; background:#284f53; color:#f4c8b6; font-size:10px; }
   .summary-top-row { flex-wrap:wrap; gap:10px; }
   .summary-top-row .booking-preparation-action { width:100%; margin-left:0; }
   .summary-top-row .primary-booking-cta { width:100%; }
