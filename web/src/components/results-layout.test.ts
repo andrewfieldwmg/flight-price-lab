@@ -21,4 +21,15 @@ describe("results page scrolling layout", () => {
     expect(tableScroll).not.toMatch(/overflow-y\s*:\s*(auto|scroll)/);
     expect(tableScroll).toMatch(/overflow-x\s*:\s*auto/);
   });
+
+  it("contains the sticky summary and uses a compact mobile grid", () => {
+    const compact = css.match(/\.compact-trip-summary\s*\{([^}]*)\}/)?.[1] ?? "";
+    expect(compact).toMatch(/width\s*:\s*100%/);
+    expect(compact).toMatch(/max-width\s*:\s*100vw/);
+    expect(compact).toMatch(/overflow\s*:\s*hidden/);
+    expect(compact).toMatch(/box-sizing\s*:\s*border-box/);
+    expect(css).toMatch(/grid-template-columns\s*:\s*minmax\(0,1fr\) max-content/);
+    expect(css).toMatch(/grid-template-rows\s*:\s*28px 25px/);
+    expect(css).toMatch(/compact-trip-sparkline[^}]*width\s*:\s*52px/);
+  });
 });

@@ -49,7 +49,7 @@ describe("observation history language", () => {
 
   it("uses the server's London calendar-day difference across devices", () => {
     expect(elapsedCompactDay(3600, "2026-08-27T09:50:00Z", new Date("2026-08-27T12:50:00Z"), 1)).toBe("1d ago");
-    expect(elapsedSummaryDay(3600, "2026-08-27T09:50:00Z", new Date("2026-08-27T12:50:00Z"), 1)).toBe("since yesterday");
+    expect(elapsedSummaryDay(3600, "2026-08-27T09:50:00Z", new Date("2026-08-27T12:50:00Z"), 1)).toBe("since y/day");
     expect(elapsedSummaryDay(3600, "2026-08-27T09:50:00Z", new Date("2026-08-27T12:50:00Z"), 3)).toBe("since 3d ago");
   });
 
@@ -69,8 +69,8 @@ describe("observation history language", () => {
   it.each([
     [3 * 3600, "today", "today"],
     [24 * 3600 - 60, "today", "today"],
-    [24 * 3600, "1d ago", "since yesterday"],
-    [48 * 3600 - 60, "1d ago", "since yesterday"],
+    [24 * 3600, "1d ago", "since y/day"],
+    [48 * 3600 - 60, "1d ago", "since y/day"],
     [48 * 3600, "2d ago", "since 2d ago"],
     [72 * 3600, "3d ago", "since 3d ago"],
   ])("uses day-level table and summary wording for %s seconds", (seconds, compact, summary) => {
@@ -83,7 +83,7 @@ describe("observation history language", () => {
   it("uses London calendar dates rather than elapsed 24-hour periods", () => {
     const now = new Date("2026-08-27T08:00:00Z");
     expect(elapsedCompactDay(15 * 3600, "2026-08-26T17:00:00Z", now)).toBe("1d ago");
-    expect(elapsedSummaryDay(15 * 3600, "2026-08-26T17:00:00Z", now)).toBe("since yesterday");
+    expect(elapsedSummaryDay(15 * 3600, "2026-08-26T17:00:00Z", now)).toBe("since y/day");
     expect(elapsedSummaryDay(3600, "2026-08-27T07:00:00Z", now)).toBe("today");
     expect(elapsedCompactDay(30 * 3600, "2026-08-25T17:00:00Z", now)).toBe("2d ago");
   });

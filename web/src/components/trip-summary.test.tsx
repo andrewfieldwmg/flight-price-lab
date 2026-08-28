@@ -82,7 +82,7 @@ describe("selected trip summary", () => {
     render(<TripSummary outbound={outbound} inbound={inbound} outboundBaseline={option({ id: "out" })} inboundBaseline={option({ id: "in", direction: "RETURN" })} />);
     expect(screen.queryByText(/Previously/)).not.toBeInTheDocument();
     expect(screen.getByText("History unavailable")).toBeInTheDocument();
-    expect(screen.queryByText(/since yesterday/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/since y\/day/)).not.toBeInTheDocument();
   });
 
   it("reconstructs trip history independently of observation-run pairing", () => {
@@ -99,7 +99,7 @@ describe("selected trip summary", () => {
     ], daily_series: [{ date: "2026-08-26", price: "788" }, { date: "2026-08-27", price: "735" }] };
     render(<TripSummary outbound={outbound} inbound={inbound} outboundBaseline={outbound} inboundBaseline={inbound} />);
     expect(screen.getByText("£1,519")).toBeInTheDocument();
-    expect(screen.getByText("↓ 7.2% since yesterday")).toBeInTheDocument();
+    expect(screen.getByText("↓ 7.2% since y/day")).toBeInTheDocument();
     expect(screen.getByText("was £1,637")).toHaveClass("summary-previous-price");
     const sparkline = screen.getByRole("img", { name: /£1,637.*£1,519/ });
     expect(sparkline).toHaveClass("trip-total-sparkline");
@@ -107,8 +107,8 @@ describe("selected trip summary", () => {
     expect(screen.getByText("£1,519").closest(".trip-total-price-row")).toContainElement(sparkline);
     expect(screen.getByLabelText("Show estimated baggage costs").closest(".summary-header-actions")).toBeInTheDocument();
     expect(sparkline).not.toHaveAccessibleName(/999/);
-    expect(screen.queryByText("↓ 7.7% since yesterday")).not.toBeInTheDocument();
-    expect(screen.queryByText("↓ 6.7% since yesterday")).not.toBeInTheDocument();
+    expect(screen.queryByText("↓ 7.7% since y/day")).not.toBeInTheDocument();
+    expect(screen.queryByText("↓ 6.7% since y/day")).not.toBeInTheDocument();
   });
 
   it("reconstructs exact and three-day carry-forward trip totals without carrying backward", () => {
@@ -133,9 +133,9 @@ describe("selected trip summary", () => {
     const inbound = option({ id: "in-549", direction: "RETURN", base_price: "549", history: { history_status: "PREVIOUS_FOUND", previous_price: "549", price_change_amount: "0", price_change_percent: "0", previous_observed_at: "2026-08-26T12:00:00Z", elapsed_seconds: 86400, day_difference: 1, previous_observation_run_id: "in", daily_series: [{ date: "2026-08-24", price: "600" }, { date: "2026-08-26", price: "549" }, { date: "2026-08-27", price: "549" }] } });
     render(<TripSummary outbound={outbound} inbound={inbound} outboundBaseline={outbound} inboundBaseline={inbound} />);
     expect(screen.getByText("£1,052")).toBeInTheDocument();
-    expect(screen.getByText("↑ 7.5% since yesterday")).toBeInTheDocument();
+    expect(screen.getByText("↑ 7.5% since y/day")).toBeInTheDocument();
     expect(screen.getByText("was £979")).toBeInTheDocument();
-    expect(screen.getByText("↑ 7.5% since yesterday")).toHaveAttribute("data-history-quality", "PARTIAL_CARRY_FORWARD");
+    expect(screen.getByText("↑ 7.5% since y/day")).toHaveAttribute("data-history-quality", "PARTIAL_CARRY_FORWARD");
   });
 
   it("collapses unchanged nonstop history without repeating leg price", () => {
@@ -155,7 +155,7 @@ describe("selected trip summary", () => {
     const increased = { history_status: "PREVIOUS_FOUND" as const, previous_price: "800", price_change_amount: "49", price_change_percent: "6.125", previous_observed_at: "2026-08-20T08:00:00Z", elapsed_seconds: 24 * 3600, day_difference: 1, previous_observation_run_id: "run-1" };
     const selected = option({ id: "increased", base_price: "849", history: increased });
     render(<TripSummary outbound={selected} inbound={null} outboundBaseline={selected} inboundBaseline={null} />);
-    expect(screen.getAllByText("↑ 6.1% since yesterday")).toHaveLength(1);
+    expect(screen.getAllByText("↑ 6.1% since y/day")).toHaveLength(1);
     expect(screen.getByText("was £800")).toHaveClass("summary-previous-price");
     expect(screen.queryByText(/\d+[hm] ago/)).not.toBeInTheDocument();
   });
@@ -164,7 +164,7 @@ describe("selected trip summary", () => {
     const comparison = { history_status: "PREVIOUS_FOUND" as const, previous_price: "623", price_change_amount: "0", price_change_percent: "0", previous_observed_at: "2026-08-26T14:41:00Z", elapsed_seconds: 86400, day_difference: 1, previous_observation_run_id: "run", trend_status: "RISING" as const, trend_start_price: "500", trend_current_price: "623", trend_change_percent: "24.6", trend_span_days: 3, observed_day_count: 4 };
     const selected = option({ id: "plateau", base_price: "623", history: comparison });
     render(<TripSummary outbound={selected} inbound={null} outboundBaseline={selected} inboundBaseline={null} />);
-    expect(screen.getAllByText("No change since yesterday")).toHaveLength(1);
+    expect(screen.getAllByText("No change since y/day")).toHaveLength(1);
     expect(screen.queryByText("↑ 24.6% over 4 observed days")).not.toBeInTheDocument();
   });
 
@@ -215,6 +215,23 @@ describe("selected trip summary", () => {
     expect(compact).not.toHaveTextContent("7.7%");
     expect(compact.querySelector(".compact-trip-sparkline")).toBeInTheDocument();
     expect(compact.querySelector(".compact-trip-history-empty")).not.toBeInTheDocument();
+  });
+
+  it.each([320, 375, 390, 768, 1440])("keeps mandatory sticky content at a %dpx viewport", (width) => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: width });
+    vi.stubGlobal("matchMedia", vi.fn((query: string) => ({ matches: query.includes("680px") && width <= 680, addEventListener: vi.fn(), removeEventListener: vi.fn() })));
+    vi.stubGlobal("IntersectionObserver", MockIntersectionObserver);
+    const selected = synthetic();
+    selected.history = { history_status: "PREVIOUS_FOUND", previous_price: "500", price_change_amount: "-14", price_change_percent: "-2.8", previous_observed_at: "2026-08-26T12:00:00Z", elapsed_seconds: 86400, day_difference: 1, previous_observation_run_id: "prior", daily_series: [{ date: "2026-08-26", price: "500" }, { date: "2026-08-27", price: "486" }] };
+    render(<TripSummary outbound={selected} inbound={null} outboundBaseline={option({ id: "baseline" })} inboundBaseline={null} outboundComparisonEnabled />);
+    act(() => observerCallback?.([{ isIntersecting: false, boundingClientRect: { top: -1 } } as IntersectionObserverEntry], {} as IntersectionObserver));
+    const compact = screen.getByLabelText("Compact selected trip summary");
+    expect(compact).toHaveTextContent("£486");
+    expect(compact).toHaveTextContent("Save");
+    expect(compact).toHaveTextContent("£255 / 34%");
+    expect(compact).toHaveTextContent("Extra travel");
+    expect(compact).toHaveTextContent("+4h 45m");
+    expect(compact.querySelector(".compact-trip-sparkline")).toBeInTheDocument();
   });
 
   it("uses the measured sticky-header height for the visibility boundary", () => {
