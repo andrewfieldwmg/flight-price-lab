@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ConnectionProfile, DirectionResults as Results, TripOption } from "@/lib/api/types";
 import { money } from "./price-display";
 import { duration } from "./result-card";
@@ -9,6 +9,19 @@ import { PriceSparkline } from "./price-sparkline";
 
 export type SortKey = "saving" | "price" | "departure" | "arrival" | "transfer" | "journey" | "extra";
 const RESULTS_PER_PAGE = 15;
+
+function useMobileResults(): boolean {
+  const [mobile, setMobile] = useState(false);
+  useEffect(() => {
+    if (!window.matchMedia) return;
+    const query = window.matchMedia("(max-width: 680px)");
+    const update = () => setMobile(query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+  return mobile;
+}
 
 export function localClock(value: string): string {
   return value.match(/T(\d{2}:\d{2})/)?.[1] ?? "—";
@@ -86,6 +99,7 @@ export function DirectionResults({
   onSelect,
   complete,
   selfTransferEnabled,
+  connectionProfile,
   date,
 }: {
   title: string;
@@ -153,7 +167,7 @@ export function DirectionResults({
             <th>Airlines</th>
           </tr></thead>
           <tbody>
-            {pageOptions.map((option) => <ResultRow key={option.id} option={option} selected={selectedId === option.id} onClick={() => onSelect(option.id)} showComparisons={selfTransferEnabled} />)}
+            {pageOptions.map((option) => <ResultRow key={option.id} option={option} selected={selectedId === option.id} onSelect={() => onSelect(option.id)} showComparisons={selfTransferEnabled} connectionProfile={connectionProfile} />)}
           </tbody>
         </table>
       </div>
@@ -164,14 +178,23 @@ export function DirectionResults({
   );
 }
 
-function ResultRow({ option, selected, onClick, showComparisons }: { option: TripOption; selected: boolean; onClick: () => void; showComparisons: boolean }) {
+function ResultRow({ option, selected, onSelect, showComparisons, connectionProfile }: { option: TripOption; selected: boolean; onSelect: () => void; showComparisons: boolean; connectionProfile: ConnectionProfile }) {
+  const [expanded, setExpanded] = useState(false);
+  const mobile = useMobileResults();
   const saving = Number(option.saving_vs_nonstop_amount ?? 0);
   const stopover = option.connection_airport && option.connection_minutes !== null
     ? `${option.connection_airport} · ${duration(option.connection_minutes)}`
     : "—";
   return (
-      <tr className={selected ? "selected-row" : ""} onClick={onClick}>
-        <td data-label="Select"><input type="radio" readOnly checked={selected} aria-label={`Select ${option.route.join("-")}`} /> <span className="type-pill">{option.is_nonstop ? "Direct" : "1-stop"}</span></td>
+      <tr className={`${selected ? "selected-row " : ""}${expanded ? "mobile-expanded" : ""}`} onClick={() => {
+        if (mobile) setExpanded((value) => !value);
+        else onSelect();
+      }}>
+        <td data-label="Select" className="select-cell">
+          <input className="trip-select-radio" type="radio" readOnly checked={selected} aria-label={`Select ${option.route.join("-")}`} onClick={(event) => { event.stopPropagation(); onSelect(); }} />
+          <div className="desktop-select"><span className="type-pill">{option.is_nonstop ? "Direct" : "1-stop"}</span></div>
+          {mobile && <MobileTripCard option={option} expanded={expanded} showComparisons={showComparisons} connectionProfile={connectionProfile} />}
+        </td>
         <td data-label="Price" className="price-cell">{compactPrice(option)}</td>
         <HistoryCell option={option} />
         <td data-label="Trend" className="trend-column trend-cell"><PriceSparkline points={option.history?.visual_series ?? []} currency={option.currency} /></td>
@@ -185,6 +208,47 @@ function ResultRow({ option, selected, onClick, showComparisons }: { option: Tri
         <td data-label="Airlines">{option.airlines.join(" / ")}</td>
       </tr>
   );
+}
+
+function MobileTripCard({ option, expanded, showComparisons, connectionProfile }: { option: TripOption; expanded: boolean; showComparisons: boolean; connectionProfile: ConnectionProfile }) {
+  const saving = Number(option.saving_vs_nonstop_amount ?? 0);
+  const historyState = priceHistoryState(option.history);
+  const historyClass = Number(option.history?.price_change_amount ?? 0) > 0 ? "history-up" : Number(option.history?.price_change_amount ?? 0) < 0 ? "history-down" : "";
+  const origin = option.route[0];
+  const destination = option.route.at(-1);
+  return <div className="mobile-trip-card">
+    <div className="mobile-identity">
+      <strong>{option.is_nonstop ? "Direct" : "1-stop"}</strong><span aria-hidden="true">·</span><span className="mobile-airlines">{option.airlines.join(" / ")}</span>
+      <span className="mobile-chevron" aria-hidden="true">{expanded ? "⌃" : "⌄"}</span>
+    </div>
+    <div className="mobile-schedule" aria-label={`${origin} ${localClock(option.departure_at)} to ${destination} ${localClock(option.arrival_at)}`}>
+      <span className={isEarlyDeparture(option.departure_at) ? "time-warning" : ""}><b>{origin}</b> {localClock(option.departure_at)}</span>
+      <span className="mobile-route-arrow">→{option.connection_airport ? ` ${option.connection_airport} →` : ""}</span>
+      <span className={isLateArrival(option.arrival_at) ? "time-warning" : ""}><b>{destination}</b> {localClock(option.arrival_at)}</span>
+    </div>
+    <div className="mobile-economics"><strong>{compactPrice(option)}</strong>{showComparisons && !option.is_nonstop && saving > 0 && <span>SAVE {money(saving, option.currency)} / {Number(option.saving_vs_nonstop_percent).toFixed(0)}%</span>}</div>
+    <div className="mobile-bottom">
+      <span className={(option.connection_minutes ?? 0) > 240 ? "time-warning" : ""}>{duration(option.total_journey_minutes)}{option.connection_airport && option.connection_minutes !== null ? ` · ${option.connection_airport} ${duration(option.connection_minutes)}` : ""}</span>
+      <span className={`mobile-history ${historyClass}`} title={historyTooltip(option.history, option.base_price, option.currency)}>
+        {historyState === "LOADING" ? <span className="loading-spinner history-loading-spinner" role="status" aria-label="Loading price history" /> : <span><b aria-label={historyAccessibleLabel(option.history)}>{historySignal(option.history)}</b>{option.history?.history_status === "PREVIOUS_FOUND" && option.history.previous_price !== null && <> · was {money(option.history.previous_price, option.currency)}</>}</span>}
+        <PriceSparkline points={option.history?.visual_series ?? []} currency={option.currency} />
+      </span>
+    </div>
+    {expanded && <div className="mobile-details">
+      <dl>
+        <div><dt>Route</dt><dd>{option.route.join(" → ")}</dd></div>
+        <div><dt>Flights</dt><dd>{option.legs.map((leg) => `${leg.airline} ${leg.flight_number}`).join(" / ")}</dd></div>
+        <div><dt>Departure / arrival</dt><dd>{origin} {localClock(option.departure_at)} → {destination} {localClock(option.arrival_at)}</dd></div>
+        {option.connection_airport && <div><dt>Transfer airport</dt><dd>{option.connection_airport}</dd></div>}
+        {option.connection_minutes !== null && <div><dt>Transfer duration</dt><dd>{duration(option.connection_minutes)}</dd></div>}
+        <div><dt>Journey duration</dt><dd>{duration(option.total_journey_minutes)}</dd></div>
+        {showComparisons && option.extra_minutes_vs_nonstop !== null && <div><dt>Extra travel vs nonstop</dt><dd>+{duration(option.extra_minutes_vs_nonstop)}</dd></div>}
+        <div><dt>Tickets</dt><dd>{option.ticketing_type === "separate_tickets" ? "Separate tickets" : option.ticketing_type === "single_ticket" ? "Single ticket" : "Not confirmed"}</dd></div>
+        <div><dt>Connection profile</dt><dd>{connectionProfile.toLowerCase()}</dd></div>
+        <div><dt>Ancillaries</dt><dd>{option.price_completeness === "COMPLETE" ? "Included in displayed estimates" : "Estimate incomplete"}</dd></div>
+      </dl>
+    </div>}
+  </div>;
 }
 
 function HistoryCell({ option }: { option: TripOption }) {

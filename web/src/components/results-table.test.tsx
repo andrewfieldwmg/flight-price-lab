@@ -239,4 +239,35 @@ describe("dense flight results", () => {
     expect(isLateArrival("2026-12-18T23:01:00+01:00")).toBe(true);
     expect(isLateArrival("2026-12-18T23:00:00+01:00")).toBe(false);
   });
+
+  it("renders purpose-built mobile cards with independent expansion and selection", () => {
+    const onSelect = vi.fn();
+    const media = { matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() };
+    vi.stubGlobal("matchMedia", vi.fn(() => media));
+    const { container } = render(<DirectionResults title="Outbound" date="2026-12-18" results={results} selectedId="direct" onSelect={onSelect} complete connectionProfile="CONSERVATIVE" selfTransferEnabled />);
+
+    const cards = container.querySelectorAll(".mobile-trip-card");
+    expect(cards).toHaveLength(2);
+    const directCard = cards[0] as HTMLElement;
+    const stopCard = cards[1] as HTMLElement;
+    expect(directCard).toHaveTextContent("Direct");
+    expect(directCard).not.toHaveTextContent("SAVE");
+    expect(stopCard).toHaveTextContent("1-stop");
+    expect(stopCard).toHaveTextContent("SAVE £255 / 34%");
+    expect(stopCard.querySelector(".mobile-schedule")).toHaveAccessibleName("LGW 08:00 to CAG 15:25");
+    expect(stopCard).toHaveTextContent("7h 25m · MXP 3h 50m");
+    expect(stopCard).not.toHaveTextContent("Separate tickets");
+    expect(container.querySelector(".selected-row .mobile-trip-card")).toBe(directCard);
+
+    fireEvent.click(stopCard);
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(stopCard).toHaveTextContent("LGW → MXP → CAG");
+    expect(stopCard).toHaveTextContent("Separate tickets");
+    expect(stopCard).toHaveTextContent("Connection profile");
+
+    fireEvent.click(screen.getByLabelText("Select LGW-MXP-CAG"));
+    expect(onSelect).toHaveBeenCalledWith("synthetic-OUTBOUND");
+    expect(stopCard).toHaveTextContent("Separate tickets");
+    vi.unstubAllGlobals();
+  });
 });

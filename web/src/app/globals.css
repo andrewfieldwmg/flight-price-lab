@@ -202,6 +202,10 @@ button { cursor:pointer; }
 .results-table th button { border:0; background:transparent; text-transform:inherit; letter-spacing:inherit; font-size:inherit; color:inherit; padding:0; }
 .results-table td { height:39px; padding:6px 8px; border-bottom:1px solid #e9ebe8; white-space:nowrap; font-variant-numeric:tabular-nums; }
 .results-table tbody tr { cursor:pointer; }
+.select-cell { position:relative; }
+.desktop-select { display:inline; }
+.trip-select-radio { margin:0 4px 0 0; vertical-align:middle; }
+.mobile-trip-card { display:none; }
 .results-table tbody tr:hover td { background:#f7faf8; }
 .results-table .selected-row td { background:#eaf5f3; }
 .results-table .selected-row td:first-child { box-shadow:inset 3px 0 var(--teal); }
@@ -269,13 +273,37 @@ footer { max-width:1540px; margin:auto; padding:14px 20px 30px; color:var(--mute
   .summary-totals { min-width:0; }
   .compact-trip-summary { top:var(--sticky-header-height, 54px); padding:6px 10px; gap:12px; flex-wrap:wrap; }
   .compact-trip-summary > b { width:100%; margin-left:0; }
-  .table-scroll { max-height:none; overflow:visible; }
-  .results-table { min-width:0; display:block; }
+  .table-scroll { max-height:none; overflow:visible; width:100%; }
+  .results-table { min-width:0; width:100%; display:block; }
   .results-table thead { display:none; }
   .results-table tbody { display:block; }
-  .results-table tr { display:grid; grid-template-columns:1fr 1fr 1fr; padding:8px 10px; border-bottom:1px solid var(--line); }
-  .results-table td { display:block; height:auto; border:0; padding:2px 4px; }
-  .results-table td::before { content:attr(data-label) " "; color:var(--muted); font-size:8px; text-transform:uppercase; }
-  .results-table td.route-cell { grid-column:1/-1; font-size:12px; order:-1; }
-  .results-table td:nth-child(2),.results-table td:nth-child(3) { font-size:13px; }
+  .results-table tr { display:block; position:relative; padding:0; border-bottom:1px solid var(--line); overflow:hidden; }
+  .results-table td { display:none; }
+  .results-table td.select-cell { display:block; height:auto; padding:0; border:0; white-space:normal; }
+  .results-table .selected-row td.select-cell { background:#eaf5f3; box-shadow:inset 3px 0 var(--teal); }
+  .desktop-select { display:none; }
+  .trip-select-radio { position:absolute; z-index:2; top:14px; left:13px; margin:0; width:16px; height:16px; }
+  .mobile-trip-card { display:block; width:100%; min-width:0; padding:11px 12px 10px 39px; box-sizing:border-box; }
+  .mobile-identity { display:flex; align-items:center; min-width:0; gap:5px; height:20px; color:var(--teal); font-size:11px; }
+  .mobile-identity strong { flex:0 0 auto; }
+  .mobile-airlines { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--ink); font-weight:650; }
+  .mobile-chevron { margin-left:auto; color:var(--muted); font-size:14px; }
+  .mobile-schedule { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:5px; color:var(--ink); font-size:15px; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .mobile-schedule b { font-size:12px; letter-spacing:.04em; }
+  .mobile-route-arrow { flex:1; color:var(--muted); text-align:center; font-size:11px; overflow:hidden; text-overflow:ellipsis; }
+  .mobile-schedule .time-warning,.mobile-bottom .time-warning { padding:1px 3px; border-radius:3px; }
+  .mobile-economics { display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-top:7px; }
+  .mobile-economics > strong { color:var(--ink); font-size:20px; font-weight:900; }
+  .mobile-economics > span { color:var(--teal); font-size:11px; font-weight:900; white-space:nowrap; }
+  .mobile-bottom { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:9px; margin-top:5px; color:var(--ink); font-size:11px; font-variant-numeric:tabular-nums; }
+  .mobile-history { display:flex; align-items:center; gap:5px; min-width:0; color:var(--muted); white-space:nowrap; }
+  .mobile-history.history-up { color:#a04431; }
+  .mobile-history.history-down { color:#167360; }
+  .mobile-history .price-sparkline { width:48px; height:18px; margin:0; }
+  .mobile-history .sparkline-empty { width:16px; margin:0; }
+  .mobile-details { margin:10px 0 0 -27px; padding:9px 0 2px; border-top:1px solid var(--line); color:var(--ink); cursor:default; }
+  .mobile-details dl { display:grid; gap:6px; margin:0; }
+  .mobile-details dl > div { display:grid; grid-template-columns:120px minmax(0,1fr); gap:8px; }
+  .mobile-details dt { color:var(--muted); font-size:9px; text-transform:uppercase; letter-spacing:.04em; }
+  .mobile-details dd { min-width:0; margin:0; font-size:11px; overflow-wrap:anywhere; }
 }
