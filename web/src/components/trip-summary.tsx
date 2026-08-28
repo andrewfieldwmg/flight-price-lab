@@ -143,10 +143,10 @@ export function TripSummary({ outbound, inbound, outboundBaseline, inboundBaseli
   const fullSummary = useRef<HTMLElement>(null);
   const compareOutbound = outboundComparisonEnabled && !!outbound && !outbound.is_nonstop;
   const compareInbound = inboundComparisonEnabled && !!inbound && !inbound.is_nonstop;
+  const selectedTripPresent = Boolean(outbound || inbound);
   const summary = aggregateTrip(outbound, inbound, outboundBaseline, inboundBaseline, { outbound: compareOutbound, inbound: compareInbound });
   useEffect(() => {
     const header = document.querySelector<HTMLElement>(".site-header");
-    const selectedTripPresent = Boolean(outbound || inbound);
     if (!selectedTripPresent || !header) {
       return;
     }
@@ -190,7 +190,7 @@ export function TripSummary({ outbound, inbound, outboundBaseline, inboundBaseli
       window.removeEventListener("resize", scheduleMeasure);
       window.removeEventListener("orientationchange", scheduleMeasure);
     };
-  }, [outbound?.id, inbound?.id, outbound?.history, inbound?.history, complete, detailsExpanded]);
+  }, [selectedTripPresent, outbound?.id, inbound?.id, outbound?.history, inbound?.history, complete, detailsExpanded]);
   if (!summary) return null;
   const currency = outbound?.currency ?? inbound?.currency ?? "GBP";
   const comparisonEnabled = compareOutbound || compareInbound;
