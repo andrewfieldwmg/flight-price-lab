@@ -171,6 +171,9 @@ button { cursor:pointer; }
 .compact-trip-summary > div { display:grid; gap:1px; }
 .compact-trip-summary > div strong { font-size:12px; }
 .compact-trip-summary > div:first-child strong { color:#dcfb7b; font-size:16px; }
+.compact-trip-total strong { display:flex; align-items:center; gap:7px; min-width:0; white-space:nowrap; }
+.compact-trip-total .compact-trip-sparkline { flex:0 0 72px; width:72px; height:21px; margin:0; color:#dcfb7b; }
+.compact-trip-history-empty { color:#769492; font-size:12px; font-style:normal; font-weight:500; }
 .compact-trip-summary > b { margin-left:auto; font-size:10px; color:#d7e4e3; }
 .summary-baggage-detail { margin-top:5px; color:#b8cbc9; font-size:9px; }
 .summary-baggage-detail summary { cursor:pointer; font-weight:800; color:#d7e4e3; }

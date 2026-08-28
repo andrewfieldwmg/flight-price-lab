@@ -7,7 +7,7 @@ import { localClock } from "./direction-results";
 import { money } from "./price-display";
 import { duration } from "./result-card";
 import { BookingPreparation } from "./booking-preparation";
-import { elapsedSummaryDay, historyAccessibleLabel, londonCalendarDayCount, priceHistoryState, summaryTrend } from "@/lib/search/price-history";
+import { elapsedSummaryDay, historyAccessibleLabel, londonCalendarDayCount, priceHistoryState } from "@/lib/search/price-history";
 import { PriceSparkline } from "./price-sparkline";
 
 function useMobileSummary(): boolean {
@@ -107,8 +107,6 @@ function DirectionSummary({ label, option, showBaggage, date, suppressTicketingB
   const baggageEstimates = option.baggage_estimates ?? [];
   return <div className="summary-direction">
     <div className="summary-direction-head"><strong>{label} · {summaryDate(date)}</strong><b>{money(option.base_price, option.currency)}</b></div>
-    {summaryDirectionHistory(option.history) && <div className="summary-history" aria-label={summaryHistoryAccessibleLabel(option.history)}>{summaryDirectionHistory(option.history)}</div>}
-    {summaryTrend(option.history) && <div className="summary-history">{summaryTrend(option.history)}</div>}
     <div className="summary-route">
       {option.legs.map((leg, index) => <div key={`${leg.flight_number}-${index}`}>
         <div className="summary-leg" aria-label={`${leg.origin} ${localClock(leg.departure_at)} to ${leg.destination} ${localClock(leg.arrival_at)} ${leg.airline} ${leg.flight_number}${option.is_self_transfer && leg.constituent_price !== null && leg.constituent_price !== undefined && summaryChangeSignal(leg.history) ? `. ${summaryHistoryAccessibleLabel(leg.history)}` : ""}`}><strong>{leg.origin}</strong> {localClock(leg.departure_at)} <span>→</span> <strong>{leg.destination}</strong> {localClock(leg.arrival_at)} <small>({leg.airline} {leg.flight_number})</small>{option.is_self_transfer && leg.constituent_price !== null && leg.constituent_price !== undefined && <b>{money(leg.constituent_price, option.currency)} {summaryChangeSignal(leg.history) && <em>{summaryDirectionHistory(leg.history)}</em>}</b>}</div>
@@ -211,7 +209,6 @@ export function TripSummary({ outbound, inbound, outboundBaseline, inboundBaseli
         ? "FIRST_SEEN"
         : previousTripTotal !== null && tripHistoryPercent === 0 ? "UNCHANGED" : previousTripTotal !== null ? "CHANGED" : "ERROR"
     : outboundHistoryState;
-  const tripHistoryCompact = tripHistoryState === "LOADING" ? "Updating…" : tripHistoryState === "FIRST_SEEN" ? "First seen" : tripHistoryState === "ERROR" ? "Unavailable" : tripHistoryState === "UNCHANGED" ? "No change" : `${(tripHistoryPercent ?? 0) > 0 ? "↑" : "↓"}${Math.abs(tripHistoryPercent ?? 0).toFixed(1)}%`;
   const tripHistoryDetailed = tripHistoryState === "LOADING"
     ? "Updating…"
     : tripHistoryState === "FIRST_SEEN"
@@ -234,7 +231,7 @@ export function TripSummary({ outbound, inbound, outboundBaseline, inboundBaseli
   return <>
     <div ref={summarySentinel} className="summary-sentinel" aria-hidden="true" />
     {compactVisible && <aside className="compact-trip-summary" aria-label="Compact selected trip summary">
-      <div><span>Trip total</span><strong>{money(summary.baseAlternativePrice, currency)}{tripHistoryCompact && ` · ${tripHistoryCompact}`}</strong></div>
+      <div className="compact-trip-total"><span>Trip total</span><strong>{money(summary.baseAlternativePrice, currency)}{tripTotalSeries.length >= 2 ? <PriceSparkline points={tripTotalSeries} currency={currency} className="compact-trip-sparkline" /> : <i className="compact-trip-history-empty" aria-label="Insufficient trip price history">—</i>}</strong></div>
       {comparisonEnabled && <div><span>Save</span><strong>{money(saving, currency)} / {percentage.toFixed(0)}%</strong></div>}
       {comparisonEnabled && <div><span>Extra travel</span><strong>+{duration(summary.extraMinutes)}</strong></div>}
       <b>{compactRoutes || routes}</b>

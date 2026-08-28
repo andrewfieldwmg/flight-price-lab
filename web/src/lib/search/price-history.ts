@@ -41,7 +41,7 @@ export function elapsedSummaryDay(seconds: number | null, previousObservedAt?: s
   const days = dayDifference ?? (previousObservedAt ? londonCalendarDayCount(previousObservedAt, now) : elapsedDayCount(seconds));
   if (days === null) return "";
   if (days === 0) return "today";
-  if (days === 1) return "since yesterday";
+  if (days === 1) return "since y/day";
   return `since ${days}d ago`;
 }
 
@@ -59,7 +59,7 @@ export function comparisonPeriod(history: PriceHistoryComparison | null | undefi
   const days = history?.day_difference ?? londonCalendarDayCount(history?.previous_observed_at);
   if (days === null) return "";
   if (days === 0) return "vs today";
-  return days === 1 ? "vs yesterday" : `vs ${days}d ago`;
+  return days === 1 ? "vs y/day" : `vs ${days}d ago`;
 }
 
 export function historySignal(history: PriceHistoryComparison | null | undefined): string {

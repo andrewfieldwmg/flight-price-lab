@@ -188,7 +188,7 @@ describe("dense flight results", () => {
     expect(screen.getByRole("columnheader", { name: "Trend" })).toHaveClass("trend-column");
     expect(screen.getByRole("img", { name: /Price history/ }).closest("td")).toHaveClass("trend-column", "trend-cell");
     expect(screen.getByLabelText(/24 Aug.*£500.*27 Aug.*£623/)).toBeInTheDocument();
-    expect(screen.getByText("vs yesterday")).toBeInTheDocument();
+    expect(screen.getByText("vs y/day")).toBeInTheDocument();
   });
 
   it("uses decrease, neutral, and first-seen indicators in the Change column", () => {
@@ -223,7 +223,7 @@ describe("dense flight results", () => {
     expect(screen.getByText("↓ 7.7%")).toBeInTheDocument();
     expect(screen.getByText("was £849")).toHaveClass("history-was");
     expect(screen.getByText("was £849").tagName).toBe("SPAN");
-    expect(screen.getByText("vs yesterday")).toBeInTheDocument();
+    expect(screen.getByText("vs y/day")).toBeInTheDocument();
   });
 
   it("labels a two-calendar-day comparison explicitly", () => {
