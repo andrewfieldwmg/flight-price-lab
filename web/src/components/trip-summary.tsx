@@ -23,6 +23,11 @@ function useMobileSummary(): boolean {
   return mobile;
 }
 
+export function shouldShowCompactSummary(fullSummary: HTMLElement | null, stickyHeader: HTMLElement | null, selectedTripPresent: boolean): boolean {
+  if (!selectedTripPresent || !fullSummary || !stickyHeader) return false;
+  return fullSummary.getBoundingClientRect().bottom <= stickyHeader.getBoundingClientRect().bottom;
+}
+
 function summaryChangeSignal(history: PriceHistoryComparison | null | undefined): string {
   const state = priceHistoryState(history);
   if (state === "LOADING") return "Loading history…";
@@ -136,41 +141,48 @@ export function TripSummary({ outbound, inbound, outboundBaseline, inboundBaseli
   const [detailsExpanded, setDetailsExpanded] = useState(false);
   const mobile = useMobileSummary();
   const fullSummary = useRef<HTMLElement>(null);
-  const summarySentinel = useRef<HTMLDivElement>(null);
   const compareOutbound = outboundComparisonEnabled && !!outbound && !outbound.is_nonstop;
   const compareInbound = inboundComparisonEnabled && !!inbound && !inbound.is_nonstop;
   const summary = aggregateTrip(outbound, inbound, outboundBaseline, inboundBaseline, { outbound: compareOutbound, inbound: compareInbound });
   useEffect(() => {
-    const sentinel = summarySentinel.current;
     const header = document.querySelector<HTMLElement>(".site-header");
-    if (!sentinel || typeof IntersectionObserver === "undefined") return;
-    let observer: IntersectionObserver | null = null;
     let frame = 0;
-    const connect = () => {
-      observer?.disconnect();
-      const headerHeight = Math.round(header?.getBoundingClientRect().height ?? 0);
-      document.documentElement.style.setProperty("--sticky-header-height", `${headerHeight}px`);
-      observer = new IntersectionObserver(([entry]) => {
-        setCompactVisible(!entry.isIntersecting && entry.boundingClientRect.top <= headerHeight + 1);
-      }, { rootMargin: `-${headerHeight}px 0px 0px 0px`, threshold: 0 });
-      observer.observe(sentinel);
+    const selectedTripPresent = Boolean(outbound || inbound);
+    const measure = () => {
+      frame = 0;
+      const summaryElement = fullSummary.current;
+      const headerBottom = header?.getBoundingClientRect().bottom ?? 0;
+      const summaryBottom = summaryElement?.getBoundingClientRect().bottom ?? 0;
+      const next = shouldShowCompactSummary(summaryElement, header, selectedTripPresent);
+      document.documentElement.style.setProperty("--app-header-bottom", `${Math.max(0, Math.round(headerBottom))}px`);
+      setCompactVisible((current) => current === next ? current : next);
+      if (process.env.NODE_ENV !== "production" && summaryElement) {
+        summaryElement.dataset.compactHeaderBottom = String(headerBottom);
+        summaryElement.dataset.compactFullSummaryBottom = String(summaryBottom);
+        summaryElement.dataset.compactSelectedTripPresent = String(selectedTripPresent);
+        summaryElement.dataset.compactShouldShow = String(next);
+        summaryElement.dataset.compactRendered = String(next);
+      }
     };
-    const reconnect = () => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(connect);
+    const scheduleMeasure = () => {
+      if (frame) return;
+      frame = requestAnimationFrame(measure);
     };
-    connect();
-    const resizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(reconnect);
+    const resizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(scheduleMeasure);
     if (header) resizeObserver?.observe(header);
     if (fullSummary.current) resizeObserver?.observe(fullSummary.current);
-    window.addEventListener("resize", reconnect);
+    window.addEventListener("scroll", scheduleMeasure, { passive: true });
+    window.addEventListener("resize", scheduleMeasure);
+    window.addEventListener("orientationchange", scheduleMeasure);
+    scheduleMeasure();
     return () => {
       cancelAnimationFrame(frame);
-      observer?.disconnect();
       resizeObserver?.disconnect();
-      window.removeEventListener("resize", reconnect);
+      window.removeEventListener("scroll", scheduleMeasure);
+      window.removeEventListener("resize", scheduleMeasure);
+      window.removeEventListener("orientationchange", scheduleMeasure);
     };
-  }, []);
+  }, [outbound?.id, inbound?.id, outbound?.history, inbound?.history, complete, detailsExpanded]);
   if (!summary) return null;
   const currency = outbound?.currency ?? inbound?.currency ?? "GBP";
   const comparisonEnabled = compareOutbound || compareInbound;
@@ -229,7 +241,6 @@ export function TripSummary({ outbound, inbound, outboundBaseline, inboundBaseli
         : `${tripHistoryPercent === 0 ? "— (0%)" : `${tripHistoryPercent > 0 ? "↑" : "↓"} ${Math.abs(tripHistoryPercent).toFixed(1)}%`}${previousTripTotal !== null ? ` · was ${money(previousTripTotal, currency)}` : ""}`;
   const optionIds = [outbound?.id, inbound?.id].filter((id): id is string => Boolean(id));
   return <>
-    <div ref={summarySentinel} className="summary-sentinel" aria-hidden="true" />
     {compactVisible && <aside className="compact-trip-summary" aria-label="Compact selected trip summary">
       <div className="compact-trip-total"><span>Trip total</span><strong>{money(summary.baseAlternativePrice, currency)}{tripTotalSeries.length >= 2 ? <PriceSparkline points={tripTotalSeries} currency={currency} className="compact-trip-sparkline" /> : <i className="compact-trip-history-empty" aria-label="Insufficient trip price history">—</i>}</strong></div>
       {comparisonEnabled && <div><span>Save</span><strong>{money(saving, currency)} / {percentage.toFixed(0)}%</strong></div>}

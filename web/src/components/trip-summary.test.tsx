@@ -1,17 +1,28 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { option, synthetic } from "@/test/fixtures";
-import { reconstructTripTotalHistory, TripSummary } from "./trip-summary";
+import { reconstructTripTotalHistory, shouldShowCompactSummary, TripSummary } from "./trip-summary";
 
-let observerCallback: IntersectionObserverCallback | null = null;
-let observerOptions: IntersectionObserverInit | undefined;
-class MockIntersectionObserver {
-  constructor(callback: IntersectionObserverCallback, options?: IntersectionObserverInit) { observerCallback = callback; observerOptions = options; }
-  observe = vi.fn(); disconnect = vi.fn(); unobserve = vi.fn(); takeRecords = vi.fn(() => []);
-  root = null; rootMargin = "0px"; thresholds = [];
+let resizeCallback: ResizeObserverCallback | null = null;
+class MockResizeObserver {
+  constructor(callback: ResizeObserverCallback) { resizeCallback = callback; }
+  observe = vi.fn(); disconnect = vi.fn(); unobserve = vi.fn();
 }
 
-afterEach(() => { observerCallback = null; observerOptions = undefined; document.querySelector(".site-header")?.remove(); vi.unstubAllGlobals(); });
+function installStickyGeometry(summaryBottom: { value: number }, headerBottom = 54) {
+  const header = document.createElement("header");
+  header.className = "site-header";
+  document.body.prepend(header);
+  vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function geometry(this: Element) {
+    const bottom = this.classList.contains("site-header") ? headerBottom : this.classList.contains("summary-strip") ? summaryBottom.value : 0;
+    return { bottom, height: bottom, top: 0, left: 0, right: 390, width: 390, x: 0, y: 0, toJSON: () => ({}) };
+  });
+  vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => { callback(0); return 1; });
+  vi.stubGlobal("cancelAnimationFrame", vi.fn());
+  return header;
+}
+
+afterEach(() => { resizeCallback = null; document.querySelector(".site-header")?.remove(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 const renderOutbound = (comparison = true) => render(<TripSummary outbound={synthetic()} inbound={null} outboundBaseline={option({ id: "baseline" })} inboundBaseline={null} outboundComparisonEnabled={comparison} />);
 
