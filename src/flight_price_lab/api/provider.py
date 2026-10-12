@@ -41,30 +41,36 @@ class _VolatileResponseCache:
             str, tuple[CachedSearch, datetime, datetime, dict[str, object]]
         ] = {}
 
-    def lookup(self, parameters: dict[str, object]) -> CacheLookup:
+    def lookup(
+        self, parameters: dict[str, object], *, allow_stale: bool = False
+    ) -> CacheLookup:
         entry = self.entries.get(canonical_search_key(parameters))
         if entry is None:
             return CacheLookup("miss", None, None, None, None)
         cached, created, expires, _parameters = entry
         now = datetime.now(UTC)
         age = (now - created).total_seconds()
-        if created < current_cache_epoch(now):
+        stale = created < current_cache_epoch(now)
+        if stale and not allow_stale:
             return CacheLookup("expired", None, created, expires, age)
         return CacheLookup(
-            "hit",
+            "stale_hit" if stale else "hit",
             cached,
             created,
             expires,
             age,
             canonical_search_key(parameters),
-            "EXACT",
+            "STALE_EXACT" if stale else "EXACT",
         )
 
-    def lookup_superset(self, parameters: dict[str, object]) -> CacheLookup:
+    def lookup_superset(
+        self, parameters: dict[str, object], *, allow_stale: bool = False
+    ) -> CacheLookup:
         now = datetime.now(UTC)
         matches = []
         for key, (cached, created, expires, candidate) in self.entries.items():
-            if created < current_cache_epoch(now) or not is_compatible_search_superset(
+            stale = created < current_cache_epoch(now)
+            if (stale and not allow_stale) or not is_compatible_search_superset(
                 candidate, parameters
             ):
                 continue
@@ -75,14 +81,15 @@ class _VolatileResponseCache:
         if not matches:
             return CacheLookup("miss", None, None, None, None)
         _size, _created_order, key, cached, created, expires = min(matches)
+        stale = created < current_cache_epoch(now)
         return CacheLookup(
-            "superset_hit",
+            "stale_superset_hit" if stale else "superset_hit",
             cached,
             created,
             expires,
             (now - created).total_seconds(),
             key,
-            "DERIVED_SUPERSET",
+            "STALE_DERIVED_SUPERSET" if stale else "DERIVED_SUPERSET",
         )
 
     def put(
@@ -131,6 +138,7 @@ class ProviderGateway(Protocol):
         cabin_bags: int,
         checked_bags: int,
         bypass_cache: bool,
+        cache_only: bool,
         trip_id: str,
         trip_search_key: str,
         direction: str,
@@ -171,13 +179,16 @@ class SearchAPIProviderGateway:
         travel_date = arguments.pop("travel_date")
         assert isinstance(travel_date, date)
         bypass_cache = bool(arguments.pop("bypass_cache", False))
+        cache_only = bool(arguments.pop("cache_only", False))
         trip_id = str(arguments.pop("trip_id", ""))
         trip_search_key = str(arguments.pop("trip_search_key", ""))
         direction = str(arguments.pop("direction", ""))
         query_type = str(arguments.pop("query_type", "direct"))
         hub = arguments.pop("hub", None)
-        cabin_bags = int(arguments.pop("cabin_bags"))
-        checked_bags = int(arguments.pop("checked_bags"))
+        # Search for the provider's zero-bag base fare. Baggage requirements are
+        # priced separately by the service so base-fare comparisons stay like-for-like.
+        arguments.pop("cabin_bags")
+        arguments.pop("checked_bags")
         parameters = {
             "origins": list(origins),
             "destinations": list(destinations),
@@ -188,10 +199,6 @@ class SearchAPIProviderGateway:
             "flight_type": "one_way",
             "stops": "nonstop",
         }
-        if cabin_bags:
-            parameters["carry_on_bags"] = cabin_bags
-        if checked_bags:
-            parameters["checked_bags"] = checked_bags
         cache_key = canonical_search_key(parameters)
         request_id = uuid4().hex
         request_started_at = datetime.now(UTC)
@@ -208,6 +215,7 @@ class SearchAPIProviderGateway:
             "provider_search_key": cache_key,
             "provider_search_key_short": cache_key[:12],
             "cache_bypass": bypass_cache,
+            "cache_only": cache_only,
         }
         lock = self._cache_locks.setdefault(cache_key, asyncio.Lock())
         async with lock:
@@ -215,7 +223,9 @@ class SearchAPIProviderGateway:
                 lookup = CacheLookup("miss", None, None, None, None)
             else:
                 try:
-                    lookup = await asyncio.to_thread(self._cache.lookup, parameters)
+                    lookup = await asyncio.to_thread(
+                        self._cache.lookup, parameters, allow_stale=cache_only
+                    )
                 except (OSError, SQLAlchemyError):
                     fallback = _VolatileResponseCache()
                     self._cache = fallback
@@ -247,6 +257,7 @@ class SearchAPIProviderGateway:
                     superset_lookup = await asyncio.to_thread(
                         self._cache.lookup_superset,
                         parameters,  # type: ignore[attr-defined]
+                        allow_stale=cache_only,
                     )
                 except (OSError, SQLAlchemyError):
                     superset_lookup = CacheLookup("miss", None, None, None, None)
@@ -261,6 +272,36 @@ class SearchAPIProviderGateway:
                         age_seconds=lookup.age_seconds,
                     )
             provider_calls = 0
+            if cached is None and cache_only:
+                search_log(
+                    "PROVIDER_CALL_SKIPPED_CACHE",
+                    **common,
+                    reason="cache_only_miss",
+                )
+                request_completed_at = datetime.now(UTC)
+                return ProviderSearchResult(
+                    offers=[],
+                    backend_cache_hits=0,
+                    backend_cache_misses=1,
+                    provider_calls=0,
+                    provider_calls_avoided=1,
+                    request_timing={
+                        "request_id": request_id,
+                        "direction": direction,
+                        "query_type": query_type,
+                        "hub": hub,
+                        "route": f"{','.join(origins)}->{','.join(destinations)}",
+                        "started_at": request_started_at.isoformat(),
+                        "completed_at": request_completed_at.isoformat(),
+                        "duration_ms": round((perf_counter() - request_clock) * 1000, 2),
+                        "http_status": None,
+                        "cache_hit": False,
+                        "cache_source": None,
+                        "derived_from_cache_key": None,
+                        "cache_age_seconds": None,
+                        "result_count": 0,
+                    },
+                )
             if cached is None:
                 search_log("PROVIDER_CALL_PLANNED", **common)
                 search_log("PROVIDER_CALL_STARTED", **common)
@@ -272,8 +313,6 @@ class SearchAPIProviderGateway:
                         departure_id=",".join(origins),
                         arrival_id=",".join(destinations),
                         outbound_date=travel_date,
-                        carry_on_bags=cabin_bags or None,
-                        checked_bags=checked_bags or None,
                         stops="nonstop",
                         **arguments,
                     )
@@ -418,7 +457,8 @@ class SearchAPIProviderGateway:
             "cache_source": lookup.cache_source,
             "derived_from_cache_key": (
                 lookup.source_cache_key
-                if lookup.cache_source == "DERIVED_SUPERSET"
+                if lookup.cache_source
+                in {"DERIVED_SUPERSET", "STALE_DERIVED_SUPERSET"}
                 else None
             ),
             "cache_age_seconds": lookup.age_seconds,
@@ -431,10 +471,12 @@ class SearchAPIProviderGateway:
             provider_calls=provider_calls,
             provider_calls_avoided=int(provider_calls == 0),
             exact_cache_hits=int(
-                provider_calls == 0 and lookup.cache_source == "EXACT"
+                provider_calls == 0
+                and lookup.cache_source in {"EXACT", "STALE_EXACT"}
             ),
             superset_cache_hits=int(
-                provider_calls == 0 and lookup.cache_source == "DERIVED_SUPERSET"
+                provider_calls == 0
+                and lookup.cache_source in {"DERIVED_SUPERSET", "STALE_DERIVED_SUPERSET"}
             ),
             normalization_ms=normalization_ms,
             postgres_write_ms=cache_write_ms,

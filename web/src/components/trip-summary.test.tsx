@@ -334,10 +334,10 @@ describe("selected trip summary", () => {
     expect(summary).toHaveTextContent("↓ 2.8% · was £1,000");
     expect(summary).toHaveTextContent("£510 / 34%");
     expect(summary).toHaveTextContent("+9h 30m");
-    expect(summary).toHaveTextContent("Outbound · 18 Dec");
+    expect(summary).toHaveTextContent("Outbound · Fri 18 Dec");
     expect(summary).toHaveTextContent("LGW 08:00 → CAG 15:25");
     expect(summary).toHaveTextContent("1 stop · MXP 3h 50m");
-    expect(summary).toHaveTextContent("Return · 28 Dec");
+    expect(summary).toHaveTextContent("Return · Mon 28 Dec");
     expect(summary).not.toHaveTextContent("U2 8309");
     expect(summary).not.toHaveTextContent("over 2 observed days");
     expect(screen.queryByLabelText("Show estimated baggage costs")).not.toBeInTheDocument();

@@ -1,6 +1,6 @@
-# Flight Price Lab
+# Flightly
 
-Flight Price Lab is a Python portfolio project for exploring flight-offer ingestion,
+Flightly is a Python portfolio project for exploring flight-offer ingestion,
 normalization, historical price snapshots, itinerary synthesis, and pricing analytics.
 Its core use case is finding inexpensive routes, including one-stop journeys assembled
 from separately purchased tickets.
@@ -99,6 +99,10 @@ SearchAPI is the only V1 flight-data provider. Provider responses are initially 
 as complete raw JSON so normalization can be designed from captured real responses.
 Live calls are manual and confirmation-gated during schema discovery; automated tests
 use an in-memory HTTP transport and never contact SearchAPI.
+
+Flight discovery requests use SearchAPI's zero-bag default so the returned amount is a
+comparable base fare. Requested cabin and checked bags are estimated separately from
+the carrier rules above and are never folded into the displayed base fare.
 
 ## Assisted handoff validation
 

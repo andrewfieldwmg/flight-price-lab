@@ -20,7 +20,7 @@ function changeLabel(ticket: BookingTicket) {
   return "No change";
 }
 
-export function BookingPreparation({ searchId, optionIds }: { searchId: string | null; optionIds: string[] }) {
+export function BookingPreparation({ searchId, optionIds, cacheOnly = false }: { searchId: string | null; optionIds: string[]; cacheOnly?: boolean }) {
   const [session, setSession] = useState<BookingSession | null>(null);
   const [drawerState, setDrawerState] = useState<DrawerState>("IDLE");
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -37,7 +37,7 @@ export function BookingPreparation({ searchId, optionIds }: { searchId: string |
     setDrawerState("PREPARING");
     setError(null);
     try {
-      const prepared = await prepareBooking(searchId, optionIds, refreshBookingPrices);
+      const prepared = await prepareBooking(searchId, optionIds, refreshBookingPrices, cacheOnly);
       setSession(prepared);
       setPreparedFor([...optionIds]);
       setAcknowledged({});
@@ -71,7 +71,7 @@ export function BookingPreparation({ searchId, optionIds }: { searchId: string |
           <div><span className="booking-eyebrow">{drawerState === "PREPARING" ? "Preparing booking" : drawerState === "ERROR" ? "Booking unavailable" : "Ready to book"}</span>{mayRenderCards && <h2>Current trip total</h2>}</div>
           <button type="button" className="booking-drawer-close" aria-label="Close prepared booking" onClick={() => setDrawerOpen(false)}>×</button>
         </header>
-        {drawerState === "PREPARING" && <div className="booking-drawer-state" role="status">Preparing selected flights…</div>}
+        {drawerState === "PREPARING" && <div className="booking-drawer-state" role="status">{cacheOnly ? "Loading stored booking details…" : "Preparing selected flights…"}</div>}
         {drawerState === "ERROR" && <div className="booking-drawer-state booking-ticket-error" role="alert">{error}</div>}
         {stale && drawerState !== "PREPARING" && <div className="booking-stale-state"><strong>Selection changed</strong><p>The prepared booking shown here belongs to your previous trip selection.</p><button type="button" onClick={() => prepare()}>Prepare new selection</button></div>}
         {mayRenderCards && session && <>
@@ -97,7 +97,7 @@ export function BookingPreparation({ searchId, optionIds }: { searchId: string |
                   {ticket.carrier === "AZ" && <div><dt>Airline price</dt><dd>Verify on ITA</dd></div>}
                   <div><dt>Price change</dt><dd className={Number(ticket.price_delta) < 0 ? "price-decrease" : ""}>{changeLabel(ticket)}</dd></div>
                 </dl>
-                {ticket.status === "FAILED" ? <p className="booking-ticket-error">This ticket could not be prepared. No airline handoff was started.</p> : <>
+                {ticket.status === "FAILED" ? <p className="booking-ticket-error">{ticket.preparation_failure_reason === "BOOKING_CACHE_MISS" ? "No stored booking details are available for this ticket. Turn off cached-only mode to check it live." : "This ticket could not be prepared. No airline handoff was started."}</p> : <>
                   {ticket.capability === "EXACT_FLIGHT_HANDOFF" && <p className="booking-capability"><strong>Exact flight ready</strong><br />Passenger composition preserved<br />Fare selection happens on {carrierName(ticket.carrier)}</p>}
                   {ticket.capability === "PREFILLED_SEARCH" && <p className="booking-capability"><strong>Search prefilled — confirm {ticket.flight_number}</strong><br />Route, date and passengers are preserved. Confirm the flight and current price on {carrierName(ticket.carrier)}.</p>}
                   {ticket.carrier === "AZ" && <p className="booking-ticket-warning">ITA may reprice significantly during handoff. Confirm the fare before continuing.</p>}
@@ -109,13 +109,13 @@ export function BookingPreparation({ searchId, optionIds }: { searchId: string |
             })}
           </div>
         </>}
-        {drawerState !== "PREPARING" && !stale && <button type="button" className="booking-refresh" onClick={() => prepare(true)}>Refresh booking prices</button>}
+        {drawerState !== "PREPARING" && !stale && (cacheOnly ? <p className="booking-capability"><strong>Cached-only mode</strong><br />No live booking price checks or SearchAPI calls. Continue opens an airline search from the stored flight details.</p> : <button type="button" className="booking-refresh" onClick={() => prepare(true)}>Refresh booking prices</button>)}
       </aside>
     </div>, document.body
   ) : null;
 
   return <div className="booking-preparation-action">
-    <button className="primary-booking-cta" type="button" onClick={session && drawerState !== "ERROR" && !stale ? () => setDrawerOpen(true) : () => prepare()} disabled={loading || !validSelection}>{loading ? "Preparing booking…" : stale ? "Prepare selected trip" : session && drawerState !== "ERROR" ? "View prepared booking" : "Prepare booking"}</button>
+    <button className="primary-booking-cta" type="button" onClick={session && drawerState !== "ERROR" && !stale ? () => setDrawerOpen(true) : () => prepare()} disabled={loading || !validSelection}>{loading ? (cacheOnly ? "Loading stored booking…" : "Preparing booking…") : stale ? (cacheOnly ? "Load selected trip from cache" : "Prepare selected trip") : session && drawerState !== "ERROR" ? "View prepared booking" : cacheOnly ? "Prepare from cache" : "Prepare booking"}</button>
     {error && !drawerOpen && <span role="alert">{error}</span>}{drawer}
   </div>;
 }

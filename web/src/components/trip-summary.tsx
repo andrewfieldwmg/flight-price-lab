@@ -59,12 +59,12 @@ function range(low: number | string | null, high: number | string | null, curren
   return Number(low) === Number(high) ? money(low, currency) : `${money(low, currency)}–${money(high, currency)}`;
 }
 
-function summaryDate(value: string, weekday = true) {
+function summaryDate(value: string, weekday = true, year = weekday) {
   return new Date(`${value}T12:00:00`).toLocaleDateString("en-GB", {
     weekday: weekday ? "short" : undefined,
     day: "numeric",
     month: "short",
-    year: weekday ? "numeric" : undefined,
+    year: year ? "numeric" : undefined,
   }).replace(",", "");
 }
 
@@ -129,13 +129,13 @@ function DirectionSummary({ label, option, showBaggage, date, suppressTicketingB
 
 function MobileDirectionOverview({ label, option, date }: { label: string; option: TripOption; date: string }) {
   return <div className="mobile-summary-direction">
-    <div><strong>{label} · {summaryDate(date, false)}</strong><b>{money(option.base_price, option.currency)}</b></div>
+    <div><strong>{label} · {summaryDate(date, true, false)}</strong><b>{money(option.base_price, option.currency)}</b></div>
     <p>{option.route[0]} {localClock(option.departure_at)} <span>→</span> {option.route.at(-1)} {localClock(option.arrival_at)}</p>
     <small>{option.is_nonstop ? `Direct · ${option.airlines.join(" / ")}` : `1 stop · ${option.connection_airport} ${duration(option.connection_minutes)}`}</small>
   </div>;
 }
 
-export function TripSummary({ outbound, inbound, outboundBaseline, inboundBaseline, outboundComparisonEnabled = false, inboundComparisonEnabled = false, excludeBaggage = true, searchId = null, outboundDate, returnDate, complete = true }: { outbound: TripOption | null; inbound: TripOption | null; outboundBaseline: TripOption | null; inboundBaseline: TripOption | null; outboundComparisonEnabled?: boolean; inboundComparisonEnabled?: boolean; excludeBaggage?: boolean; searchId?: string | null; outboundDate?: string; returnDate?: string; complete?: boolean }) {
+export function TripSummary({ outbound, inbound, outboundBaseline, inboundBaseline, outboundComparisonEnabled = false, inboundComparisonEnabled = false, excludeBaggage = true, searchId = null, outboundDate, returnDate, complete = true, cacheOnly = false }: { outbound: TripOption | null; inbound: TripOption | null; outboundBaseline: TripOption | null; inboundBaseline: TripOption | null; outboundComparisonEnabled?: boolean; inboundComparisonEnabled?: boolean; excludeBaggage?: boolean; searchId?: string | null; outboundDate?: string; returnDate?: string; complete?: boolean; cacheOnly?: boolean }) {
   const [showBaggage, setShowBaggage] = useState(false);
   const [compactVisible, setCompactVisible] = useState(false);
   const [detailsExpanded, setDetailsExpanded] = useState(false);
@@ -269,7 +269,7 @@ export function TripSummary({ outbound, inbound, outboundBaseline, inboundBaseli
         {outbound && <MobileDirectionOverview label="Outbound" option={outbound} date={resolvedOutboundDate} />}
         {inbound && <MobileDirectionOverview label="Return" option={inbound} date={resolvedReturnDate} />}
       </div>
-      <div className="mobile-summary-booking"><BookingPreparation searchId={searchId} optionIds={optionIds} /></div>
+      <div className="mobile-summary-booking"><BookingPreparation searchId={searchId} optionIds={optionIds} cacheOnly={cacheOnly} /></div>
       <button type="button" className="mobile-trip-details-toggle" aria-expanded={detailsExpanded} onClick={() => setDetailsExpanded((value) => !value)}>Trip details <span aria-hidden="true">{detailsExpanded ? "▴" : "▾"}</span></button>
       {detailsExpanded && <div className="mobile-trip-details">
         <label><input type="checkbox" checked={showBaggage} onChange={(event) => setShowBaggage(event.target.checked)} /> Show estimated baggage costs</label>
@@ -281,7 +281,7 @@ export function TripSummary({ outbound, inbound, outboundBaseline, inboundBaseli
       <div className="summary-primary">
         <div className="summary-top-row" data-testid="summary-top-row">
           <div className="summary-total-block"><span>Trip total</span><div className="trip-total-price-row"><strong>{money(summary.baseAlternativePrice, currency)}</strong>{complete && tripTotalSeries.length >= 2 && <PriceSparkline points={tripTotalSeries} currency={currency} className="trip-total-sparkline" />}</div>{tripHistoryDetailed && <small aria-live="polite" data-history-quality={combinedPriorPoint?.history_quality} aria-label={tripHistoryState === "LOADING" ? "Updating trip total and price history" : tripHistoryState === "FIRST_SEEN" ? "First price observation" : tripHistoryState === "ERROR" ? "Price history unavailable" : tripHistoryChange !== null && tripHistoryChange > 0 ? `Trip price increased by ${Math.abs(tripHistoryPercent ?? 0).toFixed(1)} percent since last seen` : tripHistoryChange !== null && tripHistoryChange < 0 ? `Trip price decreased by ${Math.abs(tripHistoryPercent ?? 0).toFixed(1)} percent since last seen` : "No trip price change since last seen"}>{tripHistoryDetailed}</small>}{complete && previousTripTotal !== null && <span className="summary-previous-price">was {money(previousTripTotal, currency)}</span>}</div>
-          <div className="summary-header-actions"><BookingPreparation searchId={searchId} optionIds={[outbound?.id, inbound?.id].filter((id): id is string => Boolean(id))} /><label><input type="checkbox" checked={showBaggage} onChange={(event) => setShowBaggage(event.target.checked)} /> Show estimated baggage costs</label></div>
+          <div className="summary-header-actions"><BookingPreparation searchId={searchId} optionIds={[outbound?.id, inbound?.id].filter((id): id is string => Boolean(id))} cacheOnly={cacheOnly} /><label><input type="checkbox" checked={showBaggage} onChange={(event) => setShowBaggage(event.target.checked)} /> Show estimated baggage costs</label></div>
         </div>
         {comparisonEnabled && <div className="summary-metrics">
           {comparisonEnabled && <div><span>Save</span><strong>{money(saving, currency)} / {percentage.toFixed(0)}%</strong></div>}

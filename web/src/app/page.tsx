@@ -5,9 +5,9 @@ export default function Home() {
   return (
     <main>
       <header className="site-header">
-        <a className="brand" href="#top" aria-label="Flight Price Lab home">
-          <span className="brand-mark">FPL</span>
-          <span>Flight Price Lab</span>
+        <a className="brand" href="#top" aria-label="Flightly home">
+          <span className="brand-mark">FLY</span>
+          <span>Flightly</span>
         </a>
         <ProviderUsageIndicator />
       </header>

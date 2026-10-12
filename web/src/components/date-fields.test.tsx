@@ -33,6 +33,7 @@ function renderFields(overrides = {}) {
     adults: 2,
     childPassengers: 2,
     currency: "GBP",
+    pricesByDefault: true,
     onOutboundChange: vi.fn(),
     onInboundChange: vi.fn(),
     ...overrides,
@@ -47,6 +48,38 @@ describe("directional date pricing", () => {
     getCalendarPrices.mockResolvedValue(response());
   });
 
+  it("opens at month scale before the first search without fetching prices", () => {
+    const props = renderFields({ pricesByDefault: false });
+
+    fireEvent.click(screen.getByRole("button", { name: /Out18 Dec 2026/ }));
+
+    expect(screen.getByRole("button", { name: "Friday, 18 December 2026" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Nearby prices" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByText(/does not fetch fares/)).toBeInTheDocument();
+    expect(getCalendarPrices).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Saturday, 2 January 2027" }));
+    expect(props.onOutboundChange).toHaveBeenCalledWith("2027-01-02");
+  });
+
+  it("disables every nearby-price fetch in cached-only mode", () => {
+    renderFields({ pricesByDefault: false, cacheOnly: true });
+    fireEvent.click(screen.getByRole("button", { name: /Out18 Dec 2026/ }));
+
+    expect(screen.getByRole("button", { name: "Nearby prices" })).toBeDisabled();
+    expect(screen.getByText(/will not make live fare requests/i)).toBeInTheDocument();
+    expect(getCalendarPrices).not.toHaveBeenCalled();
+  });
+
+  it("fetches only seven dates when nearby prices are explicitly requested", async () => {
+    renderFields({ pricesByDefault: false });
+    fireEvent.click(screen.getByRole("button", { name: /Out18 Dec 2026/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Nearby prices" }));
+
+    await waitFor(() => expect(getCalendarPrices).toHaveBeenCalledTimes(1));
+    expect(getCalendarPrices).toHaveBeenCalledWith(expect.objectContaining({ dateFrom: "2026-12-15", dateTo: "2026-12-21" }));
+  });
+
   it("loads only the selected date plus or minus three days", async () => {
     renderFields();
     fireEvent.click(screen.getByRole("button", { name: /Out18 Dec 2026/ }));
@@ -57,6 +90,16 @@ describe("directional date pricing", () => {
     expect(screen.getAllByText("Likely cheaper").length).toBeGreaterThan(0);
     expect(screen.getByText(/lowest observed nonstop fare/)).toBeInTheDocument();
     expect(screen.queryByText(/synthetic price|one-stop price/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/7 live price lookups.*daily cache/)).toBeInTheDocument();
+  });
+
+  it("makes backend daily-cache reuse visible", async () => {
+    getCalendarPrices.mockResolvedValue({ ...response(), calendar_provider_calls_this_invocation: 0, calendar_calls_avoided: 7 });
+    renderFields();
+    fireEvent.click(screen.getByRole("button", { name: /Out18 Dec 2026/ }));
+
+    expect(await screen.findByText(/Daily cache · 7 prices reused/)).toBeInTheDocument();
+    expect(screen.getByText(/refreshes after 04:00 London/)).toBeInTheDocument();
   });
 
   it("loads a new visible range lazily and does not refetch known dates", async () => {

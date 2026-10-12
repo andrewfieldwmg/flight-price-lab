@@ -28,6 +28,7 @@ export interface TripSearchRequest {
   connection_profile: ConnectionProfile;
   currency: string;
   refresh_prices: boolean;
+  cache_only?: boolean;
 }
 
 export interface DirectionTimeWindow {
@@ -141,6 +142,7 @@ export interface BookingTicket {
   children: number;
   exact_flight_verified: boolean;
   passenger_composition_verified: boolean;
+  preparation_failure_reason?: string | null;
 }
 
 export interface BookingSession {

@@ -91,10 +91,10 @@ def test_conservative_checked_bag_threshold(minutes: int, expected: bool) -> Non
 @pytest.mark.parametrize(
     ("profile", "baggage", "threshold"),
     [
-        (SelfTransferProfile.STANDARD, BaggageProfile.PERSONAL_ITEM_ONLY, 120),
+        (SelfTransferProfile.STANDARD, BaggageProfile.PERSONAL_ITEM_ONLY, 90),
         (SelfTransferProfile.STANDARD, BaggageProfile.CHECKED_BAG, 120),
-        (SelfTransferProfile.AGGRESSIVE, BaggageProfile.CABIN_BAG, 120),
-        (SelfTransferProfile.AGGRESSIVE, BaggageProfile.CHECKED_BAG, 120),
+        (SelfTransferProfile.AGGRESSIVE, BaggageProfile.CABIN_BAG, 60),
+        (SelfTransferProfile.AGGRESSIVE, BaggageProfile.CHECKED_BAG, 90),
     ],
 )
 def test_standard_and_aggressive_thresholds(
@@ -107,6 +107,14 @@ def test_standard_and_aggressive_thresholds(
     )
     assert is_feasible_self_transfer(
         _itinerary(threshold), profile=profile, baggage=baggage
+    )
+
+
+def test_aggressive_profile_includes_seventy_minute_bgy_self_transfer() -> None:
+    assert is_feasible_self_transfer(
+        _itinerary(70),
+        profile=SelfTransferProfile.AGGRESSIVE,
+        baggage=BaggageProfile.CABIN_BAG,
     )
 
 

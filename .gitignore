@@ -16,3 +16,4 @@ data/processed/
 
 .vercel
 .env*
+work/

@@ -756,7 +756,11 @@ class SearchResponseCache:
         return self.lookup(parameters, now=now).cached
 
     def lookup(
-        self, parameters: dict[str, Any], *, now: datetime | None = None
+        self,
+        parameters: dict[str, Any],
+        *,
+        now: datetime | None = None,
+        allow_stale: bool = False,
     ) -> CacheLookup:
         current = now or datetime.now(UTC)
         with Session(self.engine) as session:
@@ -770,7 +774,8 @@ class SearchResponseCache:
             if expires_at.tzinfo is None:
                 expires_at = expires_at.replace(tzinfo=UTC)
             age_seconds = (current - created_at).total_seconds()
-            if created_at < current_cache_epoch(current):
+            stale = created_at < current_cache_epoch(current)
+            if stale and not allow_stale:
                 return CacheLookup("expired", None, created_at, expires_at, age_seconds)
             path = Path(entry.raw_response_path)
             if entry.response_json:
@@ -782,25 +787,30 @@ class SearchResponseCache:
             if not isinstance(payload, dict):
                 return CacheLookup("miss", None, created_at, expires_at, age_seconds)
             return CacheLookup(
-                "hit",
+                "stale_hit" if stale else "hit",
                 CachedSearch(payload, path, entry.result_count),
                 created_at,
                 expires_at,
                 age_seconds,
                 entry.cache_key,
-                "EXACT",
+                "STALE_EXACT" if stale else "EXACT",
             )
 
     def lookup_superset(
-        self, parameters: dict[str, Any], *, now: datetime | None = None
+        self,
+        parameters: dict[str, Any],
+        *,
+        now: datetime | None = None,
+        allow_stale: bool = False,
     ) -> CacheLookup:
         current = now or datetime.now(UTC)
         epoch = current_cache_epoch(current)
         candidates: list[tuple[int, datetime, SearchCacheEntry, dict[str, Any]]] = []
         with Session(self.engine) as session:
-            entries = session.scalars(
-                select(SearchCacheEntry).where(SearchCacheEntry.created_at >= epoch)
-            ).all()
+            query = select(SearchCacheEntry)
+            if not allow_stale:
+                query = query.where(SearchCacheEntry.created_at >= epoch)
+            entries = session.scalars(query).all()
             for entry in entries:
                 try:
                     candidate_parameters = json.loads(entry.request_json)
@@ -831,14 +841,15 @@ class SearchResponseCache:
                 expires_at = entry.expires_at
                 if expires_at.tzinfo is None:
                     expires_at = expires_at.replace(tzinfo=UTC)
+                stale = created_at < epoch
                 return CacheLookup(
-                    "superset_hit",
+                    "stale_superset_hit" if stale else "superset_hit",
                     CachedSearch(payload, path, entry.result_count),
                     created_at,
                     expires_at,
                     (current - created_at).total_seconds(),
                     entry.cache_key,
-                    "DERIVED_SUPERSET",
+                    "STALE_DERIVED_SUPERSET" if stale else "DERIVED_SUPERSET",
                 )
         return CacheLookup("miss", None, None, None, None)
 

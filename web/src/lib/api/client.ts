@@ -18,6 +18,7 @@ export function resolveApiUrl(path: string, baseUrl = API_BASE_URL): string {
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(resolveApiUrl(path), {
     ...init,
+    cache: "no-store",
     headers: { "Content-Type": "application/json", ...init?.headers },
   });
   if (!response.ok) {
@@ -35,6 +36,7 @@ export async function streamSearch(
   const started = performance.now();
   const response = await fetch(resolveApiUrl("/api/search/stream"), {
     method: "POST",
+    cache: "no-store",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request),
   });
@@ -118,15 +120,16 @@ export function getProviderUsage(refresh = false): Promise<ProviderUsage> {
   return apiFetch(`/api/provider-usage${refresh ? "?refresh=true" : ""}`);
 }
 
-export function prepareBooking(searchId: string, selectedOptionIds: string[], refreshBookingPrices = false): Promise<BookingSession> {
-  return prepareBookingRequest(searchId, selectedOptionIds, refreshBookingPrices);
+export function prepareBooking(searchId: string, selectedOptionIds: string[], refreshBookingPrices = false, cacheOnly = false): Promise<BookingSession> {
+  return prepareBookingRequest(searchId, selectedOptionIds, refreshBookingPrices, cacheOnly);
 }
 
-async function prepareBookingRequest(searchId: string, selectedOptionIds: string[], refreshBookingPrices: boolean): Promise<BookingSession> {
+async function prepareBookingRequest(searchId: string, selectedOptionIds: string[], refreshBookingPrices: boolean, cacheOnly: boolean): Promise<BookingSession> {
   const response = await fetch(resolveApiUrl("/api/booking/prepare"), {
     method: "POST",
+    cache: "no-store",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ search_id: searchId, selected_option_ids: selectedOptionIds, refresh_booking_prices: refreshBookingPrices }),
+    body: JSON.stringify({ search_id: searchId, selected_option_ids: selectedOptionIds, refresh_booking_prices: refreshBookingPrices && !cacheOnly, cache_only: cacheOnly }),
   });
   const body = await response.json().catch(() => null) as BookingSession | { detail?: string } | null;
   if (process.env.NODE_ENV === "development") {

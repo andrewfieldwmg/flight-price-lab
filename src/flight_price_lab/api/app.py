@@ -65,7 +65,7 @@ def create_app(
     booking_resolver: BookingResolver | None = None,
     handoff_launcher: HandoffLauncher | None = None,
 ) -> FastAPI:
-    application = FastAPI(title="Flight Price Lab API", version="1.0.0")
+    application = FastAPI(title="Flightly API", version="1.0.0")
     allowed = os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
     application.add_middleware(
         CORSMiddleware,

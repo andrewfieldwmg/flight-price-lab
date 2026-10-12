@@ -1,8 +1,14 @@
 """Named airport groups and initial candidate hubs."""
 
-LONDON = ("LGW", "STN", "LTN", "LHR", "LCY")
-SARDINIA = ("CAG", "OLB", "AHO")
+LONDON = ("STN", "LGW", "LTN", "LHR", "LCY")
+SARDINIA = ("AHO", "CAG", "OLB")
 INITIAL_CANDIDATE_HUBS = ("MXP", "BGY", "LIN", "FCO", "CIA", "BLQ", "PSA", "NAP")
+
+_AIRPORT_SEARCH_PRIORITY = {
+    airport: rank
+    for group in (LONDON, SARDINIA)
+    for rank, airport in enumerate(group)
+}
 
 # Offline 2026-08-26 London-Sardinia evidence: MXP supplied the cheapest
 # frontier options and LIN supplied the fastest frontier option. Unscored hubs
@@ -19,5 +25,20 @@ def prioritize_candidate_hubs(hubs: tuple[str, ...]) -> tuple[str, ...]:
         for _, hub in sorted(
             indexed,
             key=lambda item: (-HUB_SEARCH_PRIORITY.get(item[1], 0), item[0]),
+        )
+    )
+
+
+def prioritize_airports(airports: tuple[str, ...]) -> tuple[str, ...]:
+    """Apply the product's stable airport preference within a selected group."""
+
+    return tuple(
+        airport
+        for _, airport in sorted(
+            enumerate(airports),
+            key=lambda item: (
+                _AIRPORT_SEARCH_PRIORITY.get(item[1], len(_AIRPORT_SEARCH_PRIORITY)),
+                item[0],
+            ),
         )
     )

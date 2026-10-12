@@ -1,6 +1,7 @@
 import type { SearchSnapshot, TripSearchRequest } from "@/lib/api/types";
 
-const PREFIX = "flight-price-lab:";
+const PREFIX = "flightly:search:v2:";
+const LEGACY_PREFIX = "flight-price-lab:";
 const LONDON_TIME_ZONE = "Europe/London";
 
 function londonParts(value: Date) {
@@ -37,6 +38,10 @@ function devLog(event: string, fields: Record<string, unknown>) {
 
 export function logFrontendCacheEvent(event: string, fields: Record<string, unknown>) {
   devLog(event, fields);
+}
+
+export function shouldUseBrowserSearchCache(request: TripSearchRequest): boolean {
+  return !request.refresh_prices && !request.cache_only;
 }
 
 export interface LocalSearchSnapshot {
@@ -88,7 +93,11 @@ export function saveLocalSearch(
     results: withoutHistory(results),
     ui_state: uiState,
   };
-  window.localStorage.setItem(`${PREFIX}${searchKey}`, JSON.stringify(value));
+  try {
+    window.localStorage.setItem(`${PREFIX}${searchKey}`, JSON.stringify(value));
+  } catch {
+    devLog("FRONTEND_LOCAL_CACHE_WRITE_SKIPPED", { search_key: searchKey, search_key_short: searchKey.slice(0, 12) });
+  }
   return value;
 }
 
@@ -114,12 +123,13 @@ export function loadLocalSearch(
   searchKey: string,
   now = new Date(),
 ): LocalSearchSnapshot | null {
-  const raw = window.localStorage.getItem(`${PREFIX}${searchKey}`);
-  if (!raw) {
-    devLog("FRONTEND_LOCAL_CACHE_MISS", { search_key: searchKey, search_key_short: searchKey.slice(0, 12), reason: "not_found" });
-    return null;
-  }
   try {
+    window.localStorage.removeItem(`${LEGACY_PREFIX}${searchKey}`);
+    const raw = window.localStorage.getItem(`${PREFIX}${searchKey}`);
+    if (!raw) {
+      devLog("FRONTEND_LOCAL_CACHE_MISS", { search_key: searchKey, search_key_short: searchKey.slice(0, 12), reason: "not_found" });
+      return null;
+    }
     const value = JSON.parse(raw) as LocalSearchSnapshot;
     const cachedAt = Date.parse(value.saved_at);
     if (value.search_key !== searchKey || !Number.isFinite(cachedAt) || cachedAt < currentCacheEpoch(now).getTime()) {
@@ -150,7 +160,7 @@ export function loadLocalSearch(
     devLog("FRONTEND_LOCAL_CACHE_HIT", { trip_id: value.trip_id, search_key: searchKey, search_key_short: searchKey.slice(0, 12) });
     return value;
   } catch {
-    window.localStorage.removeItem(`${PREFIX}${searchKey}`);
+    try { window.localStorage.removeItem(`${PREFIX}${searchKey}`); } catch { /* storage unavailable */ }
     devLog("FRONTEND_LOCAL_CACHE_MISS", { search_key: searchKey, search_key_short: searchKey.slice(0, 12), reason: "invalid_json" });
     return null;
   }

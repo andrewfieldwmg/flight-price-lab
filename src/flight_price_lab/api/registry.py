@@ -27,6 +27,7 @@ class SearchRegistry(Protocol):
         self, snapshot: SearchSnapshot, request: TripSearchRequest | None = None
     ) -> None: ...
     async def get(self, search_id: str) -> SearchSnapshot | None: ...
+    async def get_request(self, search_id: str) -> TripSearchRequest | None: ...
     async def update(
         self,
         snapshot: SearchSnapshot,
@@ -64,6 +65,7 @@ class SearchSessionPersistence(Protocol):
 @dataclass
 class _Entry:
     snapshot: SearchSnapshot
+    request: TripSearchRequest | None = None
     events: list[SearchEvent] = field(default_factory=list)
     condition: asyncio.Condition = field(default_factory=asyncio.Condition)
     booking_candidates: dict[str, tuple[FlightOffer, ...]] = field(default_factory=dict)
@@ -122,7 +124,9 @@ class InMemorySearchRegistry:
     async def create(
         self, snapshot: SearchSnapshot, request: TripSearchRequest | None = None
     ) -> None:
-        self._entries[snapshot.search_id] = _Entry(snapshot=deepcopy(snapshot))
+        self._entries[snapshot.search_id] = _Entry(
+            snapshot=deepcopy(snapshot), request=deepcopy(request)
+        )
         if self._search_store is not None and request is not None:
             acquire_clock = perf_counter()
             connection = self._search_store.engine.connect()  # type: ignore[attr-defined]
@@ -156,6 +160,14 @@ class InMemorySearchRegistry:
             return deepcopy(entry.snapshot)
         if self._search_store is not None:
             return self._search_store.get(search_id)
+        return None
+
+    async def get_request(self, search_id: str) -> TripSearchRequest | None:
+        entry = self._entries.get(search_id)
+        if entry and entry.request is not None:
+            return deepcopy(entry.request)
+        if self._search_store is not None:
+            return self._search_store.get_request(search_id)  # type: ignore[attr-defined]
         return None
 
     async def update(

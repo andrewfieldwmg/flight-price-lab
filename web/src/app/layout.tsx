@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Flight Price Lab",
+  title: "Flightly",
   description: "Compare nonstop flights with feasible separate-ticket alternatives.",
 };
 

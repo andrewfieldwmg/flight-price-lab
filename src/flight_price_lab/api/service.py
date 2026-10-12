@@ -45,6 +45,7 @@ from flight_price_lab.models.carrier_baggage import AncillaryEstimateStatus
 from flight_price_lab.providers.searchapi import SearchAPIError
 from flight_price_lab.routing.airport_groups import (
     INITIAL_CANDIDATE_HUBS,
+    prioritize_airports,
     prioritize_candidate_hubs,
 )
 from flight_price_lab.routing.feasibility import BaggageProfile, SelfTransferProfile
@@ -90,12 +91,12 @@ def trip_search_parameters(request: TripSearchRequest) -> dict[str, object]:
     """Return provider-affecting identity inputs without UI-only state."""
     profile_minimum = {
         "CONSERVATIVE": 120,
-        "STANDARD": 120,
-        "AGGRESSIVE": 120,
+        "STANDARD": 90,
+        "AGGRESSIVE": 60,
     }[request.connection_profile.value]
     parameters: dict[str, object] = {
-        "origins": request.origins,
-        "destinations": request.destinations,
+        "origins": prioritize_airports(tuple(request.origins)),
+        "destinations": prioritize_airports(tuple(request.destinations)),
         "date": request.outbound_date.isoformat(),
         "return_date": (
             request.return_date.isoformat() if request.return_date is not None else None
@@ -191,6 +192,7 @@ class TripSearchService:
             "search_key": search_key,
             "search_key_short": search_key[:12],
             "cache_bypass": request.refresh_prices,
+            "cache_only": request.cache_only,
             "request_summary": {
                 "origins": sorted(request.origins),
                 "destinations": sorted(request.destinations),
@@ -222,17 +224,11 @@ class TripSearchService:
         snapshot.status = SearchStatus.RUNNING
         snapshot.diagnostics.search_started_at = datetime.now(UTC)
         self._active_snapshot = snapshot
-        direction_count = 1 + int(request.return_date is not None)
-        transfer_direction_count = sum(
-            self._self_transfer_enabled(request, direction)
-            for direction in (Direction.OUTBOUND, Direction.RETURN)
-            if direction is Direction.OUTBOUND or request.return_date is not None
-        )
-        self._provider_queries_total = direction_count + (
-            2 * len(self.hubs) * transfer_direction_count
-        )
         snapshot.diagnostics.planned_provider_requests = self._plan_provider_work(
             request
+        )
+        self._provider_queries_total = len(
+            snapshot.diagnostics.planned_provider_requests
         )
         snapshot.diagnostics.provider_requests_planned = len(
             snapshot.diagnostics.planned_provider_requests
@@ -253,8 +249,8 @@ class TripSearchService:
                     snapshot,
                     request,
                     Direction.OUTBOUND,
-                    tuple(request.origins),
-                    tuple(request.destinations),
+                    prioritize_airports(tuple(request.origins)),
+                    prioritize_airports(tuple(request.destinations)),
                     request.outbound_date,
                     self._self_transfer_enabled(request, Direction.OUTBOUND),
                 )
@@ -266,8 +262,8 @@ class TripSearchService:
                         snapshot,
                         request,
                         Direction.RETURN,
-                        tuple(request.destinations),
-                        tuple(request.origins),
+                        prioritize_airports(tuple(request.destinations)),
+                        prioritize_airports(tuple(request.origins)),
                         request.return_date,
                         self._self_transfer_enabled(request, Direction.RETURN),
                     )
@@ -388,8 +384,8 @@ class TripSearchService:
         directions = [
             (
                 Direction.OUTBOUND,
-                tuple(request.origins),
-                tuple(request.destinations),
+                prioritize_airports(tuple(request.origins)),
+                prioritize_airports(tuple(request.destinations)),
                 request.outbound_date,
             )
         ]
@@ -397,8 +393,8 @@ class TripSearchService:
             directions.append(
                 (
                     Direction.RETURN,
-                    tuple(request.destinations),
-                    tuple(request.origins),
+                    prioritize_airports(tuple(request.destinations)),
+                    prioritize_airports(tuple(request.origins)),
                     request.return_date,
                 )
             )
@@ -407,23 +403,48 @@ class TripSearchService:
             if not self._self_transfer_enabled(request, direction):
                 continue
             for hub in self.hubs:
-                add(
-                    direction,
-                    "hub_first_leg",
-                    origins,
-                    (hub,),
-                    travel_date,
-                    hub,
-                )
-                add(
-                    direction,
-                    "hub_second_leg",
-                    (hub,),
-                    destinations,
-                    travel_date,
-                    hub,
-                )
+                for query_type, route_origins, route_destinations in self._hub_queries(
+                    hub, origins, destinations
+                ):
+                    add(
+                        direction,
+                        query_type,
+                        route_origins,
+                        route_destinations,
+                        travel_date,
+                        hub,
+                    )
         return planned
+
+    @staticmethod
+    def _hub_queries(
+        hub: str,
+        origins: tuple[str, ...],
+        destinations: tuple[str, ...],
+    ) -> tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...]:
+        """Prioritize Stansted on Milan routes without increasing call count.
+
+        Grouped London-to-Milan results can omit a valid STN flight when a
+        cheaper Gatwick or Luton result occupies the provider's result window.
+        Use STN alone on the London side of MXP and BGY searches, while retaining
+        the single prioritized Sardinia group request. Every hub still consumes
+        exactly two leg searches per enabled direction.
+        """
+
+        if hub in {"MXP", "BGY"}:
+            first_origins = ("STN",) if "STN" in origins else origins
+            second_destinations = (
+                ("STN",) if "STN" in destinations else destinations
+            )
+            return (
+                ("hub_first_leg", first_origins, (hub,)),
+                ("hub_second_leg", (hub,), second_destinations),
+            )
+
+        return (
+            ("hub_first_leg", origins, (hub,)),
+            ("hub_second_leg", (hub,), destinations),
+        )
 
     @staticmethod
     def _planned_id(
@@ -564,6 +585,7 @@ class TripSearchService:
                         cabin_bags=request.baggage.cabin_bags,
                         checked_bags=request.baggage.checked_bags,
                         bypass_cache=request.refresh_prices,
+                        cache_only=request.cache_only,
                         trip_id=(
                             self._active_snapshot.trip_id
                             if self._active_snapshot
@@ -933,25 +955,29 @@ class TripSearchService:
                 snapshot.search_id, "hub_started", direction=direction.value, hub=hub
             )
             try:
-                first, second = await asyncio.gather(
-                    self._provider_search(
-                        request,
-                        origins,
-                        (hub,),
-                        travel_date,
-                        direction=direction,
-                        query_type="hub_first_leg",
+                queries = self._hub_queries(hub, origins, destinations)
+                if not queries:
+                    await self._event(
+                        snapshot.search_id,
+                        "hub_completed",
+                        direction=direction.value,
                         hub=hub,
-                    ),
-                    self._provider_search(
-                        request,
-                        (hub,),
-                        destinations,
-                        travel_date,
-                        direction=direction,
-                        query_type="hub_second_leg",
-                        hub=hub,
-                    ),
+                        count=0,
+                    )
+                    return []
+                query_results = await asyncio.gather(
+                    *(
+                        self._provider_search(
+                            request,
+                            route_origins,
+                            route_destinations,
+                            travel_date,
+                            direction=direction,
+                            query_type=query_type,
+                            hub=hub,
+                        )
+                        for query_type, route_origins, route_destinations in queries
+                    )
                 )
                 route_plan = RoutePlan(
                     origin_airports=origins,
@@ -971,7 +997,9 @@ class TripSearchService:
                     ),
                 )
                 by_route: dict[tuple[str, str], list[FlightOffer]] = {}
-                for item in (*first, *second):
+                for item in (
+                    offer for query_result in query_results for offer in query_result
+                ):
                     leg = item.legs[0]
                     by_route.setdefault((leg.origin, leg.destination), []).append(item)
                 synthesis_clock = perf_counter()

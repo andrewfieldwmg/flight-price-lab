@@ -349,7 +349,10 @@ def test_provider_progress_counts_routes_and_options() -> None:
 def test_round_trip_provider_plan_reconciles_and_contains_return_cia() -> None:
     service = TripSearchService(MockProvider(), InMemorySearchRegistry())
     search_request = request(SelfTransferPolicy.BOTH).model_copy(
-        update={"destinations": ["CAG", "OLB", "AHO"]}
+        update={
+            "origins": ["LGW", "STN", "LTN", "LHR", "LCY"],
+            "destinations": ["CAG", "OLB", "AHO"],
+        }
     )
     planned = service._plan_provider_work(search_request)
 
@@ -357,7 +360,35 @@ def test_round_trip_provider_plan_reconciles_and_contains_return_cia() -> None:
     assert any(
         item["direction"] == "RETURN"
         and item["query_type"] == "hub_first_leg"
-        and item["route"] == "CAG,OLB,AHO->CIA"
+        and item["route"] == "AHO,CAG,OLB->CIA"
+        for item in planned
+    )
+    assert any(
+        item["direction"] == "OUTBOUND"
+        and item["query_type"] == "hub_first_leg"
+        and item["route"] == "STN->BGY"
+        for item in planned
+    )
+    assert any(
+        item["direction"] == "OUTBOUND"
+        and item["query_type"] == "hub_second_leg"
+        and item["route"] == "BGY->AHO,CAG,OLB"
+        for item in planned
+    )
+    assert any(
+        item["direction"] == "OUTBOUND"
+        and item["query_type"] == "hub_first_leg"
+        and item["route"] == "STN->MXP"
+        for item in planned
+    )
+    assert any(
+        item["direction"] == "OUTBOUND"
+        and item["query_type"] == "hub_second_leg"
+        and item["route"] == "MXP->AHO,CAG,OLB"
+        for item in planned
+    )
+    assert not any(
+        item["route"] == "STN,LGW,LTN,LHR,LCY->BGY"
         for item in planned
     )
 
@@ -605,9 +636,12 @@ def test_search_key_endpoint_does_not_call_provider() -> None:
     first = client.post("/api/search/key", json=payload)
     payload["origins"] = list(reversed(payload["origins"]))
     second = client.post("/api/search/key", json=payload)
+    payload["cache_only"] = True
+    cached_only = client.post("/api/search/key", json=payload)
 
     assert first.status_code == 200
     assert first.json()["search_key"] == second.json()["search_key"]
+    assert first.json()["search_key"] == cached_only.json()["search_key"]
     assert provider.calls == []
 
 

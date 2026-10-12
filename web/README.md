@@ -1,6 +1,6 @@
-# Flight Price Lab Web
+# Flightly Web
 
-Next.js App Router frontend for the Flight Price Lab FastAPI service.
+Next.js App Router frontend for the Flightly FastAPI service.
 
 ```powershell
 copy .env.example .env.local

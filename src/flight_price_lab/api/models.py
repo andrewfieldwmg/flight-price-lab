@@ -76,6 +76,7 @@ class TripSearchRequest(BaseModel):
     connection_profile: ConnectionProfile = ConnectionProfile.CONSERVATIVE
     currency: str = "GBP"
     refresh_prices: bool = False
+    cache_only: bool = False
 
     @field_validator("origins", "destinations")
     @classmethod
@@ -95,6 +96,8 @@ class TripSearchRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_dates_and_policy(self) -> "TripSearchRequest":
+        if self.refresh_prices and self.cache_only:
+            raise ValueError("refresh_prices and cache_only cannot both be enabled")
         if self.return_date is not None and self.return_date < self.outbound_date:
             raise ValueError("return_date must not precede outbound_date")
         if self.return_date is None and self.self_transfer_policy in (

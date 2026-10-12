@@ -11,6 +11,7 @@ from flight_price_lab.api.booking import (
     AeroitaliaHandoffAdapter,
     BritishAirwaysHandoffAdapter,
     EasyJetHandoffAdapter,
+    GooglePostHandoffLauncher,
     HandoffCapability,
     ITAAirwaysHandoffAdapter,
     PriceChangeStatus,
@@ -20,7 +21,7 @@ from flight_price_lab.api.booking import (
     WizzAirHandoffAdapter,
     classify_price_change,
 )
-from flight_price_lab.api.models import SearchSnapshot
+from flight_price_lab.api.models import SearchSnapshot, TripSearchRequest
 from flight_price_lab.api.registry import InMemorySearchRegistry
 from flight_price_lab.api.service import TripSearchService
 from flight_price_lab.models.flight import FlightLeg, FlightOffer
@@ -756,3 +757,117 @@ def test_successful_booking_resolution_is_cached_and_explicit_refresh_bypasses()
         result["tickets"][0]["flight_number"] == "FR 2687"
         for result in (first, second, refreshed)
     )
+
+
+def test_cached_only_booking_preparation_uses_resolution_cache_without_provider_call() -> (
+    None
+):
+    class CountingResolver(Resolver):
+        def __init__(self) -> None:
+            super().__init__({"FR 2687": "813"})
+            self.calls = 0
+
+        async def resolve(self, selected: FlightOffer) -> ResolvedHandoff:
+            self.calls += 1
+            return await super().resolve(selected)
+
+    resolver = CountingResolver()
+    app = create_app(booking_resolver=resolver, handoff_launcher=Launcher())
+    selected = route_offer("STN", "CAG", date(2026, 12, 18), 19, "FR 2687", "849")
+    asyncio.run(
+        app.state.registry.create(
+            SearchSnapshot(search_id="booking-cache-only-hit", status="completed")
+        )
+    )
+    asyncio.run(
+        app.state.registry.register_booking_candidate(
+            "booking-cache-only-hit", "selected", (selected,)
+        )
+    )
+    client = TestClient(app)
+    request = {
+        "search_id": "booking-cache-only-hit",
+        "selected_option_ids": ["selected"],
+    }
+
+    live = client.post("/api/booking/prepare", json=request).json()
+    cached = client.post(
+        "/api/booking/prepare", json={**request, "cache_only": True}
+    ).json()
+
+    assert live["booking_provider_calls_this_invocation"] == 1
+    assert cached["booking_provider_calls_this_invocation"] == 0
+    assert cached["state"] == "READY"
+    assert cached["tickets"][0]["current_price"] == "813"
+    assert resolver.calls == 1
+
+
+def test_cached_only_booking_preparation_builds_airline_search_without_provider_call() -> (
+    None
+):
+    class CountingResolver(Resolver):
+        def __init__(self) -> None:
+            super().__init__({"FR 2687": "813"})
+            self.calls = 0
+
+        async def resolve(self, selected: FlightOffer) -> ResolvedHandoff:
+            self.calls += 1
+            return await super().resolve(selected)
+
+    resolver = CountingResolver()
+    app = create_app(
+        booking_resolver=resolver, handoff_launcher=GooglePostHandoffLauncher()
+    )
+    selected = offer("FR 2687", "849")
+    asyncio.run(
+        app.state.registry.create(
+            SearchSnapshot(search_id="booking-cache-only-miss", status="completed"),
+            TripSearchRequest(
+                origins=["STN"],
+                destinations=["CAG"],
+                outbound_date=date(2026, 12, 18),
+                adults=2,
+                children=2,
+                cache_only=True,
+            ),
+        )
+    )
+    asyncio.run(
+        app.state.registry.register_booking_candidate(
+            "booking-cache-only-miss", "selected", (selected,)
+        )
+    )
+
+    client = TestClient(app)
+    result = client.post(
+        "/api/booking/prepare",
+        json={
+            "search_id": "booking-cache-only-miss",
+            "selected_option_ids": ["selected"],
+            "cache_only": True,
+            "refresh_booking_prices": True,
+        },
+    ).json()
+
+    assert result["booking_provider_calls_this_invocation"] == 0
+    assert result["state"] == "READY"
+    assert result["tickets"][0]["status"] == "VERIFY_ON_AIRLINE"
+    assert result["tickets"][0]["capability"] == "PREFILLED_SEARCH"
+    assert result["tickets"][0]["current_price"] is None
+    assert result["tickets"][0]["adults"] == 2
+    assert result["tickets"][0]["children"] == 2
+    assert resolver.calls == 0
+
+    ticket = result["tickets"][0]
+    handoff = client.post(
+        f"/api/booking/{result['booking_session_id']}/handoff/{ticket['ticket_id']}",
+        follow_redirects=False,
+    )
+    query = parse_qs(urlparse(handoff.headers["location"]).query)
+    assert handoff.status_code == 303
+    assert urlparse(handoff.headers["location"]).hostname == "www.ryanair.com"
+    assert query["originIata"] == ["STN"]
+    assert query["destinationIata"] == ["CAG"]
+    assert query["dateOut"] == ["2026-12-18"]
+    assert query["adults"] == ["2"]
+    assert query["children"] == ["2"]

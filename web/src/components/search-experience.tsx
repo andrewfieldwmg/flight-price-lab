@@ -6,7 +6,7 @@ import type { SearchSnapshot, TripOption, TripSearchRequest } from "@/lib/api/ty
 import { uniqueOptions } from "@/lib/search/calculations";
 import { initialSearchState, searchReducer } from "@/lib/search/state";
 import { shouldRefreshProviderUsage } from "@/lib/search/telemetry";
-import { cachedAgeMinutes, currentInvocationFromLocalCache, loadLocalSearch, logFrontendCacheEvent, saveLocalSearch } from "@/lib/search/local-cache";
+import { cachedAgeMinutes, currentInvocationFromLocalCache, loadLocalSearch, logFrontendCacheEvent, saveLocalSearch, shouldUseBrowserSearchCache } from "@/lib/search/local-cache";
 import { DirectionResults } from "./direction-results";
 import { SearchForm } from "./search-form";
 import { SearchStatusPanel } from "./search-status-panel";
@@ -47,16 +47,19 @@ export function SearchExperience() {
     try {
       const key = await getSearchKey(request);
       logFrontendCacheEvent("SEARCH_RECEIVED", { search_key: key, search_key_short: key.slice(0, 12), cache_bypass: request.refresh_prices });
-      if (!request.refresh_prices) {
+      if (shouldUseBrowserSearchCache(request)) {
         const cached = loadLocalSearch(key);
         if (cached) {
-          const restored = currentInvocationFromLocalCache(cached);
-          dispatch({ type: "restore_cached", snapshot: restored, selectedOutboundId: cached.ui_state.selected_outbound_id, selectedReturnId: cached.ui_state.selected_return_id, directionProgress: cached.ui_state.direction_progress });
-          logFrontendCacheEvent("RESULT_RESTORED_FROM_CACHE", { trip_id: cached.trip_id, search_key: key, search_key_short: key.slice(0, 12) });
-          setCachedMinutes(cachedAgeMinutes(cached));
-          const rehydrated = await getSearch(cached.trip_id);
-          dispatch({ type: "restore_cached", snapshot: rehydrated, selectedOutboundId: cached.ui_state.selected_outbound_id, selectedReturnId: cached.ui_state.selected_return_id, directionProgress: cached.ui_state.direction_progress });
-          return;
+          try {
+            const rehydrated = await getSearch(cached.trip_id);
+            const restored = currentInvocationFromLocalCache({ ...cached, results: rehydrated });
+            dispatch({ type: "restore_cached", snapshot: restored, selectedOutboundId: cached.ui_state.selected_outbound_id, selectedReturnId: cached.ui_state.selected_return_id, directionProgress: cached.ui_state.direction_progress });
+            logFrontendCacheEvent("RESULT_RESTORED_FROM_CACHE", { trip_id: cached.trip_id, search_key: key, search_key_short: key.slice(0, 12) });
+            setCachedMinutes(cachedAgeMinutes(cached));
+            return;
+          } catch {
+            logFrontendCacheEvent("FRONTEND_LOCAL_CACHE_MISS", { trip_id: cached.trip_id, search_key: key, search_key_short: key.slice(0, 12), reason: "server_snapshot_unavailable" });
+          }
         }
       }
       setCachedMinutes(null);
@@ -109,8 +112,12 @@ export function SearchExperience() {
   }, [outboundOptions.length]);
   const outboundTransfers = state.request?.self_transfer_policy === "OUTBOUND_ONLY" || state.request?.self_transfer_policy === "BOTH";
   const returnTransfers = state.request?.self_transfer_policy === "RETURN_ONLY" || state.request?.self_transfer_policy === "BOTH";
+  const missingCachedRoutes = state.request?.cache_only && (outboundTransfers || returnTransfers)
+    ? state.snapshot?.diagnostics.backend_cache_misses ?? 0
+    : 0;
+  const noFeasibleConnection = state.snapshot?.errors.some((error) => error.code === "no_feasible_self_transfer") ?? false;
   const progressText = useMemo(() => {
-    if (!state.snapshot?.outbound.baseline) return "Searching direct flights…";
+    if (!state.snapshot?.outbound.baseline) return state.request?.cache_only ? "Loading the latest stored results…" : "Searching direct flights…";
     if (!isTerminal && state.routeProgress.total > 0) {
       return `Searching best connections… ${state.routeProgress.completed} / ${state.routeProgress.total} routes checked · ${state.routeProgress.optionsFound} options found`;
     }
@@ -118,14 +125,14 @@ export function SearchExperience() {
     return state.snapshot.status === "partial_failure"
       ? "Search complete with some unavailable routes"
       : "Search complete";
-  }, [state.snapshot, state.routeProgress, isTerminal]);
+  }, [state.snapshot, state.routeProgress, state.request?.cache_only, isTerminal]);
 
   useEffect(() => {
     if (refreshProviderUsage) window.dispatchEvent(new Event("provider-usage-refresh"));
   }, [refreshProviderUsage]);
 
   useEffect(() => {
-    if (!state.request || !state.snapshot || !isTerminal || searchClickedAt.current === null) return;
+    if (!state.request || state.request.cache_only || !state.snapshot || !isTerminal || searchClickedAt.current === null) return;
     const key = calendarPrefetchKey(state.request);
     if (calendarPrefetchStarted.current.has(key) || localStorage.getItem(key)) return;
     calendarPrefetchStarted.current.add(key);
@@ -167,10 +174,18 @@ export function SearchExperience() {
 
   return (
     <div className="workspace">
-      <SearchForm onSearch={submit} disabled={isSearching} onExcludeBaggageChange={setExcludeBaggage} />
+      <SearchForm onSearch={submit} disabled={isSearching} hasSearched={Boolean(state.request)} onExcludeBaggageChange={setExcludeBaggage} />
       {(state.request || startError) && <SearchStatusPanel snapshot={state.snapshot} cachedMinutes={cachedMinutes} directionProgress={state.directionProgress} pendingText={startError ?? progressText} />}
-      {(state.snapshot?.errors.length || state.sseDisconnected) && (
+      {(state.snapshot?.errors.length || state.sseDisconnected || missingCachedRoutes > 0) && (
         <div className="notices">
+          {missingCachedRoutes > 0 && (
+            <div className="notice cache-coverage-notice">
+              Cached connection coverage is incomplete: {missingCachedRoutes} route {missingCachedRoutes === 1 ? "search was" : "searches were"} not stored for this date. The connection profile can only filter flights already in the cache. No live API calls were made.
+            </div>
+          )}
+          {noFeasibleConnection && missingCachedRoutes === 0 && (
+            <div className="notice">No stored connection matched the selected connection profile.</div>
+          )}
           {state.snapshot?.errors
             .filter((error) => error.code !== "no_feasible_self_transfer")
             .map((error, index) => (
@@ -200,6 +215,7 @@ export function SearchExperience() {
             outboundDate={state.request?.outbound_date}
             returnDate={state.request?.return_date ?? undefined}
             complete={isTerminal || (state.directionCompleted.OUTBOUND && (!state.request?.return_date || state.directionCompleted.RETURN))}
+            cacheOnly={state.request?.cache_only ?? false}
           />}
           <DirectionResults
             title="Outbound"

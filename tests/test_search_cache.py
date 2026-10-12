@@ -28,10 +28,11 @@ class FakeSearchClient:
     def __init__(self, payload: dict[str, object]) -> None:
         self.payload = payload
         self.calls = 0
+        self.requests: list[dict[str, object]] = []
 
     def search_one_way(self, **arguments: object) -> dict[str, object]:
-        del arguments
         self.calls += 1
+        self.requests.append(arguments)
         return self.payload
 
 
@@ -106,6 +107,31 @@ def test_identical_search_uses_persistent_cache_and_preserves_raw_json(
     assert second.backend_cache_hits == 1
     assert second.provider_calls_avoided == 1
     assert Path(first.offers[0].raw_reference or "").is_file()
+
+
+def test_gateway_fetches_zero_bag_base_fares_for_separate_baggage_pricing(
+    tmp_path: Path,
+) -> None:
+    client = FakeSearchClient(fixture_payload())
+    gateway = SearchAPIProviderGateway(
+        client,  # type: ignore[arg-type]
+        SearchResponseCache(postgres_test_url(), raw_root=tmp_path / "raw"),
+    )
+
+    asyncio.run(
+        gateway.search_direct(
+            **{
+                **arguments(),
+                "origins": ("LGW",),
+                "cabin_bags": 1,
+                "checked_bags": 1,
+                "bypass_cache": True,
+            }
+        )
+    )
+
+    assert "carry_on_bags" not in client.requests[0]
+    assert "checked_bags" not in client.requests[0]
 
 
 def test_postgres_payload_survives_missing_instance_local_raw_file(
@@ -276,7 +302,7 @@ def test_widening_or_expired_superset_calls_provider(tmp_path: Path) -> None:
         postgres_test_url(), raw_root=tmp_path / "expired-raw"
     )
     expired_cache.put(
-        cache_parameters(["MXP"], ["CAG", "OLB", "AHO"]),
+        cache_parameters(["PSA"], ["CAG", "OLB", "AHO"]),
         payload,
         result_count=1,
         now=datetime.now(UTC) - timedelta(days=1),
@@ -287,12 +313,59 @@ def test_widening_or_expired_superset_calls_provider(tmp_path: Path) -> None:
         expired_gateway.search_direct(
             **{
                 **arguments(),
-                "origins": ("MXP",),
+                "origins": ("PSA",),
                 "destinations": ("CAG", "AHO"),
             }
         )
     )
     assert expired.provider_calls == 1
+
+
+def test_cache_only_reuses_expired_exact_entry_without_provider_call(
+    tmp_path: Path,
+) -> None:
+    cache = SearchResponseCache(postgres_test_url(), raw_root=tmp_path / "raw")
+    parameters = cache_parameters(
+        ["LCY", "LGW", "STN", "LTN", "LHR"], ["CAG"]
+    )
+    cache.put(
+        parameters,
+        fixture_payload(),
+        result_count=1,
+        now=datetime.now(UTC) - timedelta(days=30),
+    )
+    client = FakeSearchClient(fixture_payload())
+    gateway = SearchAPIProviderGateway(client, cache)  # type: ignore[arg-type]
+
+    result = asyncio.run(
+        gateway.search_direct(**{**arguments(), "cache_only": True})
+    )
+
+    assert client.calls == 0
+    assert result.provider_calls == 0
+    assert result.backend_cache_hits == 1
+    assert result.exact_cache_hits == 1
+    assert result.offers
+    assert result.request_timing is not None
+    assert result.request_timing["cache_source"] == "STALE_EXACT"
+
+
+def test_cache_only_miss_returns_empty_without_provider_call(tmp_path: Path) -> None:
+    client = FakeSearchClient(fixture_payload())
+    gateway = SearchAPIProviderGateway(
+        client,
+        SearchResponseCache(postgres_test_url(), raw_root=tmp_path / "raw"),
+    )  # type: ignore[arg-type]
+
+    result = asyncio.run(
+        gateway.search_direct(**{**arguments(), "cache_only": True})
+    )
+
+    assert client.calls == 0
+    assert result.offers == []
+    assert result.provider_calls == 0
+    assert result.backend_cache_misses == 1
+    assert result.provider_calls_avoided == 1
 
 
 def test_refresh_bypasses_cache_without_deleting_previous_raw_capture(

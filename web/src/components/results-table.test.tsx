@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { option, synthetic } from "@/test/fixtures";
-import { DirectionResults, isEarlyDeparture, isLateArrival, sortOptions } from "./direction-results";
+import { DirectionResults, filterByMinimumSaving, isEarlyDeparture, isLateArrival, sortOptions } from "./direction-results";
 
 const direct = option({ id: "direct" });
 const cheaper = synthetic();
@@ -84,19 +84,31 @@ describe("dense flight results", () => {
     const rows = screen.getAllByRole("row").slice(1);
     expect(within(rows[0]).getByText("£741")).toBeInTheDocument();
     expect(within(rows[0]).getByText("Reference")).toBeInTheDocument();
-    expect(screen.queryByText("LGW–FCO–CAG")).not.toBeInTheDocument();
+    expect(screen.getByText("LGW–FCO–CAG")).toBeInTheDocument();
     expect(screen.getByText("LGW–CAG")).toBeInTheDocument();
   });
 
-  it("defaults to £100 minimum saving while retaining the nonstop reference", () => {
+  it("shows all connections by default and identifies the active profile", () => {
     const onSelect = vi.fn();
     renderResults(true, onSelect);
-    expect(screen.getByLabelText("Outbound minimum saving")).toHaveValue("100");
+    expect(screen.getByLabelText("Outbound minimum saving")).toHaveValue("0");
+    expect(screen.getByText("Connection profile: conservative")).toBeInTheDocument();
     expect(screen.getByText("LGW–CAG")).toBeInTheDocument();
-    expect(screen.queryByText("LGW–FCO–CAG")).not.toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Outbound minimum saving"), { target: { value: "0" } });
     expect(screen.getByText("LGW–FCO–CAG")).toBeInTheDocument();
+    expect(screen.getByText("LGW–MXP–CAG")).toBeInTheDocument();
     expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("treats zero as no filter so costlier connections remain visible", () => {
+    const costlier = option({
+      id: "costlier-connection",
+      is_nonstop: false,
+      is_self_transfer: true,
+      saving_vs_nonstop_amount: "-162",
+    });
+
+    expect(filterByMinimumSaving([direct, costlier], 0, null)).toEqual([direct, costlier]);
+    expect(filterByMinimumSaving([direct, costlier], 50, null)).toEqual([direct]);
   });
 
   it("retains a selected alternative below the saving threshold", () => {
@@ -152,7 +164,6 @@ describe("dense flight results", () => {
     renderResults();
     fireEvent.click(screen.getByText("LGW–MXP–CAG"));
     expect(screen.queryByText("Ancillary status")).not.toBeInTheDocument();
-    expect(screen.queryByText("Connection profile")).not.toBeInTheDocument();
     expect(screen.queryByText(/missed-connection protection/)).not.toBeInTheDocument();
     expect(screen.queryByRole("row", { name: /Base fare/ })).not.toBeInTheDocument();
   });
@@ -254,7 +265,7 @@ describe("dense flight results", () => {
     const { container } = render(<DirectionResults title="Outbound" date="2026-12-18" results={results} selectedId="direct" onSelect={onSelect} complete connectionProfile="CONSERVATIVE" selfTransferEnabled />);
 
     const cards = container.querySelectorAll(".mobile-trip-card");
-    expect(cards).toHaveLength(2);
+    expect(cards).toHaveLength(3);
     const directCard = cards[0] as HTMLElement;
     const stopCard = cards[1] as HTMLElement;
     expect(directCard).toHaveTextContent("Direct");

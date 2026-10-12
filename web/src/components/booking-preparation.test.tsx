@@ -118,7 +118,37 @@ describe("BookingPreparation drawer", () => {
     expect(prepareBooking).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: "Refresh booking prices" }));
     await waitFor(() => expect(prepareBooking).toHaveBeenCalledTimes(2));
-    expect(prepareBooking).toHaveBeenLastCalledWith("search", ["outbound"], true);
+    expect(prepareBooking).toHaveBeenLastCalledWith("search", ["outbound"], true, false);
+  });
+
+  it("uses only stored booking details and cannot refresh while cached-only mode is on", async () => {
+    prepareBooking.mockResolvedValue(session({ booking_provider_calls_this_invocation: 0 }));
+    render(<BookingPreparation searchId="search" optionIds={["outbound"]} cacheOnly />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Prepare from cache" }));
+
+    expect(await screen.findByText("Cached-only mode")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Refresh booking prices" })).not.toBeInTheDocument();
+    expect(prepareBooking).toHaveBeenCalledWith("search", ["outbound"], false, true);
+    expect(screen.getByText("Booking provider calls now: 0")).toBeInTheDocument();
+  });
+
+  it("allows an unverified airline handoff built from stored flight details", async () => {
+    prepareBooking.mockResolvedValue(session({
+      state: "READY",
+      current_total: null,
+      price_delta: null,
+      booking_provider_calls_this_invocation: 0,
+      tickets: [ticket({ status: "VERIFY_ON_AIRLINE", current_price: null, price_delta: null, capability: "PREFILLED_SEARCH", exact_flight_verified: false })],
+    }));
+    render(<BookingPreparation searchId="search" optionIds={["outbound"]} cacheOnly />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Prepare from cache" }));
+
+    expect(await screen.findByRole("button", { name: "Continue on Ryanair" })).toBeEnabled();
+    expect(screen.getByText("Search prefilled — confirm FR 2687")).toBeInTheDocument();
+    expect(screen.getByText(/Continue opens an airline search from the stored flight details/)).toBeInTheDocument();
+    expect(prepareBooking).toHaveBeenCalledWith("search", ["outbound"], false, true);
   });
 
   it("marks a changed selection stale and only prepares it on explicit action", async () => {
@@ -131,7 +161,7 @@ describe("BookingPreparation drawer", () => {
     expect(screen.getByRole("button", { name: "Prepare selected trip" })).toBeInTheDocument();
     expect(prepareBooking).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: "Prepare new selection" }));
-    await waitFor(() => expect(prepareBooking).toHaveBeenLastCalledWith("search", ["new"], false));
+    await waitFor(() => expect(prepareBooking).toHaveBeenLastCalledWith("search", ["new"], false, false));
     fireEvent.click(screen.getByRole("button", { name: "Close prepared booking" }));
     fireEvent.click(screen.getByRole("button", { name: "View prepared booking" }));
     expect(prepareBooking).toHaveBeenCalledTimes(2);

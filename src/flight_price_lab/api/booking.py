@@ -10,12 +10,13 @@ from enum import StrEnum
 from hashlib import sha256
 from pathlib import Path
 from typing import Protocol
-from urllib.parse import parse_qs, parse_qsl, urlparse
+from urllib.parse import parse_qs, parse_qsl, urlencode, urlparse
 from uuid import uuid4
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
+from flight_price_lab.api.models import TripSearchRequest
 from flight_price_lab.api.registry import InMemorySearchRegistry
 from flight_price_lab.api.search_logging import (
     development_diagnostics_enabled,
@@ -75,6 +76,7 @@ class PrepareBookingRequest(BaseModel):
     search_id: str
     selected_option_ids: list[str] = Field(min_length=1)
     refresh_booking_prices: bool = False
+    cache_only: bool = False
 
 
 class HandoffRequest(BaseModel):
@@ -134,6 +136,7 @@ class ResolvedHandoff:
     origin: str = ""
     destination: str = ""
     travel_date: str = ""
+    direct_handoff_url: bool = False
 
 
 class CarrierHandoffAdapter(Protocol):
@@ -311,6 +314,11 @@ class GooglePostHandoffLauncher:
     """Exchange the secret Google POST server-side for its carrier redirect."""
 
     async def launch(self, handoff: ResolvedHandoff) -> str:
+        if handoff.direct_handoff_url:
+            adapter = HANDOFF_ADAPTERS.get(handoff.carrier)
+            if adapter is None:
+                raise ValueError("carrier handoff is not supported")
+            return adapter.validate_redirect(handoff.booking_url, handoff)
         fields = dict(
             parse_qsl(
                 handoff.booking_post_data.get_secret_value(), keep_blank_values=True
@@ -327,6 +335,107 @@ class GooglePostHandoffLauncher:
         if adapter is None:
             raise ValueError("carrier handoff is not supported")
         return adapter.validate_redirect(destination, handoff)
+
+
+def _passenger_context(
+    offer: FlightOffer, request: TripSearchRequest | None = None
+) -> tuple[int, int]:
+    if request is not None:
+        return request.adults, request.children
+    context = offer.raw_metadata.get("provider_search_context", {})
+    if isinstance(context, dict):
+        try:
+            adults = int(context.get("adults") or 0)
+            children = int(context.get("children") or 0)
+        except (TypeError, ValueError):
+            adults = 0
+            children = 0
+        if adults > 0 and children >= 0:
+            return adults, children
+    return max((offer.passenger_count or 1), 1), 0
+
+
+def cached_airline_search_handoff(
+    offer: FlightOffer, request: TripSearchRequest | None = None
+) -> ResolvedHandoff:
+    """Build a provider-free airline search link from persisted flight context."""
+
+    leg = offer.legs[0]
+    carrier = leg.flight_number.split()[0].upper()
+    origin = leg.origin
+    destination = offer.legs[-1].destination
+    travel_date = leg.departure.date().isoformat()
+    adults, children = _passenger_context(offer, request)
+    flight_number = leg.flight_number
+    flight_digits = flight_number.split()[-1]
+    if carrier == "FR":
+        query = urlencode(
+            {
+                "adults": adults,
+                "teens": 0,
+                "children": children,
+                "infants": 0,
+                "dateOut": travel_date,
+                "dateIn": "",
+                "isConnectedFlight": "false",
+                "isReturn": "false",
+                "discount": 0,
+                "promoCode": "",
+                "originIata": origin,
+                "destinationIata": destination,
+            }
+        )
+        url = f"https://www.ryanair.com/gb/en/trip/flights/select?{query}"
+    elif carrier == "U2":
+        query = urlencode(
+            {
+                "dep": origin,
+                "dest": destination,
+                "dd": travel_date,
+                "apax": adults,
+                "cpax": children,
+                "ipax": 0,
+                "xdfn": flight_digits,
+            }
+        )
+        url = f"https://www.easyjet.com/deeplink?{query}"
+    elif carrier == "W4":
+        url = (
+            "https://www.wizzair.com/en-gb/booking/select-flight/"
+            f"{origin}/{destination}/{travel_date}/null/{adults}/{children}/0"
+        )
+    elif carrier == "XZ":
+        query = urlencode(
+            {
+                "ADT": adults,
+                "CHD": children,
+                "INL": 0,
+                "o1": origin,
+                "d1": destination,
+                "dd1": travel_date,
+                "r": "false",
+            }
+        )
+        url = f"https://book.aeroitalia.com/deeplink/search?{query}"
+    else:
+        raise BookingResolutionError("BOOKING_CACHE_MISS")
+    return ResolvedHandoff(
+        current_price=None,
+        booking_url=url,
+        booking_post_data=SecretStr(""),
+        capability=HandoffCapability.PREFILLED_SEARCH,
+        pricing_confidence=PricingConfidence.UNVERIFIED,
+        adults=adults,
+        children=children,
+        exact_flight_verified=False,
+        passenger_composition_verified=True,
+        carrier=carrier,
+        flight_number=flight_number,
+        origin=origin,
+        destination=destination,
+        travel_date=travel_date,
+        direct_handoff_url=True,
+    )
 
 
 class SearchAPIBookingResolver:
@@ -552,6 +661,7 @@ class BookingPreparationService:
         self.sessions.put(session)
         search_log("booking_prepare_started", booking_session_id=session.session_id)
         session.state = BookingSessionState.REPRICING
+        search_request = await self.searches.get_request(request.search_id)
         candidates = []
         for option_id in request.selected_option_ids:
             snapshot = await self.searches.get(request.search_id)
@@ -616,6 +726,7 @@ class BookingPreparationService:
 
         async def resolve(offer: FlightOffer) -> _Ticket:
             leg = offer.legs[0]
+            adults, children = _passenger_context(offer, search_request)
             base = BookingTicketResponse(
                 ticket_id=str(uuid4()),
                 carrier=leg.flight_number.split()[0].upper(),
@@ -632,21 +743,24 @@ class BookingPreparationService:
                 price_change_status=None,
                 material_change_acknowledgement_required=False,
                 capability=None,
-                adults=max((offer.passenger_count or 1), 1),
-                children=0,
+                adults=adults,
+                children=children,
                 exact_flight_verified=False,
                 passenger_composition_verified=False,
             )
             try:
                 handoff = (
                     None
-                    if request.refresh_booking_prices
+                    if request.refresh_booking_prices and not request.cache_only
                     else self.resolution_cache.get(offer)
                 )
                 if handoff is None:
-                    session.booking_provider_calls_this_invocation += 1
-                    handoff = await self.resolver.resolve(offer)
-                    self.resolution_cache.put(offer, handoff)
+                    if request.cache_only:
+                        handoff = cached_airline_search_handoff(offer, search_request)
+                    else:
+                        session.booking_provider_calls_this_invocation += 1
+                        handoff = await self.resolver.resolve(offer)
+                        self.resolution_cache.put(offer, handoff)
                 delta = (
                     handoff.current_price - offer.total_price
                     if handoff.current_price is not None
