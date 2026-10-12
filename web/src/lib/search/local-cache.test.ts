@@ -30,8 +30,17 @@ describe("completed search localStorage cache", () => {
   it("rejects a legacy rolling-TTL snapshot at 09:31 after the epoch changed", () => {
     const saved = new Date("2026-08-26T14:30:00Z");
     const value = saveLocalSearch("key-1", request, results, saved);
-    window.localStorage.setItem("flightly:search:v2:key-1", JSON.stringify({ ...value, expires_at: "2026-08-27T14:30:00Z" }));
+    window.localStorage.setItem("flightly:search:v3:key-1", JSON.stringify({ ...value, expires_at: "2026-08-27T14:30:00Z" }));
     expect(loadLocalSearch("key-1", new Date("2026-08-27T08:31:00Z"))).toBeNull();
+    expect(window.localStorage.getItem("flightly:search:v3:key-1")).toBeNull();
+  });
+
+  it("invalidates v2 browser snapshots after the connection route-plan change", () => {
+    const value = saveLocalSearch("key-1", request, results);
+    window.localStorage.removeItem("flightly:search:v3:key-1");
+    window.localStorage.setItem("flightly:search:v2:key-1", JSON.stringify(value));
+
+    expect(loadLocalSearch("key-1")).toBeNull();
     expect(window.localStorage.getItem("flightly:search:v2:key-1")).toBeNull();
   });
 
@@ -83,11 +92,11 @@ describe("completed search localStorage cache", () => {
     staleResults.outbound.nonstop_options[0].history = staleHistory;
 
     saveLocalSearch("key-1", request, staleResults);
-    const newlySaved = window.localStorage.getItem("flightly:search:v2:key-1")!;
+    const newlySaved = window.localStorage.getItem("flightly:search:v3:key-1")!;
     expect(newlySaved).not.toContain('"history"');
 
     const legacy = { ...JSON.parse(newlySaved), results: staleResults };
-    window.localStorage.setItem("flightly:search:v2:key-1", JSON.stringify(legacy));
+    window.localStorage.setItem("flightly:search:v3:key-1", JSON.stringify(legacy));
     const replay = currentInvocationFromLocalCache(loadLocalSearch("key-1")!);
     expect(replay.outbound.baseline!.history).toBeUndefined();
     expect(replay.outbound.baseline!.legs[0].history).toBeUndefined();

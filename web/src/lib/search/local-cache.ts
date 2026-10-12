@@ -1,7 +1,7 @@
 import type { SearchSnapshot, TripSearchRequest } from "@/lib/api/types";
 
-const PREFIX = "flightly:search:v2:";
-const LEGACY_PREFIX = "flight-price-lab:";
+const PREFIX = "flightly:search:v3:";
+const LEGACY_PREFIXES = ["flight-price-lab:", "flightly:search:v2:"];
 const LONDON_TIME_ZONE = "Europe/London";
 
 function londonParts(value: Date) {
@@ -124,7 +124,7 @@ export function loadLocalSearch(
   now = new Date(),
 ): LocalSearchSnapshot | null {
   try {
-    window.localStorage.removeItem(`${LEGACY_PREFIX}${searchKey}`);
+    LEGACY_PREFIXES.forEach((prefix) => window.localStorage.removeItem(`${prefix}${searchKey}`));
     const raw = window.localStorage.getItem(`${PREFIX}${searchKey}`);
     if (!raw) {
       devLog("FRONTEND_LOCAL_CACHE_MISS", { search_key: searchKey, search_key_short: searchKey.slice(0, 12), reason: "not_found" });
